@@ -672,6 +672,31 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent;}
   </div>
 </div>
 
+<!-- MODAL: TOKEN GITHUB -->
+<div class="overlay" id="tokenModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Token cloud (GitHub Gist)</div>
+    <div class="modal-sub">Serve per sincronizzare i dati tra dispositivi. Senza token l'app funziona solo in locale.</div>
+    <div style="background:var(--blue-bg);border:1px solid color-mix(in srgb,var(--blue) 25%,transparent);border-radius:var(--r-sm);padding:11px 13px;font-size:12px;color:var(--blue);line-height:1.5;margin-bottom:14px;">
+      <b>Come crearlo (1 minuto):</b><br>
+      1. Apri <span style="font-family:'DM Mono',monospace;">github.com/settings/tokens</span><br>
+      2. <b>Generate new token</b> → <b>classic</b><br>
+      3. Note: "budget-luca" · Expiration: <b>No expiration</b><br>
+      4. Spunta solo <b>gist</b> (unico scope necessario)<br>
+      5. Genera, copia (inizia con <span style="font-family:'DM Mono',monospace;">ghp_…</span>) e incollalo qui sotto
+    </div>
+    <div class="mrow"><input class="inp" id="tokenInput" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="width:100%;font-family:'DM Mono',monospace;font-size:12px;" autocomplete="off"/></div>
+    <div class="mrow" style="margin-top:2px;"><label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="tokenShow"/> Mostra token</label></div>
+    <div id="tokenStatus" style="font-size:12px;margin-top:4px;min-height:16px;color:var(--muted);"></div>
+    <div class="mactions">
+      <button class="btn btn-cancel" id="tokenCancelBtn">Annulla</button>
+      <button class="btn btn-ghost" id="tokenClearBtn">Rimuovi</button>
+      <button class="btn btn-dark" id="tokenSaveBtn">Salva e testa</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: SETTINGS -->
 <div class="overlay" id="settingsModal">
   <div class="modal-sheet">
@@ -692,6 +717,11 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent;}
       <button class="settings-row" id="setImport">
         <div class="settings-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
         <div class="settings-info"><div class="settings-name">Importa backup</div><div class="settings-sub">Sovrascrive lo stato corrente</div></div>
+        <span class="chev">›</span>
+      </button>
+      <button class="settings-row" id="setToken">
+        <div class="settings-ico" id="setTokenIco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+        <div class="settings-info"><div class="settings-name">Token cloud GitHub</div><div class="settings-sub" id="setTokenSub">Configura per la sincronizzazione</div></div>
         <span class="chev">›</span>
       </button>
       <button class="settings-row" id="setForceSync">
@@ -808,10 +838,20 @@ var state = {
   futureWeeks:[], balances:{}, walletLog:[], checkedAcc:{}
 };
 
-var GITHUB_TOKEN = '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';
+var TOKEN_KEY    = 'luca_gh_token_v1';
+var GIST_ID_KEY  = 'luca_gist_id_v1';
+function getToken(){
+  try{ var t=localStorage.getItem(TOKEN_KEY); if(t) return t.trim(); }catch(e){}
+  return '';
+}
+function setToken(t){
+  try{ if(t) localStorage.setItem(TOKEN_KEY,String(t).trim()); else localStorage.removeItem(TOKEN_KEY); }catch(e){}
+}
 var GIST_FILE    = 'budget-luca-2026.json';
 var GIST_DESC    = 'budget-luca-2026';
 var gistId       = '';
+try{ gistId = localStorage.getItem(GIST_ID_KEY) || ''; }catch(e){}
+function saveGistId(id){ try{ if(id) localStorage.setItem(GIST_ID_KEY,id); }catch(e){} }
 var editTarget   = null;
 var editAccTarget= null;
 var pendingCheck = null;
@@ -938,10 +978,11 @@ function scheduleCloud(delay){
 }
 
 function gistHeaders(){
-  return {'Authorization':'Bearer '+GITHUB_TOKEN,'Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'};
+  return {'Authorization':'Bearer '+getToken(),'Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'};
 }
 
 function findOrCreateGist(cb){
+  if(!getToken()){ setSync('err','token mancante'); cb(null); return; }
   fetch('https://api.github.com/gists?per_page=100',{headers:gistHeaders()})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(list){
@@ -951,21 +992,32 @@ function findOrCreateGist(cb){
           found=list[i]; break;
         }
       }
-      if(found){ gistId=found.id; cb(gistId); return; }
+      if(found){ gistId=found.id; saveGistId(gistId); cb(gistId); return; }
       fetch('https://api.github.com/gists',{method:'POST',headers:gistHeaders(),
         body:JSON.stringify({description:GIST_DESC,public:false,files:{[GIST_FILE]:{content:JSON.stringify(state)}}})})
-        .then(function(r){ return r.json(); })
-        .then(function(d){ gistId=d.id||''; cb(gistId); })
-        .catch(function(e){ console.warn('[createGist]',e); cb(null); });
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(d){ gistId=d.id||''; saveGistId(gistId); cb(gistId); })
+        .catch(function(e){ console.warn('[createGist]',e); setSync('err','crea gist: '+(e.message||'errore')); cb(null); });
     })
-    .catch(function(e){ console.warn('[findGist]',e); cb(null); });
+    .catch(function(e){
+      console.warn('[findGist]',e);
+      var label = (e.message||'').indexOf('401')>-1 ? 'token invalido (401)' :
+                  (e.message||'').indexOf('403')>-1 ? 'permessi mancanti (403)' :
+                  'errore: '+(e.message||'?');
+      setSync('err',label);
+      cb(null);
+    });
 }
 
 function cloudLoad(cb){
   setSync('syncing','caricamento…');
   function doLoad(){
+    if(!getToken()){ setSync('err','token mancante'); cb(null); return; }
     fetch('https://api.github.com/gists/'+gistId,{headers:gistHeaders(),cache:'no-store'})
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(r){
+        if(r.status===404){ gistId=''; try{localStorage.removeItem(GIST_ID_KEY);}catch(e){} throw new Error('HTTP 404'); }
+        if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+      })
       .then(function(data){
         var fc=data.files&&data.files[GIST_FILE]&&data.files[GIST_FILE].content;
         if(fc){ try{ cb(JSON.parse(fc)); }catch(e){ cb(null); } }
@@ -973,31 +1025,40 @@ function cloudLoad(cb){
       })
       .catch(function(err){
         console.warn('[cloudLoad]',err);
-        setSync('err','errore caricamento');
-        cb(null);
+        var msg=err&&err.message?err.message:'';
+        var label=msg.indexOf('401')>-1?'token invalido (401)':
+                  msg.indexOf('404')>-1?'gist non trovato (rigenero)':
+                  msg.indexOf('403')>-1?'permessi mancanti (403)':
+                  'errore caricamento';
+        setSync('err',label); cb(null);
       });
   }
   if(gistId) doLoad();
-  else findOrCreateGist(function(id){ if(id) doLoad(); else { setSync('err','no cloud'); cb(null); } });
+  else findOrCreateGist(function(id){ if(id) doLoad(); else cb(null); });
 }
 
 function cloudSave(onDone){
   function doSave(){
+    if(!getToken()){ setSync('err','token mancante'); if(onDone) onDone(false); return; }
     setSync('syncing','sincr…');
     var body=JSON.stringify({files:{[GIST_FILE]:{content:JSON.stringify(state)}}});
     fetch('https://api.github.com/gists/'+gistId,{method:'PATCH',headers:gistHeaders(),body:body})
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(r){
+        if(r.status===404){ gistId=''; try{localStorage.removeItem(GIST_ID_KEY);}catch(e){} throw new Error('HTTP 404'); }
+        if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+      })
       .then(function(){ setSync('ok','sincronizzato ✓'); if(onDone) onDone(true); })
       .catch(function(err){
         var msg=err&&err.message?err.message:'';
-        var label=msg.indexOf('401')>-1?'token non valido':
-                  msg.indexOf('403')>-1?'permessi insufficienti':
+        var label=msg.indexOf('401')>-1?'token invalido (401)':
+                  msg.indexOf('404')>-1?'gist non trovato':
+                  msg.indexOf('403')>-1?'permessi insufficienti (403)':
                   msg.indexOf('Failed to fetch')>-1||msg.indexOf('NetworkError')>-1?'offline':'errore sync';
         console.warn('[cloudSave]',err); setSync('err',label); if(onDone) onDone(false);
       });
   }
   if(gistId) doSave();
-  else findOrCreateGist(function(id){ if(id) doSave(); else { setSync('err','no cloud'); if(onDone) onDone(false); } });
+  else findOrCreateGist(function(id){ if(id) doSave(); else { if(onDone) onDone(false); } });
 }
 
 /**
@@ -1119,7 +1180,7 @@ document.querySelectorAll('.nav-item').forEach(function(btn){
   });
 });
 
-['editModal','accountModal','editAccModal','futureModal','transferModal','quickModal','settingsModal'].forEach(function(id){
+['editModal','accountModal','editAccModal','futureModal','transferModal','quickModal','settingsModal','tokenModal'].forEach(function(id){
   var el=$(id);
   if(el) el.addEventListener('click',function(e){ if(e.target===this) closeOverlay(id); });
 });
@@ -2175,7 +2236,83 @@ function importJson(file){
 /* ═══════════════════════════════════════════════════════
    SETTINGS MODAL
    ═══════════════════════════════════════════════════════ */
-$('settingsBtn').addEventListener('click',function(){ openOverlay('settingsModal'); });
+function refreshTokenStatus(){
+  var t=getToken();
+  var sub=$('setTokenSub'), ico=$('setTokenIco');
+  if(!sub) return;
+  if(!t){ sub.textContent='Non configurato — la sincronizzazione è disattivata'; ico.style.background='var(--red-bg)'; ico.style.color='var(--red)'; }
+  else { sub.textContent='Configurato · '+t.slice(0,7)+'…'+t.slice(-4); ico.style.background='var(--green-bg)'; ico.style.color='var(--green)'; }
+}
+
+$('setToken').addEventListener('click',function(){
+  $('tokenInput').value=getToken();
+  $('tokenInput').type='password';
+  $('tokenShow').checked=false;
+  $('tokenStatus').textContent='';
+  $('tokenStatus').style.color='var(--muted)';
+  closeOverlay('settingsModal');
+  openOverlay('tokenModal');
+});
+$('tokenShow').addEventListener('change',function(e){
+  $('tokenInput').type = e.target.checked ? 'text' : 'password';
+});
+$('tokenCancelBtn').addEventListener('click',function(){ closeOverlay('tokenModal'); });
+$('tokenClearBtn').addEventListener('click',function(){
+  if(!confirm('Rimuovere il token? La sincronizzazione cloud verrà disattivata (i dati locali restano).')) return;
+  setToken('');
+  try{ localStorage.removeItem(GIST_ID_KEY); }catch(e){}
+  gistId='';
+  refreshTokenStatus();
+  setSync('','locale');
+  toast('Token rimosso','info');
+  closeOverlay('tokenModal');
+});
+$('tokenSaveBtn').addEventListener('click',function(){
+  var t=$('tokenInput').value.trim();
+  if(!t){ $('tokenStatus').textContent='Inserisci un token'; $('tokenStatus').style.color='var(--red)'; return; }
+  if(!/^gh[ps]_[A-Za-z0-9_]{20,}$/.test(t)){
+    if(!confirm('Il formato non sembra un token GitHub valido (atteso "ghp_..."). Salvarlo comunque?')) return;
+  }
+  $('tokenStatus').textContent='Test in corso…'; $('tokenStatus').style.color='var(--muted)';
+  fetch('https://api.github.com/user',{headers:{'Authorization':'Bearer '+t,'X-GitHub-Api-Version':'2022-11-28'}})
+    .then(function(r){
+      if(r.status===401){ throw new Error('401: token non valido o revocato'); }
+      if(r.status===403){ throw new Error('403: scope/permessi mancanti (serve "gist")'); }
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(u){
+      // Test scope gist
+      return fetch('https://api.github.com/gists?per_page=1',{headers:{'Authorization':'Bearer '+t,'X-GitHub-Api-Version':'2022-11-28'}})
+        .then(function(r2){ if(!r2.ok) throw new Error('HTTP '+r2.status+' su /gists (manca scope?)'); return u; });
+    })
+    .then(function(u){
+      setToken(t);
+      try{ localStorage.removeItem(GIST_ID_KEY); }catch(e){}
+      gistId='';
+      $('tokenStatus').textContent='✓ Token valido — utente: '+(u.login||'?');
+      $('tokenStatus').style.color='var(--green)';
+      refreshTokenStatus();
+      toast('Token configurato · sincronizzazione attiva','ok');
+      // Forza una sincronizzazione subito
+      setSync('syncing','primo sync…');
+      cloudLoad(function(remote){
+        if(remote){
+          var changed=mergeFromCloud(remote);
+          if(changed){ persistLocal(); preTotal=totalAll(); renderAll(); }
+          else { cloudSave(null); }
+        } else { cloudSave(null); }
+      });
+      setTimeout(function(){ closeOverlay('tokenModal'); }, 900);
+    })
+    .catch(function(err){
+      console.warn('[tokenTest]',err);
+      $('tokenStatus').textContent='✗ '+(err.message||'errore');
+      $('tokenStatus').style.color='var(--red)';
+    });
+});
+
+$('settingsBtn').addEventListener('click',function(){ refreshTokenStatus(); openOverlay('settingsModal'); });
 $('settingsCloseBtn').addEventListener('click',function(){ closeOverlay('settingsModal'); });
 $('setExportJson').addEventListener('click',function(){ exportJson(); });
 $('setExportCsv').addEventListener('click',function(){ exportCsv(); });
@@ -2245,6 +2382,11 @@ function bootWithCloud(){
   $('app').style.display='block';
   preTotal = totalAll();
   renderAll();
+  if(!getToken()){
+    setSync('err','solo locale · token mancante');
+    toast('Sincronizzazione cloud disattiva. Configura un token in Impostazioni.','warn',{duration:6000});
+    return;
+  }
   setSync('syncing','controllo cloud…');
   cloudLoad(function(remote){
     if(remote){
@@ -2257,8 +2399,8 @@ function bootWithCloud(){
         setSync('ok','allineato');
       }
     } else {
-      // No remote: pusha locale
-      cloudSave(null);
+      // Se manca per 401 abbiamo già mostrato errore in setSync, niente cloudSave (fallirebbe pure)
+      if(getToken()) cloudSave(null);
     }
   });
 }

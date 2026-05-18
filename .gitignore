@@ -1,0 +1,29 @@
+# ── Budget Luca HTML (può contenere token in chiaro) ──
+# Se devi committare una versione pulita, usa: git add -f budget-luca-vXX.html
+budget-luca-*.html
+
+# ── File con credenziali/secrets ──
+.env
+.env.*
+*.secret
+*.key
+secrets.json
+
+# ── OS noise ──
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ── Editor / IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Backup e temporanei ──
+*.bak
+*.tmp
+*.old
+~$*
