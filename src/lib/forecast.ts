@@ -53,6 +53,7 @@ export function generateForecast(
 
       for (const exp of recurringExpenses) {
         if (!exp.is_active) continue
+        if (exp.end_date && isAfter(day, new Date(exp.end_date))) continue
         const adjusted = Math.min(exp.day_of_month, dim)
         if (dom === adjusted) weekExpenses += Number(exp.amount)
       }
@@ -104,7 +105,9 @@ export function getMonthlyEstimates(
   }
 
   for (const exp of recurringExpenses) {
-    if (exp.is_active) monthlyExpenses += Number(exp.amount)
+    if (!exp.is_active) continue
+    if (exp.end_date && new Date(exp.end_date) < new Date()) continue
+    monthlyExpenses += Number(exp.amount)
   }
 
   for (const b of weeklyBudgets) {

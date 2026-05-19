@@ -20,6 +20,7 @@ export interface RecurringExpense {
   fund_id: string | null
   category: string
   is_active: boolean
+  end_date: string | null
   created_at: string
 }
 

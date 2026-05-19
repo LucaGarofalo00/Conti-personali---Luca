@@ -7,7 +7,7 @@ import Modal from '../components/Modal'
 import { cur, EXPENSE_CATEGORIES } from '../lib/utils'
 import type { RecurringExpense, Fund } from '../types'
 
-const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, category: 'altro' }
+const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, category: 'altro', end_date: '' }
 
 export default function RecurringExpenses() {
   const { user } = useAuth()
@@ -36,7 +36,7 @@ export default function RecurringExpenses() {
   const openAdd = () => { setEditing(null); setForm(emptyForm); setShowModal(true) }
   const openEdit = (item: RecurringExpense) => {
     setEditing(item)
-    setForm({ name: item.name, amount: Number(item.amount), day_of_month: item.day_of_month, fund_id: item.fund_id || '', category: item.category })
+    setForm({ name: item.name, amount: Number(item.amount), day_of_month: item.day_of_month, fund_id: item.fund_id || '', category: item.category, end_date: item.end_date || '' })
     setShowModal(true)
   }
 
@@ -44,7 +44,7 @@ export default function RecurringExpenses() {
     if (!form.name.trim()) { toast.error('Inserisci un nome'); return }
     if (form.amount <= 0) { toast.error('Inserisci un importo valido'); return }
     setSaving(true)
-    const data = { ...form, fund_id: form.fund_id || null }
+    const data = { ...form, fund_id: form.fund_id || null, end_date: form.end_date || null }
     const { error } = editing
       ? await supabase.from('recurring_expenses').update(data).eq('id', editing.id)
       : await supabase.from('recurring_expenses').insert({ user_id: user!.id, ...data })
@@ -71,7 +71,10 @@ export default function RecurringExpenses() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const totalActive = items.filter(i => i.is_active).reduce((s, i) => s + Number(i.amount), 0)
+  const today = new Date().toISOString().split('T')[0]
+  const activeItems = items.filter(i => i.is_active && (!i.end_date || i.end_date >= today))
+  const expiredItems = items.filter(i => i.end_date && i.end_date < today)
+  const totalActive = activeItems.reduce((s, i) => s + Number(i.amount), 0)
 
   return (
     <div>
@@ -92,7 +95,7 @@ export default function RecurringExpenses() {
         </div>
       ) : (
         <div className="space-y-3">
-          {items.map(item => {
+          {items.filter(i => !i.end_date || i.end_date >= today).map(item => {
             const fundName = funds.find(f => f.id === item.fund_id)?.name
             return (
               <div key={item.id} className={`bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between transition ${!item.is_active ? 'opacity-50' : ''}`}>
@@ -105,6 +108,7 @@ export default function RecurringExpenses() {
                     <p className="text-xs text-slate-400">
                       Giorno {item.day_of_month} &middot; {item.category}
                       {fundName && ` · ${fundName}`}
+                      {item.end_date && ` · Fino al ${new Date(item.end_date).toLocaleDateString('it-IT')}`}
                     </p>
                   </div>
                 </div>
@@ -116,6 +120,27 @@ export default function RecurringExpenses() {
               </div>
             )
           })}
+
+          {expiredItems.length > 0 && (
+            <>
+              <p className="text-sm font-medium text-slate-400 mt-6 mb-2">Scadute</p>
+              {expiredItems.map(item => (
+                <div key={item.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between opacity-40">
+                  <div className="flex items-center gap-4">
+                    <div className="w-6" />
+                    <div>
+                      <p className="font-medium text-slate-800 line-through">{item.name}</p>
+                      <p className="text-xs text-slate-400">Scaduta il {new Date(item.end_date!).toLocaleDateString('it-IT')}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-semibold text-slate-400">{cur(Number(item.amount))}</span>
+                    <button onClick={() => remove(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
 
@@ -142,11 +167,18 @@ export default function RecurringExpenses() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Fondo (opzionale)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
             <select value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
-              <option value="">Nessuno</option>
+              <option value="">Scegli al momento del pagamento</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Data di fine (opzionale)</label>
+            <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+            {form.end_date && (
+              <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-indigo-600 mt-1 hover:text-indigo-700">Rimuovi data di fine</button>
+            )}
           </div>
           <button onClick={save} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
             {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Aggiungi Spesa'}
