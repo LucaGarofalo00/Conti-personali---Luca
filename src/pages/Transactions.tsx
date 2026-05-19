@@ -217,15 +217,6 @@ export default function Transactions() {
     })
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
-
-  const filtered = items.filter(tx => {
-    if (filterType !== 'all' && tx.type !== filterType) return false
-    if (filterFund !== 'all' && tx.fund_id !== filterFund && tx.fund_to_id !== filterFund) return false
-    if (filterText && !tx.description.toLowerCase().includes(filterText.toLowerCase()) && !tx.category.toLowerCase().includes(filterText.toLowerCase())) return false
-    return true
-  })
-
   const duplicateGroups = useMemo(() => {
     const map = new Map<string, Transaction[]>()
     for (const tx of items) {
@@ -240,6 +231,15 @@ export default function Transactions() {
     }
     return dups
   }, [items])
+
+  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+
+  const filtered = items.filter(tx => {
+    if (filterType !== 'all' && tx.type !== filterType) return false
+    if (filterFund !== 'all' && tx.fund_id !== filterFund && tx.fund_to_id !== filterFund) return false
+    if (filterText && !tx.description.toLowerCase().includes(filterText.toLowerCase()) && !tx.category.toLowerCase().includes(filterText.toLowerCase())) return false
+    return true
+  })
 
   const filteredVisibleIds = filtered.map(t => t.id)
   const allFilteredSelected = filteredVisibleIds.length > 0 && filteredVisibleIds.every(id => selectedIds.has(id))
