@@ -16,7 +16,9 @@ export interface RecurringExpense {
   user_id: string
   name: string
   amount: number
-  day_of_month: number
+  frequency: 'monthly' | 'weekly'
+  day_of_month: number | null
+  day_of_week: number | null
   fund_id: string | null
   fund_to_id: string | null
   category: string
@@ -52,19 +54,6 @@ export interface WeeklyBudget {
   created_at: string
 }
 
-export interface VariableExpense {
-  id: string
-  user_id: string
-  name: string
-  estimated_amount: number
-  frequency: 'weekly' | 'monthly'
-  fund_id: string | null
-  category: string
-  is_active: boolean
-  needs_confirmation: boolean
-  created_at: string
-}
-
 export interface Transaction {
   id: string
   user_id: string
@@ -75,7 +64,6 @@ export interface Transaction {
   fund_to_id: string | null
   category: string
   budget_id: string | null
-  variable_expense_id: string | null
   recurring_expense_id: string | null
   recurring_income_id: string | null
   is_memo: boolean

@@ -1,13 +1,11 @@
 import { addDays, getDate, getDay, getDaysInMonth, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns'
 import { toDateString } from './utils'
-import type { RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction } from '../types'
+import type { RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
 export type BreakdownSource =
   | 'recurring_income'
   | 'recurring_expense'
   | 'weekly_budget'
-  | 'variable_weekly'
-  | 'variable_monthly'
   | 'planned'
   | 'transfer'
 
@@ -27,7 +25,6 @@ interface Args {
   recurringExpenses: RecurringExpense[]
   recurringIncome: RecurringIncome[]
   weeklyBudgets: WeeklyBudget[]
-  variableExpenses: VariableExpense[]
   planned: Transaction[]
   excludedFundIds: string[]
   fromToday?: boolean
@@ -37,14 +34,12 @@ const SOURCE_LABELS: Record<BreakdownSource, string> = {
   recurring_income: 'Entrata ricorrente',
   recurring_expense: 'Spesa ricorrente',
   weekly_budget: 'Budget settimanale',
-  variable_weekly: 'Spesa variabile sett.',
-  variable_monthly: 'Spesa variabile mensile',
   planned: 'Pianificata',
   transfer: 'Trasferimento',
 }
 
 export function getPeriodBreakdown(args: Args): BreakdownItem[] {
-  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, variableExpenses, planned, excludedFundIds, fromToday = false } = args
+  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false } = args
   const excluded = new Set(excludedFundIds)
   const items: BreakdownItem[] = []
   const today = startOfDay(new Date())
@@ -85,8 +80,15 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       if (exp.fund_id && excluded.has(exp.fund_id)) continue
       const isTransfer = (exp.type || 'expense') === 'transfer'
       if (isTransfer && exp.fund_to_id && excluded.has(exp.fund_to_id)) continue
-      const adjusted = Math.min(exp.day_of_month, dim)
-      if (dom === adjusted) {
+      const freq = exp.frequency || 'monthly'
+      let occurs = false
+      if (freq === 'monthly' && exp.day_of_month !== null) {
+        const adjusted = Math.min(exp.day_of_month, dim)
+        if (dom === adjusted) occurs = true
+      } else if (freq === 'weekly' && exp.day_of_week !== null) {
+        if (getDay(cursor) === exp.day_of_week) occurs = true
+      }
+      if (occurs) {
         items.push({
           date: dateStr, description: exp.name, amount: Number(exp.amount),
           kind: 'expense',
@@ -126,31 +128,9 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
           kind: 'expense', source: 'weekly_budget', sourceLabel: SOURCE_LABELS.weekly_budget,
         })
       }
-      for (const ve of variableExpenses) {
-        if (!ve.is_active) continue
-        if (ve.frequency !== 'weekly') continue
-        if (ve.fund_id && excluded.has(ve.fund_id)) continue
-        items.push({
-          date: dateStr, description: `${ve.name} (settimana)`, amount: Number(ve.estimated_amount),
-          kind: 'expense', source: 'variable_weekly', sourceLabel: SOURCE_LABELS.variable_weekly,
-          category: ve.category,
-        })
-      }
     }
 
     cursor.setDate(cursor.getDate() + 1)
-  }
-
-  for (const ve of variableExpenses) {
-    if (!ve.is_active) continue
-    if (ve.frequency !== 'monthly') continue
-    if (ve.fund_id && excluded.has(ve.fund_id)) continue
-    items.push({
-      date: toDateString(lowerBound),
-      description: `${ve.name} (mensile)`, amount: Number(ve.estimated_amount),
-      kind: 'expense', source: 'variable_monthly', sourceLabel: SOURCE_LABELS.variable_monthly,
-      category: ve.category,
-    })
   }
 
   items.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)

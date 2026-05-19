@@ -1,6 +1,6 @@
 import { addDays, addMonths, startOfWeek, getDate, getDay, getDaysInMonth, format, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns'
 import { it } from 'date-fns/locale'
-import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction, ForecastPoint } from '../types'
+import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction, ForecastPoint } from '../types'
 
 function isExcluded(fundId: string | null, excluded: Set<string>): boolean {
   return fundId !== null && excluded.has(fundId)
@@ -11,7 +11,6 @@ export function generateForecast(
   recurringExpenses: RecurringExpense[],
   recurringIncome: RecurringIncome[],
   weeklyBudgets: WeeklyBudget[],
-  variableExpenses: VariableExpense[],
   endDateOrMonths: Date | number = 6,
   excludedFundIds: string[] = [],
   plannedTransactions: Transaction[] = []
@@ -59,8 +58,13 @@ export function generateForecast(
           if (exp.end_date && isAfter(cursor, new Date(exp.end_date))) continue
           if (isExcluded(exp.fund_id, excluded)) continue
           if ((exp.type || 'expense') === 'transfer' && isExcluded(exp.fund_to_id, excluded)) continue
-          const adjusted = Math.min(exp.day_of_month, dim)
-          if (dom === adjusted) expenses += Number(exp.amount)
+          const freq = exp.frequency || 'monthly'
+          if (freq === 'monthly' && exp.day_of_month !== null) {
+            const adjusted = Math.min(exp.day_of_month, dim)
+            if (dom === adjusted) expenses += Number(exp.amount)
+          } else if (freq === 'weekly' && exp.day_of_week !== null) {
+            if (getDay(cursor) === exp.day_of_week) expenses += Number(exp.amount)
+          }
         }
 
         for (const planned of pendingPlanned) {
@@ -77,12 +81,6 @@ export function generateForecast(
         if (!b.is_active) continue
         if (isExcluded(b.fund_id, excluded)) continue
         expenses += Number(b.amount)
-      }
-      for (const ve of variableExpenses) {
-        if (!ve.is_active) continue
-        if (isExcluded(ve.fund_id, excluded)) continue
-        if (ve.frequency === 'weekly') expenses += Number(ve.estimated_amount)
-        else expenses += Number(ve.estimated_amount) / 4.33
       }
     }
 
@@ -119,11 +117,86 @@ export function generateForecast(
   return points
 }
 
+import { getPeriodBreakdown, totalsFromBreakdown } from './periodBreakdown'
+import { getBillingPeriodFor } from './utils'
+
+export interface BalanceProjection {
+  balance: number
+  targetDate: Date
+  totalIncome: number
+  totalExpenses: number
+}
+
+export function projectBalanceAtDate(
+  targetDate: Date,
+  currentBalance: number,
+  recurringExpenses: RecurringExpense[],
+  recurringIncome: RecurringIncome[],
+  weeklyBudgets: WeeklyBudget[],
+  planned: Transaction[],
+  excludedFundIds: string[]
+): BalanceProjection {
+  const today = startOfDay(new Date())
+  const target = startOfDay(targetDate)
+  if (isBefore(target, today)) {
+    return { balance: currentBalance, targetDate: target, totalIncome: 0, totalExpenses: 0 }
+  }
+
+  let balance = currentBalance
+  let totalIncome = 0
+  let totalExpenses = 0
+  let cursor = today
+
+  while (!isAfter(cursor, target)) {
+    const { endDate } = getBillingPeriodFor(cursor)
+    const segmentEnd = isBefore(endDate, target) ? endDate : target
+
+    const items = getPeriodBreakdown({
+      startDate: cursor,
+      endDate: segmentEnd,
+      recurringExpenses, recurringIncome, weeklyBudgets, planned,
+      excludedFundIds,
+      fromToday: false,
+    })
+    const totals = totalsFromBreakdown(items)
+    balance += totals.income - totals.expenses
+    totalIncome += totals.income
+    totalExpenses += totals.expenses
+
+    cursor = addDays(endDate, 1)
+  }
+
+  return {
+    balance: Math.round(balance * 100) / 100,
+    targetDate: target,
+    totalIncome: Math.round(totalIncome * 100) / 100,
+    totalExpenses: Math.round(totalExpenses * 100) / 100,
+  }
+}
+
+export function findNextMonthlyIncomeDate(income: RecurringIncome[]): { date: Date; income: RecurringIncome } | null {
+  const today = startOfDay(new Date())
+  let best: { date: Date; income: RecurringIncome } | null = null
+  for (const inc of income) {
+    if (!inc.is_active || inc.frequency !== 'monthly' || inc.day_of_month === null) continue
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), Math.min(inc.day_of_month, new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()))
+    let candidate = thisMonth
+    if (isBefore(candidate, today)) {
+      const nextMonth = today.getMonth() + 1
+      const lastDayNext = new Date(today.getFullYear(), nextMonth + 1, 0).getDate()
+      candidate = new Date(today.getFullYear(), nextMonth, Math.min(inc.day_of_month, lastDayNext))
+    }
+    if (!best || isBefore(candidate, best.date)) {
+      best = { date: candidate, income: inc }
+    }
+  }
+  return best
+}
+
 export function getMonthlyEstimates(
   recurringExpenses: RecurringExpense[],
   recurringIncome: RecurringIncome[],
   weeklyBudgets: WeeklyBudget[],
-  variableExpenses: VariableExpense[],
   excludedFundIds: string[] = [],
   plannedInPeriod: Transaction[] = []
 ) {
@@ -144,21 +217,14 @@ export function getMonthlyEstimates(
     if (exp.end_date && new Date(exp.end_date) < new Date()) continue
     if (isExcluded(exp.fund_id, excluded)) continue
     if ((exp.type || 'expense') === 'transfer' && isExcluded(exp.fund_to_id, excluded)) continue
-    monthlyExpenses += Number(exp.amount)
+    const freq = exp.frequency || 'monthly'
+    monthlyExpenses += freq === 'weekly' ? Number(exp.amount) * 4.33 : Number(exp.amount)
   }
 
   for (const b of weeklyBudgets) {
     if (!b.is_active) continue
     if (isExcluded(b.fund_id, excluded)) continue
     monthlyExpenses += Number(b.amount) * 4.33
-  }
-
-  for (const ve of variableExpenses) {
-    if (!ve.is_active) continue
-    if (isExcluded(ve.fund_id, excluded)) continue
-    monthlyExpenses += ve.frequency === 'weekly'
-      ? Number(ve.estimated_amount) * 4.33
-      : Number(ve.estimated_amount)
   }
 
   let plannedIncomeInPeriod = 0

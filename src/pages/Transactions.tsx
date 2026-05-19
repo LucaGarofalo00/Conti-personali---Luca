@@ -128,7 +128,7 @@ export default function Transactions() {
     }
 
     const newTx: Transaction = {
-      ...(editing || { id: '', user_id: '', created_at: '', is_memo: false, is_planned: false, budget_id: null, variable_expense_id: null, recurring_expense_id: null, recurring_income_id: null }),
+      ...(editing || { id: '', user_id: '', created_at: '', is_memo: false, is_planned: false, budget_id: null, recurring_expense_id: null, recurring_income_id: null }),
       type: form.type,
       amount: form.amount,
       description: form.description,
@@ -247,8 +247,7 @@ export default function Transactions() {
       if (filterSource === 'recurring_expense' && !tx.recurring_expense_id) return false
       if (filterSource === 'recurring_income' && !tx.recurring_income_id) return false
       if (filterSource === 'budget' && !tx.budget_id) return false
-      if (filterSource === 'variable' && !tx.variable_expense_id) return false
-      if (filterSource === 'manual' && (tx.recurring_expense_id || tx.recurring_income_id || tx.budget_id || tx.variable_expense_id)) return false
+      if (filterSource === 'manual' && (tx.recurring_expense_id || tx.recurring_income_id || tx.budget_id)) return false
     }
     if (filterText && !tx.description.toLowerCase().includes(filterText.toLowerCase()) && !tx.category.toLowerCase().includes(filterText.toLowerCase())) return false
     return true
@@ -297,7 +296,6 @@ export default function Transactions() {
         <ul className="list-disc ml-4 space-y-0.5">
           <li><strong>entrata ric.</strong> / <strong>auto-uscita</strong>: generata confermando una voce ricorrente o da auto-deduct</li>
           <li><strong>budget</strong>: spesa inserita dentro un budget settimanale</li>
-          <li><strong>var.</strong>: spesa inserita dentro una variable expense (es. GPL)</li>
           <li><strong>memo</strong>: "solo pagato" o "non lavorato" — non muove i fondi</li>
           <li><strong>pianif.</strong>: futura/pianificata, non ancora avvenuta — non influisce sul saldo</li>
         </ul>
@@ -342,7 +340,6 @@ export default function Transactions() {
           <option value="recurring_income">Entrate ricorrenti</option>
           <option value="recurring_expense">Spese ricorrenti</option>
           <option value="budget">Da budget settimanali</option>
-          <option value="variable">Da spese variabili</option>
           <option value="manual">Solo manuali</option>
         </select>
         <div className="relative">
@@ -418,7 +415,6 @@ export default function Transactions() {
                         {tx.recurring_expense_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">auto-uscita</span>}
                         {tx.recurring_income_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">entrata ric.</span>}
                         {tx.budget_id && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-medium uppercase">budget</span>}
-                        {tx.variable_expense_id && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium uppercase">var.</span>}
                       </div>
                       <p className="text-xs text-slate-400">
                         {format(new Date(tx.date), 'dd MMM yyyy', { locale: it })}

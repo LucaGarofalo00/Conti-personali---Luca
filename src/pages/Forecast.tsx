@@ -13,7 +13,7 @@ import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
 import { getPeriodBreakdown } from '../lib/periodBreakdown'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { cur, getBillingPeriodFor, toDateString } from '../lib/utils'
-import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction, ForecastPoint } from '../types'
+import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction, ForecastPoint } from '../types'
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint }> }) {
   if (!active || !payload?.length) return null
@@ -35,7 +35,6 @@ export default function Forecast() {
   const [expenses, setExpenses] = useState<RecurringExpense[]>([])
   const [income, setIncome] = useState<RecurringIncome[]>([])
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
-  const [varExp, setVarExp] = useState<VariableExpense[]>([])
   const [planned, setPlanned] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [targetDate, setTargetDate] = useState(() => toDateString(addMonths(new Date(), 6)))
@@ -58,10 +57,9 @@ export default function Forecast() {
       supabase.from('recurring_expenses').select('*'),
       supabase.from('recurring_income').select('*'),
       supabase.from('weekly_budgets').select('*'),
-      supabase.from('variable_expenses').select('*'),
       supabase.from('transactions').select('*').eq('is_planned', true),
-    ]).then(([f, e, i, b, v, p]) => {
-      const firstError = [f, e, i, b, v, p].find(r => r.error)?.error
+    ]).then(([f, e, i, b, p]) => {
+      const firstError = [f, e, i, b, p].find(r => r.error)?.error
       if (firstError) {
         console.error('Errore Supabase:', firstError)
         toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
@@ -70,7 +68,6 @@ export default function Forecast() {
       setExpenses(e.data || [])
       setIncome(i.data || [])
       setBudgets(b.data || [])
-      setVarExp(v.data || [])
       setPlanned(p.data || [])
     }).catch(err => {
       console.error('Errore fatale:', err)
@@ -84,10 +81,10 @@ export default function Forecast() {
 
   const targetDateObj = new Date(targetDate)
   const daysToTarget = Math.max(1, differenceInDays(targetDateObj, new Date()))
-  const forecast = generateForecast(funds, expenses, income, budgets, varExp, targetDateObj, excludedFundIds, planned)
+  const forecast = generateForecast(funds, expenses, income, budgets, targetDateObj, excludedFundIds, planned)
   const periodNow = getBillingPeriodFor(new Date())
   const plannedInCurrent = planned.filter(p => p.date >= periodNow.start && p.date <= periodNow.end)
-  const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds, plannedInCurrent)
+  const est = getMonthlyEstimates(expenses, income, budgets, excludedFundIds, plannedInCurrent)
   const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
   const excludedNames = funds.filter(f => excludedFundIds.includes(f.id)).map(f => f.name)
 
@@ -216,7 +213,6 @@ export default function Forecast() {
                   recurringExpenses: expenses,
                   recurringIncome: income,
                   weeklyBudgets: budgets,
-                  variableExpenses: varExp,
                   planned,
                   excludedFundIds,
                   fromToday: true,

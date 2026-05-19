@@ -8,7 +8,20 @@ import { cur, EXPENSE_CATEGORIES, todayString } from '../lib/utils'
 import InfoBox from '../components/InfoBox'
 import type { RecurringExpense, Fund } from '../types'
 
-const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, fund_to_id: '' as string, category: 'altro', type: 'expense' as 'expense' | 'transfer', auto_deduct: false, end_date: '' }
+const DAYS_OF_WEEK = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
+
+const emptyForm = {
+  name: '', amount: 0,
+  frequency: 'monthly' as 'monthly' | 'weekly',
+  day_of_month: 1,
+  day_of_week: 1,
+  fund_id: '' as string,
+  fund_to_id: '' as string,
+  category: 'altro',
+  type: 'expense' as 'expense' | 'transfer',
+  auto_deduct: false,
+  end_date: '',
+}
 
 export default function RecurringExpenses() {
   const { user } = useAuth()
@@ -50,7 +63,9 @@ export default function RecurringExpenses() {
     setForm({
       name: item.name,
       amount: Number(item.amount),
-      day_of_month: item.day_of_month,
+      frequency: item.frequency || 'monthly',
+      day_of_month: item.day_of_month ?? 1,
+      day_of_week: item.day_of_week ?? 1,
       fund_id: item.fund_id || '',
       fund_to_id: item.fund_to_id || '',
       category: item.category,
@@ -74,7 +89,9 @@ export default function RecurringExpenses() {
     const data = {
       name: form.name,
       amount: form.amount,
-      day_of_month: form.day_of_month,
+      frequency: form.frequency,
+      day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
+      day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
       fund_id: form.fund_id || null,
       fund_to_id: form.type === 'transfer' ? (form.fund_to_id || null) : null,
       category: form.type === 'transfer' ? 'trasferimento' : form.category,
@@ -111,7 +128,9 @@ export default function RecurringExpenses() {
   const today = todayString()
   const activeItems = items.filter(i => i.is_active && (!i.end_date || i.end_date >= today))
   const expiredItems = items.filter(i => i.end_date && i.end_date < today)
-  const totalExpenses = activeItems.filter(i => (i.type || 'expense') === 'expense').reduce((s, i) => s + Number(i.amount), 0)
+  const totalExpenses = activeItems
+    .filter(i => (i.type || 'expense') === 'expense')
+    .reduce((s, i) => s + ((i.frequency || 'monthly') === 'weekly' ? Number(i.amount) * 4.33 : Number(i.amount)), 0)
 
   return (
     <div>
@@ -124,9 +143,11 @@ export default function RecurringExpenses() {
         </button>
       </div>
       <InfoBox title="Come funzionano le spese ricorrenti" tone="indigo">
-        <p>Una spesa ricorrente si ripete <strong>ogni mese</strong> nel giorno indicato. Compaiono nelle previsioni e nelle stime mensili.</p>
-        <p><strong>Da confermare</strong>: nel giorno di scadenza compare nella sezione "Da Confermare" della dashboard. Clicchi "Paga" → registri la spesa e scegli il fondo.</p>
-        <p><strong>Automatica</strong>: nel giorno di scadenza viene scalata <strong>automaticamente</strong> dal fondo predefinito. Non compare in "Da Confermare". Richiede di aver scelto un fondo.</p>
+        <p>Una spesa ricorrente si ripete con la frequenza indicata. Compare nelle previsioni e nelle stime.</p>
+        <p><strong>Frequenza mensile</strong>: scatta ogni mese nel giorno indicato (es. affitto il 1, Netflix il 5).</p>
+        <p><strong>Frequenza settimanale</strong>: scatta ogni settimana nel giorno indicato (es. GPL ogni venerdì). Nelle previsioni conta come <code>importo × 4.33</code>/mese.</p>
+        <p><strong>Da confermare</strong>: nel giorno di scadenza compare nella sezione "Da Confermare" della dashboard. Clicchi "Paga" → puoi modificare l'importo prima di confermare (per esempio se questo mese hai pagato 25€ di GPL invece di 30€).</p>
+        <p><strong>Automatica</strong>: nel giorno di scadenza viene scalata <strong>automaticamente</strong> dal fondo predefinito con l'importo fisso. Non compare in "Da Confermare". Richiede di aver scelto un fondo.</p>
         <p><strong>Trasferimento</strong>: sposta soldi da un fondo all'altro (es. risparmio mensile). Conteggiato come uscita nelle previsioni.</p>
         <p><strong>Data ultimo accredito</strong>: dopo quella data la spesa non viene più contata (es. finanziamento che finisce a giugno).</p>
       </InfoBox>
@@ -159,7 +180,9 @@ export default function RecurringExpenses() {
                       )}
                     </div>
                     <p className="text-xs text-slate-400">
-                      Ogni mese il {item.day_of_month} &middot; {isTransfer
+                      {(item.frequency || 'monthly') === 'weekly'
+                        ? `Ogni ${DAYS_OF_WEEK[item.day_of_week ?? 1]}`
+                        : `Ogni mese il ${item.day_of_month}`} &middot; {isTransfer
                         ? `${fromFund || '?'} → ${toFund || '?'}`
                         : item.category}
                       {!isTransfer && fromFund && ` · ${fromFund}`}
@@ -225,10 +248,27 @@ export default function RecurringExpenses() {
               <input type="number" step="0.01" value={form.amount || ''} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
             </div>
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
+              <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                <option value="monthly">Mensile</option>
+                <option value="weekly">Settimanale</option>
+              </select>
+            </div>
+          </div>
+          {form.frequency === 'monthly' ? (
+            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Giorno del mese</label>
               <input type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Giorno della settimana</label>
+              <select value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                {DAYS_OF_WEEK.map((d, i) => <option key={i} value={i}>{d}</option>)}
+              </select>
+              <p className="text-xs text-slate-400 mt-1">La spesa verrà conteggiata ogni {DAYS_OF_WEEK[form.day_of_week]} (~{form.amount > 0 ? (form.amount * 4.33).toFixed(2) : 0}€/mese stimato).</p>
+            </div>
+          )}
 
           {form.type === 'expense' && (
             <>

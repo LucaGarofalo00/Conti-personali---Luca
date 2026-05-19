@@ -35,7 +35,6 @@ alter table recurring_expenses add column if not exists auto_deduct boolean not 
 alter table recurring_expenses add column if not exists fund_to_id uuid references funds(id) on delete set null;
 alter table recurring_expenses add column if not exists type text not null default 'expense';
 alter table recurring_expenses add column if not exists end_date date;
-alter table variable_expenses add column if not exists needs_confirmation boolean not null default false;
 NOTIFY pgrst, 'reload schema';`}</pre>
           </details>
         </div>

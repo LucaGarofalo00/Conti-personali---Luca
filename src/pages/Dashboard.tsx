@@ -13,13 +13,14 @@ import SchemaBanner from '../components/SchemaBanner'
 import InfoBox from '../components/InfoBox'
 import BreakdownList from '../components/BreakdownList'
 import { getPeriodBreakdown } from '../lib/periodBreakdown'
-import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
-import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, formatDayMonth, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
+import { generateForecast, getMonthlyEstimates, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
+import { addDays } from 'date-fns'
+import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
 import { generateIncomeOccurrences, type IncomeOccurrence } from '../lib/incomeOccurrences'
-import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction } from '../types'
+import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
 interface PendingItem {
   id: string
@@ -33,6 +34,7 @@ interface PendingItem {
   confirmed: boolean
   occurrence?: IncomeOccurrence
   recurring_income_id?: string
+  recurring_expense_id?: string
   occurrence_date?: string
 }
 
@@ -60,7 +62,6 @@ export default function Dashboard() {
   const [expenses, setExpenses] = useState<RecurringExpense[]>([])
   const [income, setIncome] = useState<RecurringIncome[]>([])
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
-  const [varExp, setVarExp] = useState<VariableExpense[]>([])
   const [periodTx, setPeriodTx] = useState<Transaction[]>([])
   const [planned, setPlanned] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,12 +86,11 @@ export default function Dashboard() {
     try {
       const { start: periodStart, end: periodEnd } = getBillingPeriod()
 
-      const [f, e, i, b, v] = await Promise.all([
+      const [f, e, i, b] = await Promise.all([
         supabase.from('funds').select('*').order('sort_order'),
         supabase.from('recurring_expenses').select('*'),
         supabase.from('recurring_income').select('*'),
         supabase.from('weekly_budgets').select('*'),
-        supabase.from('variable_expenses').select('*'),
       ])
 
       let periodTxData: Transaction[] = []
@@ -118,7 +118,7 @@ export default function Dashboard() {
         plannedData = plRes.data || []
       }
 
-      const firstError = [f, e, i, b, v].find(r => r.error)?.error
+      const firstError = [f, e, i, b].find(r => r.error)?.error
       if (firstError) {
         console.error('Errore Supabase:', firstError)
         toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
@@ -154,7 +154,6 @@ export default function Dashboard() {
       setExpenses(expensesData)
       setIncome(i.data || [])
       setBudgets(b.data || [])
-      setVarExp(v.data || [])
       setPeriodTx(finalPeriodTx)
       setPlanned(plannedData)
       setMissingColumns(missing)
@@ -170,34 +169,59 @@ export default function Dashboard() {
 
   const today = todayString()
 
-  const isItemConfirmed = (name: string, type: string) =>
-    periodTx.some(tx => tx.description === name && (type === 'transfer' ? tx.type === 'transfer' : tx.type === 'expense'))
+  const { startDate: periodStartObj, endDate: periodEndObj } = getBillingPeriodFor(new Date())
 
   const pendingRecurring: PendingItem[] = expenses
     .filter(exp => exp.is_active && !exp.auto_deduct && (!exp.end_date || exp.end_date >= today))
-    .sort((a, b) => {
-      const aDate = getDateInCurrentPeriod(a.day_of_month).getTime()
-      const bDate = getDateInCurrentPeriod(b.day_of_month).getTime()
-      return aDate - bDate
-    })
-    .map(exp => {
+    .flatMap(exp => {
       const isTransfer = (exp.type || 'expense') === 'transfer'
       const fromName = funds.find(f => f.id === exp.fund_id)?.name
       const toName = funds.find(f => f.id === exp.fund_to_id)?.name
-      return {
-        id: 'rec-' + exp.id,
-        kind: isTransfer ? 'transfer' as const : 'expense' as const,
-        name: exp.name,
-        amount: Number(exp.amount),
-        fund_id: exp.fund_id,
-        fund_to_id: exp.fund_to_id || null,
-        category: exp.category,
-        label: isTransfer
-          ? `${formatDayMonth(exp.day_of_month)} · ${fromName || '?'} → ${toName || '?'}`
-          : `${formatDayMonth(exp.day_of_month)} · ${exp.category}`,
-        confirmed: isItemConfirmed(exp.name, isTransfer ? 'transfer' : 'expense'),
+      const baseLabel = isTransfer ? `${fromName || '?'} → ${toName || '?'}` : exp.category
+      const freq = exp.frequency || 'monthly'
+      const occurrences: { date: Date; dateStr: string }[] = []
+
+      if (freq === 'weekly' && exp.day_of_week !== null) {
+        const cursor = new Date(periodStartObj)
+        while (cursor <= periodEndObj) {
+          if (cursor.getDay() === exp.day_of_week) {
+            occurrences.push({ date: new Date(cursor), dateStr: format(cursor, 'yyyy-MM-dd') })
+          }
+          cursor.setDate(cursor.getDate() + 1)
+        }
+      } else if (freq === 'monthly' && exp.day_of_month !== null) {
+        const due = getDateInCurrentPeriod(exp.day_of_month)
+        occurrences.push({ date: due, dateStr: format(due, 'yyyy-MM-dd') })
       }
+
+      return occurrences.map(o => {
+        const matchingTx = periodTx.find(tx =>
+          tx.recurring_expense_id === exp.id &&
+          tx.date === o.dateStr
+        ) || (freq === 'monthly' ? periodTx.find(tx =>
+          tx.description === exp.name &&
+          (isTransfer ? tx.type === 'transfer' : tx.type === 'expense') &&
+          !tx.recurring_expense_id
+        ) : undefined)
+        const dateLabel = freq === 'weekly'
+          ? format(o.date, 'EEE d MMM', { locale: it })
+          : format(o.date, 'd MMM', { locale: it })
+        return {
+          id: 'rec-' + exp.id + '-' + o.dateStr,
+          kind: isTransfer ? 'transfer' as const : 'expense' as const,
+          name: exp.name,
+          amount: Number(exp.amount),
+          fund_id: exp.fund_id,
+          fund_to_id: exp.fund_to_id || null,
+          category: exp.category,
+          label: `${dateLabel} · ${baseLabel}`,
+          confirmed: !!matchingTx,
+          recurring_expense_id: exp.id,
+          occurrence_date: o.dateStr,
+        }
+      })
     })
+    .sort((a, b) => (a.occurrence_date || '').localeCompare(b.occurrence_date || ''))
 
   const { start: pStartStr, end: pEndStr } = getBillingPeriod()
   const incomeOccurrences = generateIncomeOccurrences(income, pStartStr, pEndStr, periodTx)
@@ -228,19 +252,7 @@ export default function Dashboard() {
     }
   })
 
-  const pendingVarExp: PendingItem[] = varExp
-    .filter(v => v.is_active && v.needs_confirmation)
-    .map(v => ({
-      id: 'var-' + v.id,
-      kind: 'expense' as const,
-      name: v.name,
-      amount: Number(v.estimated_amount),
-      fund_id: v.fund_id,
-      fund_to_id: null,
-      category: v.category,
-      label: v.frequency === 'weekly' ? 'Spesa variabile settimanale' : 'Spesa variabile mensile',
-      confirmed: false,
-    }))
+  const pendingVarExp: PendingItem[] = []
 
   const confirmedRecurringCount = pendingRecurring.filter(p => p.confirmed).length
 
@@ -268,6 +280,7 @@ export default function Dashboard() {
       fund_to_id: fundToId,
       category: confirmItem.category,
       recurring_income_id: confirmItem.recurring_income_id || null,
+      recurring_expense_id: confirmItem.recurring_expense_id || null,
       date: txDate,
     })
 
@@ -380,8 +393,8 @@ export default function Dashboard() {
   const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
   const { start: pStartForEst, end: pEndForEst } = getBillingPeriod()
   const plannedInPeriod = planned.filter(p => p.date >= pStartForEst && p.date <= pEndForEst)
-  const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds, plannedInPeriod)
-  const forecast = generateForecast(funds, expenses, income, budgets, varExp, 3, excludedFundIds, planned)
+  const est = getMonthlyEstimates(expenses, income, budgets, excludedFundIds, plannedInPeriod)
+  const forecast = generateForecast(funds, expenses, income, budgets, 3, excludedFundIds, planned)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
   const { end: pEnd } = getBillingPeriod()
@@ -389,8 +402,8 @@ export default function Dashboard() {
   const nowDate = new Date()
 
   const upcoming = expenses
-    .filter(e => e.is_active && (!e.end_date || e.end_date >= today))
-    .map(e => ({ ...e, dueDate: getDateInCurrentPeriod(e.day_of_month) }))
+    .filter(e => e.is_active && (!e.end_date || e.end_date >= today) && (e.frequency || 'monthly') === 'monthly' && e.day_of_month !== null)
+    .map(e => ({ ...e, dueDate: getDateInCurrentPeriod(e.day_of_month as number) }))
     .filter(e => e.dueDate > nowDate && e.dueDate <= periodEndDate)
     .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
     .slice(0, 5)
@@ -438,19 +451,56 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <Card icon={Wallet} color="bg-indigo-100 text-indigo-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
-        <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate / Mese" value={cur(est.monthlyIncome)} sub={est.plannedIncomeInPeriod > 0 ? `incl. ${cur(est.plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
-        <Card icon={TrendingDown} color="bg-red-100 text-red-600" label="Uscite / Mese" value={cur(est.monthlyExpenses)} sub={est.plannedExpensesInPeriod > 0 ? `incl. ${cur(est.plannedExpensesInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('expense')} />
-        <Card icon={Target} color="bg-amber-100 text-amber-600" label="Netto / Mese" value={cur(est.monthlyNet)} valueColor={est.monthlyNet >= 0 ? 'text-emerald-600' : 'text-red-600'} />
-      </div>
-      <InfoBox title="Come vengono calcolate queste cifre" tone="indigo">
-        <p><strong>Saldo Totale</strong>: somma di tutti i fondi (escluso quelli filtrati col selettore in alto).</p>
-        <p><strong>Entrate / Mese</strong>: stipendio mensile + (sabato settimanale × 4.33 settimane) + pianificate del periodo corrente (15-14).</p>
-        <p><strong>Uscite / Mese</strong>: spese ricorrenti + budget settimanali × 4.33 + spese variabili (settimanali × 4.33, mensili tal quale) + pianificate del periodo.</p>
-        <p><strong>Netto / Mese</strong>: Entrate − Uscite. Se positivo, mediamente risparmi.</p>
-        <p>Le pianificate del periodo corrente vengono incluse e mostrate sotto la cifra.</p>
-      </InfoBox>
+      {(() => {
+        const nextSalary = findNextMonthlyIncomeDate(income)
+        const projectionTarget = nextSalary ? addDays(nextSalary.date, -1) : null
+        const projection = projectionTarget
+          ? projectBalanceAtDate(projectionTarget, totalBalance, expenses, income, budgets, planned, excludedFundIds)
+          : null
+        return (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <Card icon={Wallet} color="bg-indigo-100 text-indigo-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
+              <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate / Mese" value={cur(est.monthlyIncome)} sub={est.plannedIncomeInPeriod > 0 ? `incl. ${cur(est.plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
+              <Card
+                icon={Target}
+                color={est.monthlyNet >= 0 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}
+                label="Netto / Mese"
+                value={cur(est.monthlyNet)}
+                valueColor={est.monthlyNet >= 0 ? 'text-emerald-600' : 'text-red-600'}
+                sub={`Uscite ${cur(est.monthlyExpenses)} · Entrate ${cur(est.monthlyIncome)}`}
+                onClick={() => setBreakdownModal('expense')}
+              />
+              {projection && projectionTarget && nextSalary ? (
+                <Card
+                  icon={projection.balance >= 0 ? TrendingUp : TrendingDown}
+                  color={projection.balance >= 0 ? 'bg-purple-100 text-purple-600' : 'bg-red-100 text-red-600'}
+                  label={`Saldo il ${format(projectionTarget, 'd MMM', { locale: it })}`}
+                  value={cur(projection.balance)}
+                  valueColor={projection.balance >= 0 ? 'text-purple-700' : 'text-red-600'}
+                  sub={`Giorno prima di "${nextSalary.income.name}"`}
+                  onClick={() => setBreakdownModal('expense')}
+                />
+              ) : (
+                <Card icon={TrendingDown} color="bg-slate-100 text-slate-400" label="Saldo prossimo stipendio" value="—" sub="Configura un'entrata mensile" />
+              )}
+            </div>
+            <InfoBox title="Come vengono calcolate queste cifre" tone="indigo">
+              <p><strong>Saldo Totale</strong>: somma di tutti i fondi (escluso quelli filtrati col selettore in alto).</p>
+              <p><strong>Entrate / Mese</strong>: stipendio mensile + (sabato settimanale × 4.33 settimane) + pianificate del periodo corrente (15-14). Click per dettaglio.</p>
+              <p><strong>Netto / Mese</strong>: Entrate − Uscite (uscite mostrate sotto). Click per vedere il dettaglio delle uscite.</p>
+              {projection && projectionTarget && nextSalary && (
+                <p>
+                  <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).
+                  Conta <strong>TUTTO</strong>: ricorrenti, budget settimanali, spese variabili (GPL/benzina come stima), pianificate.
+                  Da oggi al {format(projectionTarget, 'd MMM', { locale: it })}: <span className="text-emerald-600">+{cur(projection.totalIncome)}</span> entrate, <span className="text-red-500">-{cur(projection.totalExpenses)}</span> uscite.
+                </p>
+              )}
+              <p className="text-amber-700"><strong>Nota su GPL/Benzina</strong>: usate come <strong>stime fisse</strong> per la previsione (es. 30€/sett GPL). Se in alcuni mesi spendi diversamente (25€ invece di 30€), modifica la stima nella pagina Budget. L'effettiva spesa la vedi col progress bar nella stessa pagina.</p>
+            </InfoBox>
+          </>
+        )
+      })()}
 
       {(pendingRecurring.length > 0 || pendingIncome.length > 0 || pendingVarExp.length > 0) && (
         <div className="mb-8">
@@ -541,27 +591,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {pendingVarExp.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Spese Variabili</p>
-              <div className="space-y-2">
-                {pendingVarExp.map(item => (
-                  <div key={item.id} className="bg-white rounded-xl border-l-4 border-l-amber-500 border border-slate-200 p-4 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-slate-800">{item.name}</p>
-                      <p className="text-xs text-slate-400">{item.label} · ~{cur(item.amount)}</p>
-                    </div>
-                    <button
-                      onClick={() => openConfirm(item)}
-                      className="px-4 py-2 bg-amber-50 text-amber-600 rounded-lg text-sm font-medium hover:bg-amber-100 transition"
-                    >
-                      Pagato
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -760,10 +789,38 @@ export default function Dashboard() {
             <div className={`p-3 rounded-lg ${confirmItem.kind === 'income' ? 'bg-emerald-50' : confirmItem.kind === 'transfer' ? 'bg-blue-50' : 'bg-red-50'}`}>
               <p className={`font-medium ${confirmItem.kind === 'income' ? 'text-emerald-700' : confirmItem.kind === 'transfer' ? 'text-blue-700' : 'text-red-700'}`}>{confirmItem.name}</p>
               <p className={`text-xs ${confirmItem.kind === 'income' ? 'text-emerald-500' : confirmItem.kind === 'transfer' ? 'text-blue-500' : 'text-red-500'}`}>{confirmItem.label}</p>
+              <p className="text-xs text-slate-500 mt-1">Importo previsto: <span className="font-semibold">{cur(confirmItem.amount)}</span></p>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-700">
+              Modifica l'importo qui sotto se hai pagato/ricevuto una cifra diversa da quella prevista. La spesa/entrata ricorrente NON viene modificata, solo questa transazione.
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <input type="number" step="0.01" value={confirmAmount || ''} onChange={e => setConfirmAmount(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                {confirmItem.kind === 'income' ? 'Importo effettivamente ricevuto (€)' : confirmItem.kind === 'transfer' ? 'Importo effettivamente trasferito (€)' : 'Importo effettivamente pagato (€)'}
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={confirmAmount || ''}
+                  onChange={e => setConfirmAmount(parseFloat(e.target.value) || 0)}
+                  className={`w-full px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg font-semibold ${confirmAmount !== confirmItem.amount ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
+                />
+                {confirmAmount !== confirmItem.amount && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmAmount(confirmItem.amount)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-indigo-600 hover:text-indigo-700 bg-white px-2 py-1 rounded border border-slate-200"
+                  >
+                    Ripristina {cur(confirmItem.amount)}
+                  </button>
+                )}
+              </div>
+              {confirmAmount !== confirmItem.amount && (
+                <p className={`text-xs mt-1 ${confirmAmount > confirmItem.amount ? 'text-red-600' : 'text-emerald-600'}`}>
+                  {confirmAmount > confirmItem.amount ? '+' : ''}{cur(confirmAmount - confirmItem.amount)} rispetto al previsto
+                </p>
+              )}
             </div>
             {confirmItem.kind !== 'transfer' && (
               <div>
@@ -780,8 +837,8 @@ export default function Dashboard() {
               <button onClick={handleConfirm} disabled={confirmSaving || confirmAmount <= 0} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition text-sm">
                 {confirmSaving ? 'Registrazione...' : 'Conferma e registra'}
               </button>
-              <button onClick={handleMarkOnly} disabled={confirmSaving} className="py-2.5 px-4 bg-slate-100 text-slate-600 rounded-lg font-medium hover:bg-slate-200 disabled:opacity-50 transition text-sm">
-                Solo pagato
+              <button onClick={handleMarkOnly} disabled={confirmSaving} className="py-2.5 px-4 bg-slate-100 text-slate-600 rounded-lg font-medium hover:bg-slate-200 disabled:opacity-50 transition text-sm" title="Crea un memo che marca come pagato/ricevuto senza muovere i fondi">
+                Solo memo
               </button>
             </div>
           </div>
@@ -798,7 +855,7 @@ export default function Dashboard() {
           const breakdown = getPeriodBreakdown({
             startDate, endDate,
             recurringExpenses: expenses, recurringIncome: income,
-            weeklyBudgets: budgets, variableExpenses: varExp, planned,
+            weeklyBudgets: budgets, planned,
             excludedFundIds, fromToday: false,
           })
           return (

@@ -6,11 +6,14 @@
 -- Aggiunge SOLO le colonne mancanti, non ricrea nulla.
 -- =============================================
 
--- Spese ricorrenti: nuovi campi per trasferimenti e addebito automatico
+-- Spese ricorrenti: nuovi campi per trasferimenti, addebito automatico, frequenza weekly
 alter table recurring_expenses add column if not exists fund_to_id uuid references funds(id) on delete set null;
 alter table recurring_expenses add column if not exists type text not null default 'expense';
 alter table recurring_expenses add column if not exists auto_deduct boolean not null default false;
 alter table recurring_expenses add column if not exists end_date date;
+alter table recurring_expenses add column if not exists frequency text not null default 'monthly';
+alter table recurring_expenses add column if not exists day_of_week integer;
+alter table recurring_expenses alter column day_of_month drop not null;
 
 -- Spese variabili: campo per la conferma in dashboard
 alter table variable_expenses add column if not exists needs_confirmation boolean not null default false;

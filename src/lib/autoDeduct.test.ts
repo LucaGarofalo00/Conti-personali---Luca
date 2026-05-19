@@ -50,7 +50,8 @@ const mock = (supabaseMod as unknown as { __mock__: { tables: { transactions: Re
 
 function mkExp(id: string, day: number, amount: number, opts: Partial<RecurringExpense> = {}): RecurringExpense {
   return {
-    id, user_id: 'u1', name: 'Exp-' + id, amount, day_of_month: day,
+    id, user_id: 'u1', name: 'Exp-' + id, amount,
+    frequency: 'monthly', day_of_month: day, day_of_week: null,
     fund_id: 'fund-1', fund_to_id: null, category: 'altro', type: 'expense',
     is_active: true, auto_deduct: true, end_date: null, created_at: '',
     ...opts,
@@ -96,7 +97,7 @@ describe('processAutoDeducts - idempotency (the critical bug)', () => {
     const existing: Transaction = {
       id: 'pre-existing', user_id: 'u1', type: 'expense', amount: 100,
       description: 'Different name', fund_id: 'fund-1', fund_to_id: null,
-      category: 'altro', budget_id: null, variable_expense_id: null, recurring_expense_id: 'e1',
+      category: 'altro', budget_id: null, recurring_expense_id: 'e1',
       recurring_income_id: null, is_memo: false, is_planned: false,
       date: '2026-05-15', created_at: '',
     }
@@ -110,7 +111,7 @@ describe('processAutoDeducts - idempotency (the critical bug)', () => {
     const existing: Transaction = {
       id: 'manual', user_id: 'u1', type: 'expense', amount: 100,
       description: 'Exp-e1', fund_id: 'fund-1', fund_to_id: null,
-      category: 'altro', budget_id: null, variable_expense_id: null, recurring_expense_id: null,
+      category: 'altro', budget_id: null, recurring_expense_id: null,
       recurring_income_id: null, is_memo: false, is_planned: false,
       date: '2026-05-15', created_at: '',
     }

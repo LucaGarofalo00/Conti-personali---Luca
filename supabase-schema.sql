@@ -41,13 +41,15 @@ create table if not exists recurring_income (
   created_at timestamptz default now()
 );
 
--- Spese ricorrenti mensili (con supporto trasferimenti e addebito automatico)
+-- Spese ricorrenti (mensili o settimanali, con supporto trasferimenti e addebito automatico)
 create table if not exists recurring_expenses (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users(id) on delete cascade not null,
   name text not null,
   amount numeric(12,2) not null,
-  day_of_month integer not null check (day_of_month between 1 and 31),
+  frequency text not null default 'monthly' check (frequency in ('monthly', 'weekly')),
+  day_of_month integer check (day_of_month between 1 and 31),
+  day_of_week integer check (day_of_week between 0 and 6),
   fund_id uuid references funds(id) on delete set null,
   fund_to_id uuid references funds(id) on delete set null,
   category text not null default 'altro',
@@ -66,20 +68,6 @@ create table if not exists weekly_budgets (
   amount numeric(12,2) not null,
   fund_id uuid references funds(id) on delete set null,
   is_active boolean not null default true,
-  created_at timestamptz default now()
-);
-
--- Spese variabili ricorrenti (GPL, benzina, etc.)
-create table if not exists variable_expenses (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users(id) on delete cascade not null,
-  name text not null,
-  estimated_amount numeric(12,2) not null,
-  frequency text not null default 'weekly' check (frequency in ('weekly', 'monthly')),
-  fund_id uuid references funds(id) on delete set null,
-  category text not null default 'trasporti',
-  is_active boolean not null default true,
-  needs_confirmation boolean not null default false,
   created_at timestamptz default now()
 );
 
@@ -111,6 +99,9 @@ alter table recurring_expenses add column if not exists fund_to_id uuid referenc
 alter table recurring_expenses add column if not exists type text not null default 'expense';
 alter table recurring_expenses add column if not exists auto_deduct boolean not null default false;
 alter table recurring_expenses add column if not exists end_date date;
+alter table recurring_expenses add column if not exists frequency text not null default 'monthly';
+alter table recurring_expenses add column if not exists day_of_week integer;
+alter table recurring_expenses alter column day_of_month drop not null;
 
 alter table variable_expenses add column if not exists needs_confirmation boolean not null default false;
 
