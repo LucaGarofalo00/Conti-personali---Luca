@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur, iconMap, ICONS, COLORS } from '../lib/utils'
+import { cur, iconMap, ICONS, COLORS, todayString } from '../lib/utils'
 import type { Fund } from '../types'
 
 const emptyForm = { name: '', type: 'main' as 'main' | 'sub', parent_id: null as string | null, balance: 0, icon: 'wallet', color: '#3B82F6', sort_order: 0 }
@@ -74,7 +74,7 @@ export default function Funds() {
     await supabase.from('transactions').insert({
       user_id: user!.id, type: 'transfer', amount: transfer.amount,
       description: `Trasferimento: ${from.name} → ${to.name}`,
-      fund_id: from.id, fund_to_id: to.id, category: 'trasferimento', date: new Date().toISOString().split('T')[0],
+      fund_id: from.id, fund_to_id: to.id, category: 'trasferimento', date: todayString(),
     })
     setSaving(false)
     toast.success('Trasferimento completato')

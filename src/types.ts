@@ -75,10 +75,14 @@ export interface Transaction {
   fund_to_id: string | null
   category: string
   budget_id: string | null
+  recurring_expense_id: string | null
+  recurring_income_id: string | null
   is_memo: boolean
+  is_planned: boolean
   date: string
   created_at: string
 }
+
 
 export interface ForecastPoint {
   date: string

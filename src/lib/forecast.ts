@@ -1,6 +1,6 @@
-import { addDays, addMonths, startOfWeek, getDate, getDay, getDaysInMonth, format, startOfDay, isBefore, isAfter } from 'date-fns'
+import { addDays, addMonths, startOfWeek, getDate, getDay, getDaysInMonth, format, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns'
 import { it } from 'date-fns/locale'
-import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, ForecastPoint } from '../types'
+import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction, ForecastPoint } from '../types'
 
 function isExcluded(fundId: string | null, excluded: Set<string>): boolean {
   return fundId !== null && excluded.has(fundId)
@@ -13,7 +13,8 @@ export function generateForecast(
   weeklyBudgets: WeeklyBudget[],
   variableExpenses: VariableExpense[],
   months: number = 6,
-  excludedFundIds: string[] = []
+  excludedFundIds: string[] = [],
+  plannedTransactions: Transaction[] = []
 ): ForecastPoint[] {
   const excluded = new Set(excludedFundIds)
   const today = startOfDay(new Date())
@@ -35,6 +36,11 @@ export function generateForecast(
   if (isBefore(weekStart, addDays(today, 1))) {
     weekStart = addDays(weekStart, 7)
   }
+
+  const pendingPlanned = plannedTransactions
+    .filter(p => p.is_planned && !isExcluded(p.fund_id, excluded))
+    .filter(p => p.type !== 'transfer' || !isExcluded(p.fund_to_id, excluded))
+    .map(p => ({ ...p, dateObj: new Date(p.date) }))
 
   while (isBefore(weekStart, endDate)) {
     let weekIncome = 0
@@ -67,6 +73,12 @@ export function generateForecast(
         if ((exp.type || 'expense') === 'transfer' && isExcluded(exp.fund_to_id, excluded)) continue
         const adjusted = Math.min(exp.day_of_month, dim)
         if (dom === adjusted) weekExpenses += Number(exp.amount)
+      }
+
+      for (const planned of pendingPlanned) {
+        if (!isSameDay(planned.dateObj, day)) continue
+        if (planned.type === 'income') weekIncome += Number(planned.amount)
+        else if (planned.type === 'expense') weekExpenses += Number(planned.amount)
       }
     }
 

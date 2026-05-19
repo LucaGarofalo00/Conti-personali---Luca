@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, Calendar, PiggyBank, CheckCircle2, Check, Clock } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, Calendar, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
@@ -10,9 +10,10 @@ import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import FundExcluder from '../components/FundExcluder'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
-import { cur, iconMap, getBillingPeriod, getDateInCurrentPeriod, formatDayMonth } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getDateInCurrentPeriod, formatDayMonth, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
+import { markPlannedAsDone } from '../lib/plannedTransactions'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction } from '../types'
 
 interface PendingItem {
@@ -49,6 +50,7 @@ export default function Dashboard() {
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
   const [varExp, setVarExp] = useState<VariableExpense[]>([])
   const [periodTx, setPeriodTx] = useState<Transaction[]>([])
+  const [planned, setPlanned] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
 
@@ -57,18 +59,26 @@ export default function Dashboard() {
   const [confirmFundId, setConfirmFundId] = useState('')
   const [confirmSaving, setConfirmSaving] = useState(false)
 
+  const [plannedModal, setPlannedModal] = useState(false)
+  const [plannedForm, setPlannedForm] = useState({
+    type: 'expense' as 'income' | 'expense',
+    amount: 0, description: '', fund_id: '', category: 'altro', date: todayString(),
+  })
+  const [plannedSaving, setPlannedSaving] = useState(false)
+
   const load = async () => {
     const { start: periodStart, end: periodEnd } = getBillingPeriod()
 
-    const [f, e, i, b, v, tx] = await Promise.all([
+    const [f, e, i, b, v, tx, pl] = await Promise.all([
       supabase.from('funds').select('*').order('sort_order'),
       supabase.from('recurring_expenses').select('*'),
       supabase.from('recurring_income').select('*'),
       supabase.from('weekly_budgets').select('*'),
       supabase.from('variable_expenses').select('*'),
-      supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd),
+      supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd).eq('is_planned', false),
+      supabase.from('transactions').select('*').eq('is_planned', true).order('date', { ascending: true }),
     ])
-    if (f.error || e.error || i.error || b.error || v.error) {
+    if (f.error || e.error || i.error || b.error || v.error || tx.error || pl.error) {
       toast.error('Errore nel caricamento dei dati')
     }
 
@@ -87,7 +97,7 @@ export default function Dashboard() {
       if (processed > 0) {
         const [fRefetch, txRefetch] = await Promise.all([
           supabase.from('funds').select('*').order('sort_order'),
-          supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd),
+          supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd).eq('is_planned', false),
         ])
         fundsData = fRefetch.data || fundsData
         finalPeriodTx = txRefetch.data || finalPeriodTx
@@ -101,12 +111,13 @@ export default function Dashboard() {
     setBudgets(b.data || [])
     setVarExp(v.data || [])
     setPeriodTx(finalPeriodTx)
+    setPlanned(pl.data || [])
     setLoading(false)
   }
 
   useEffect(() => { if (user) load() }, [user])
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayString()
 
   const isItemConfirmed = (name: string, type: string) =>
     periodTx.some(tx => tx.description === name && (type === 'transfer' ? tx.type === 'transfer' : tx.type === 'expense'))
@@ -189,7 +200,7 @@ export default function Dashboard() {
       fund_id: fundId,
       fund_to_id: fundToId,
       category: confirmItem.category,
-      date: new Date().toISOString().split('T')[0],
+      date: todayString(),
     })
 
     if (confirmItem.kind === 'transfer' && fundId && fundToId) {
@@ -213,6 +224,45 @@ export default function Dashboard() {
     load()
   }
 
+  const savePlanned = async () => {
+    if (plannedForm.amount <= 0) { toast.error('Inserisci un importo valido'); return }
+    if (!plannedForm.description.trim()) { toast.error('Inserisci una descrizione'); return }
+    if (!plannedForm.date) { toast.error('Inserisci una data'); return }
+    setPlannedSaving(true)
+    const { error } = await supabase.from('transactions').insert({
+      user_id: user!.id,
+      type: plannedForm.type,
+      amount: plannedForm.amount,
+      description: plannedForm.description,
+      fund_id: plannedForm.fund_id || null,
+      fund_to_id: null,
+      category: plannedForm.category,
+      date: plannedForm.date,
+      is_planned: true,
+    })
+    setPlannedSaving(false)
+    if (error) { toast.error('Errore nel salvataggio'); return }
+    toast.success('Pianificazione aggiunta')
+    setPlannedModal(false)
+    setPlannedForm({ type: 'expense', amount: 0, description: '', fund_id: '', category: 'altro', date: todayString() })
+    load()
+  }
+
+  const completePlanned = async (p: Transaction) => {
+    const { error } = await markPlannedAsDone(p)
+    if (error) { toast.error('Errore nel completamento'); return }
+    toast.success('Pianificazione completata')
+    load()
+  }
+
+  const deletePlanned = async (id: string) => {
+    if (!confirm('Eliminare questa pianificazione?')) return
+    const { error } = await supabase.from('transactions').delete().eq('id', id)
+    if (error) { toast.error('Errore'); return }
+    toast.success('Pianificazione eliminata')
+    load()
+  }
+
   const handleMarkOnly = async () => {
     if (!confirmItem) return
     setConfirmSaving(true)
@@ -226,7 +276,7 @@ export default function Dashboard() {
       fund_to_id: null,
       category: confirmItem.category,
       is_memo: true,
-      date: new Date().toISOString().split('T')[0],
+      date: todayString(),
     })
 
     setConfirmSaving(false)
@@ -242,7 +292,7 @@ export default function Dashboard() {
   const totalBalanceAll = funds.reduce((s, f) => s + Number(f.balance), 0)
   const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
   const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds)
-  const forecast = generateForecast(funds, expenses, income, budgets, varExp, 3, excludedFundIds)
+  const forecast = generateForecast(funds, expenses, income, budgets, varExp, 3, excludedFundIds, planned)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
   const { end: pEnd } = getBillingPeriod()
@@ -285,12 +335,17 @@ export default function Dashboard() {
             </p>
           )}
         </div>
-        <FundExcluder
-          funds={funds}
-          excludedIds={excludedFundIds}
-          onToggle={toggleExcluded}
-          onClear={() => excludedFundIds.forEach(id => toggleExcluded(id))}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setPlannedModal(true)} className="flex items-center gap-2 px-3 py-1.5 border border-purple-300 text-purple-700 bg-purple-50 rounded-lg text-sm font-medium hover:bg-purple-100 transition">
+            <CalendarClock className="w-3.5 h-3.5" /> Pianifica
+          </button>
+          <FundExcluder
+            funds={funds}
+            excludedIds={excludedFundIds}
+            onToggle={toggleExcluded}
+            onClear={() => excludedFundIds.forEach(id => toggleExcluded(id))}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -390,6 +445,54 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {planned.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="w-5 h-5 text-purple-600" />
+              <h3 className="text-lg font-semibold text-slate-700">Pianificate</h3>
+              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full">{planned.length}</span>
+            </div>
+            <button onClick={() => setPlannedModal(true)} className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700 font-medium">
+              <Plus className="w-3.5 h-3.5" /> Aggiungi
+            </button>
+          </div>
+          <div className="space-y-2">
+            {planned.slice(0, 5).map(p => {
+              const fundName = funds.find(f => f.id === p.fund_id)?.name
+              const dueDate = new Date(p.date)
+              const isPast = dueDate <= nowDate
+              return (
+                <div key={p.id} className={`bg-white rounded-xl border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-4 flex items-center justify-between`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-slate-800 truncate">{p.description}</p>
+                      {isPast && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium uppercase">scaduta</span>}
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {format(dueDate, 'd MMM yyyy', { locale: it })}
+                      {fundName && ` · ${fundName}`}
+                      {' · '}{p.type === 'income' ? '+' : '-'}{cur(Number(p.amount))}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => completePlanned(p)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-100 transition">
+                      Fatto
+                    </button>
+                    <button onClick={() => deletePlanned(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+            {planned.length > 5 && (
+              <p className="text-xs text-slate-400 text-center mt-2">+ altre {planned.length - 5} pianificazioni</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -551,6 +654,55 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal isOpen={plannedModal} onClose={() => setPlannedModal(false)} title="Pianifica spesa o entrata">
+        <div className="space-y-4">
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-700">
+            Le pianificazioni appariranno nelle previsioni ma non intaccheranno il saldo dei fondi finché non le segnerai come fatte.
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setPlannedForm({ ...plannedForm, type: 'expense' })} className={`py-2 rounded-lg text-sm font-medium border transition ${plannedForm.type === 'expense' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                Uscita
+              </button>
+              <button onClick={() => setPlannedForm({ ...plannedForm, type: 'income' })} className={`py-2 rounded-lg text-sm font-medium border transition ${plannedForm.type === 'income' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                Entrata
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
+            <input type="text" value={plannedForm.description} onChange={e => setPlannedForm({ ...plannedForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="es. Vacanza estate, Rimborso..." />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+              <input type="number" step="0.01" value={plannedForm.amount || ''} onChange={e => setPlannedForm({ ...plannedForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data prevista</label>
+              <input type="date" value={plannedForm.date} onChange={e => setPlannedForm({ ...plannedForm, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Fondo (opzionale)</label>
+            <select value={plannedForm.fund_id} onChange={e => setPlannedForm({ ...plannedForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              <option value="">Scegli al completamento</option>
+              {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
+            <select value={plannedForm.category} onChange={e => setPlannedForm({ ...plannedForm, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none capitalize">
+              {TRANSACTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <button onClick={savePlanned} disabled={plannedSaving || plannedForm.amount <= 0 || !plannedForm.description.trim()} className="w-full py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 transition">
+            {plannedSaving ? 'Salvataggio...' : 'Aggiungi pianificazione'}
+          </button>
+        </div>
       </Modal>
     </div>
   )

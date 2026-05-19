@@ -4,20 +4,40 @@ import { it } from 'date-fns/locale'
 
 export const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
+export function toDateString(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function todayString(): string {
+  return toDateString(new Date())
+}
+
 export function getBillingPeriod(): { start: string; end: string } {
   const now = new Date()
   if (now.getDate() >= 15) {
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 14)
     return {
-      start: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-15`,
-      end: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-14`,
+      start: toDateString(new Date(now.getFullYear(), now.getMonth(), 15)),
+      end: toDateString(end),
     }
   }
   const start = new Date(now.getFullYear(), now.getMonth() - 1, 15)
-  return {
-    start: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-15`,
-    end: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-14`,
+  const end = new Date(now.getFullYear(), now.getMonth(), 14)
+  return { start: toDateString(start), end: toDateString(end) }
+}
+
+export function getBillingPeriodFor(date: Date): { start: string; end: string; startDate: Date; endDate: Date } {
+  if (date.getDate() >= 15) {
+    const startDate = new Date(date.getFullYear(), date.getMonth(), 15)
+    const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 14)
+    return { start: toDateString(startDate), end: toDateString(endDate), startDate, endDate }
   }
+  const startDate = new Date(date.getFullYear(), date.getMonth() - 1, 15)
+  const endDate = new Date(date.getFullYear(), date.getMonth(), 14)
+  return { start: toDateString(startDate), end: toDateString(endDate), startDate, endDate }
 }
 
 export function getDateInCurrentPeriod(dayOfMonth: number): Date {

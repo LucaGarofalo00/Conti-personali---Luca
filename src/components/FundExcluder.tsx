@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { Filter, Eye, EyeOff, ChevronDown } from 'lucide-react'
 import type { Fund } from '../types'
 
@@ -10,9 +10,13 @@ interface Props {
   compact?: boolean
 }
 
+const DROPDOWN_WIDTH = 288
+
 export default function FundExcluder({ funds, excludedIds, onToggle, onClear, compact = false }: Props) {
   const [open, setOpen] = useState(false)
+  const [alignRight, setAlignRight] = useState(true)
   const ref = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -21,6 +25,35 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return
+    const rect = ref.current.getBoundingClientRect()
+    const viewport = window.innerWidth
+    const rightAlignedLeft = rect.right - DROPDOWN_WIDTH
+    const leftAlignedRight = rect.left + DROPDOWN_WIDTH
+    const shouldAlignRight = !(rightAlignedLeft < 8 && leftAlignedRight <= viewport - 8)
+    if (shouldAlignRight !== alignRight) setAlignRight(shouldAlignRight)
+  })
+
+  useEffect(() => {
+    if (!open) return
+    const update = () => {
+      if (!ref.current) return
+      const rect = ref.current.getBoundingClientRect()
+      const viewport = window.innerWidth
+      const rightAlignedLeft = rect.right - DROPDOWN_WIDTH
+      const leftAlignedRight = rect.left + DROPDOWN_WIDTH
+      const shouldAlignRight = !(rightAlignedLeft < 8 && leftAlignedRight <= viewport - 8)
+      setAlignRight(prev => prev === shouldAlignRight ? prev : shouldAlignRight)
+    }
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
   }, [open])
 
   if (funds.length === 0) return null
@@ -43,7 +76,10 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-lg shadow-lg z-30 overflow-hidden">
+        <div
+          ref={dropdownRef}
+          className={`absolute mt-2 w-72 max-w-[calc(100vw-1rem)] bg-white border border-slate-200 rounded-lg shadow-lg z-40 overflow-hidden ${alignRight ? 'right-0' : 'left-0'}`}
+        >
           <div className="p-3 border-b border-slate-100 flex items-center justify-between">
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Escludi dai calcoli</p>
             {excludedCount > 0 && (

@@ -10,7 +10,7 @@ import FundExcluder from '../components/FundExcluder'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { cur } from '../lib/utils'
-import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, ForecastPoint } from '../types'
+import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction, ForecastPoint } from '../types'
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint }> }) {
   if (!active || !payload?.length) return null
@@ -33,6 +33,7 @@ export default function Forecast() {
   const [income, setIncome] = useState<RecurringIncome[]>([])
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
   const [varExp, setVarExp] = useState<VariableExpense[]>([])
+  const [planned, setPlanned] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [months, setMonths] = useState(6)
   const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
@@ -45,8 +46,9 @@ export default function Forecast() {
       supabase.from('recurring_income').select('*'),
       supabase.from('weekly_budgets').select('*'),
       supabase.from('variable_expenses').select('*'),
-    ]).then(([f, e, i, b, v]) => {
-      if (f.error || e.error || i.error || b.error || v.error) {
+      supabase.from('transactions').select('*').eq('is_planned', true),
+    ]).then(([f, e, i, b, v, p]) => {
+      if (f.error || e.error || i.error || b.error || v.error || p.error) {
         toast.error('Errore nel caricamento dei dati')
       }
       setFunds(f.data || [])
@@ -54,13 +56,14 @@ export default function Forecast() {
       setIncome(i.data || [])
       setBudgets(b.data || [])
       setVarExp(v.data || [])
+      setPlanned(p.data || [])
       setLoading(false)
     })
   }, [user])
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const forecast = generateForecast(funds, expenses, income, budgets, varExp, months, excludedFundIds)
+  const forecast = generateForecast(funds, expenses, income, budgets, varExp, months, excludedFundIds, planned)
   const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds)
   const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
   const excludedNames = funds.filter(f => excludedFundIds.includes(f.id)).map(f => f.name)

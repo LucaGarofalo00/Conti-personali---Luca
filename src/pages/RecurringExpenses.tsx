@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur, EXPENSE_CATEGORIES, formatDayMonth } from '../lib/utils'
+import { cur, EXPENSE_CATEGORIES, formatDayMonth, todayString } from '../lib/utils'
 import type { RecurringExpense, Fund } from '../types'
 
 const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, fund_to_id: '' as string, category: 'altro', type: 'expense' as 'expense' | 'transfer', auto_deduct: false, end_date: '' }
@@ -97,7 +97,7 @@ export default function RecurringExpenses() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayString()
   const activeItems = items.filter(i => i.is_active && (!i.end_date || i.end_date >= today))
   const expiredItems = items.filter(i => i.end_date && i.end_date < today)
   const totalExpenses = activeItems.filter(i => (i.type || 'expense') === 'expense').reduce((s, i) => s + Number(i.amount), 0)

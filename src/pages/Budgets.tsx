@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur, VARIABLE_CATEGORIES } from '../lib/utils'
+import { cur, VARIABLE_CATEGORIES, todayString, toDateString } from '../lib/utils'
 import type { WeeklyBudget, VariableExpense, Fund, Transaction } from '../types'
 
 export default function Budgets() {
@@ -30,7 +30,7 @@ export default function Budgets() {
   const [expBudgetId, setExpBudgetId] = useState<string | null>(null)
   const [expForm, setExpForm] = useState({ description: '', amount: 0, fund_id: '' })
 
-  const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  const weekStart = toDateString(startOfWeek(new Date(), { weekStartsOn: 1 }))
 
   const load = async () => {
     const [{ data: b, error: e1 }, { data: v, error: e2 }, { data: f, error: e3 }, { data: tx, error: e4 }] = await Promise.all([
@@ -80,7 +80,7 @@ export default function Budgets() {
       fund_to_id: null,
       category: 'budget',
       budget_id: expBudgetId,
-      date: new Date().toISOString().split('T')[0],
+      date: todayString(),
     })
 
     if (!error && fundId) {

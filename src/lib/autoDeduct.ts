@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { getDateInCurrentPeriod } from './utils'
+import { getDateInCurrentPeriod, toDateString, todayString } from './utils'
 import type { RecurringExpense, Transaction } from '../types'
 
 interface ProcessArgs {
@@ -10,7 +10,7 @@ interface ProcessArgs {
 
 export async function processAutoDeducts({ userId, expenses, periodTx }: ProcessArgs): Promise<number> {
   const today = new Date()
-  const todayStr = today.toISOString().split('T')[0]
+  const todayStr = todayString()
   let processed = 0
 
   for (const exp of expenses) {
@@ -23,18 +23,22 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
 
     const isTransfer = (exp.type || 'expense') === 'transfer'
     const txType = isTransfer ? 'transfer' : 'expense'
+
     const alreadyProcessed = periodTx.some(tx =>
-      tx.description === exp.name &&
-      tx.type === txType &&
-      tx.fund_id === exp.fund_id &&
-      (!isTransfer || tx.fund_to_id === exp.fund_to_id)
+      tx.recurring_expense_id === exp.id ||
+      (
+        tx.description === exp.name &&
+        tx.type === txType &&
+        tx.fund_id === exp.fund_id &&
+        (!isTransfer || tx.fund_to_id === exp.fund_to_id)
+      )
     )
     if (alreadyProcessed) continue
 
-    const dueDateStr = dueDate.toISOString().split('T')[0]
+    const dueDateStr = toDateString(dueDate)
     const amount = Number(exp.amount)
 
-    const { error: txError } = await supabase.from('transactions').insert({
+    const { data: inserted, error: txError } = await supabase.from('transactions').insert({
       user_id: userId,
       type: txType,
       amount,
@@ -42,9 +46,10 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
       fund_id: exp.fund_id,
       fund_to_id: isTransfer ? exp.fund_to_id : null,
       category: isTransfer ? 'trasferimento' : exp.category,
+      recurring_expense_id: exp.id,
       date: dueDateStr,
-    })
-    if (txError) continue
+    }).select().single()
+    if (txError || !inserted) continue
 
     if (isTransfer && exp.fund_to_id) {
       const [{ data: from }, { data: to }] = await Promise.all([
@@ -58,6 +63,7 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
       if (fund) await supabase.from('funds').update({ balance: Number(fund.balance) - amount }).eq('id', exp.fund_id)
     }
 
+    periodTx.push(inserted as Transaction)
     processed++
   }
 
