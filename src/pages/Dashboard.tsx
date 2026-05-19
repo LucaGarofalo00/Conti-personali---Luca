@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, Calendar, PiggyBank, CheckCircle2, Check } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, Calendar, PiggyBank, CheckCircle2, Check, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
@@ -9,15 +9,16 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
-import { cur, iconMap, getBillingPeriodStart, formatDayMonth } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, formatDayMonth } from '../lib/utils'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction } from '../types'
 
 interface PendingItem {
   id: string
-  kind: 'income' | 'expense'
+  kind: 'income' | 'expense' | 'transfer'
   name: string
   amount: number
   fund_id: string | null
+  fund_to_id: string | null
   category: string
   label: string
   confirmed: boolean
@@ -53,7 +54,7 @@ export default function Dashboard() {
   const [confirmSaving, setConfirmSaving] = useState(false)
 
   const load = async () => {
-    const periodStart = getBillingPeriodStart()
+    const { start: periodStart, end: periodEnd } = getBillingPeriod()
 
     const [f, e, i, b, v, tx] = await Promise.all([
       supabase.from('funds').select('*').order('sort_order'),
@@ -61,7 +62,7 @@ export default function Dashboard() {
       supabase.from('recurring_income').select('*'),
       supabase.from('weekly_budgets').select('*'),
       supabase.from('variable_expenses').select('*'),
-      supabase.from('transactions').select('*').gte('date', periodStart),
+      supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd),
     ])
     if (f.error || e.error || i.error || b.error || v.error) {
       toast.error('Errore nel caricamento dei dati')
@@ -79,31 +80,40 @@ export default function Dashboard() {
 
   const today = new Date().toISOString().split('T')[0]
 
-  const isExpenseConfirmed = (name: string) =>
-    periodTx.some(tx => tx.type === 'expense' && tx.description === name)
+  const isItemConfirmed = (name: string, type: string) =>
+    periodTx.some(tx => tx.description === name && (type === 'transfer' ? tx.type === 'transfer' : tx.type === 'expense'))
 
   const pendingRecurring: PendingItem[] = expenses
     .filter(exp => exp.is_active && (!exp.end_date || exp.end_date >= today))
     .sort((a, b) => a.day_of_month - b.day_of_month)
-    .map(exp => ({
-      id: 'rec-' + exp.id,
-      kind: 'expense',
-      name: exp.name,
-      amount: Number(exp.amount),
-      fund_id: exp.fund_id,
-      category: exp.category,
-      label: `${formatDayMonth(exp.day_of_month)} · ${exp.category}`,
-      confirmed: isExpenseConfirmed(exp.name),
-    }))
+    .map(exp => {
+      const isTransfer = (exp.type || 'expense') === 'transfer'
+      const fromName = funds.find(f => f.id === exp.fund_id)?.name
+      const toName = funds.find(f => f.id === exp.fund_to_id)?.name
+      return {
+        id: 'rec-' + exp.id,
+        kind: isTransfer ? 'transfer' as const : 'expense' as const,
+        name: exp.name,
+        amount: Number(exp.amount),
+        fund_id: exp.fund_id,
+        fund_to_id: exp.fund_to_id || null,
+        category: exp.category,
+        label: isTransfer
+          ? `${formatDayMonth(exp.day_of_month)} · ${fromName || '?'} → ${toName || '?'}`
+          : `${formatDayMonth(exp.day_of_month)} · ${exp.category}`,
+        confirmed: isItemConfirmed(exp.name, isTransfer ? 'transfer' : 'expense'),
+      }
+    })
 
   const pendingIncome: PendingItem[] = income
     .filter(i => i.is_active && i.frequency === 'weekly')
     .map(i => ({
       id: 'inc-' + i.id,
-      kind: 'income',
+      kind: 'income' as const,
       name: i.name,
       amount: Number(i.amount),
       fund_id: i.fund_id,
+      fund_to_id: null,
       category: 'lavoro',
       label: 'Entrata settimanale',
       confirmed: false,
@@ -113,10 +123,11 @@ export default function Dashboard() {
     .filter(v => v.is_active && v.needs_confirmation)
     .map(v => ({
       id: 'var-' + v.id,
-      kind: 'expense',
+      kind: 'expense' as const,
       name: v.name,
       amount: Number(v.estimated_amount),
       fund_id: v.fund_id,
+      fund_to_id: null,
       category: v.category,
       label: v.frequency === 'weekly' ? 'Spesa variabile settimanale' : 'Spesa variabile mensile',
       confirmed: false,
@@ -135,18 +146,28 @@ export default function Dashboard() {
     setConfirmSaving(true)
 
     const fundId = confirmFundId || null
+    const fundToId = confirmItem.kind === 'transfer' ? (confirmItem.fund_to_id || null) : null
+    const txType = confirmItem.kind === 'transfer' ? 'transfer' : confirmItem.kind === 'income' ? 'income' : 'expense'
+
     await supabase.from('transactions').insert({
       user_id: user!.id,
-      type: confirmItem.kind === 'income' ? 'income' : 'expense',
+      type: txType,
       amount: confirmAmount,
       description: confirmItem.name,
       fund_id: fundId,
-      fund_to_id: null,
+      fund_to_id: fundToId,
       category: confirmItem.category,
       date: new Date().toISOString().split('T')[0],
     })
 
-    if (fundId) {
+    if (confirmItem.kind === 'transfer' && fundId && fundToId) {
+      const [{ data: from }, { data: to }] = await Promise.all([
+        supabase.from('funds').select('balance').eq('id', fundId).single(),
+        supabase.from('funds').select('balance').eq('id', fundToId).single(),
+      ])
+      if (from) await supabase.from('funds').update({ balance: Number(from.balance) - confirmAmount }).eq('id', fundId)
+      if (to) await supabase.from('funds').update({ balance: Number(to.balance) + confirmAmount }).eq('id', fundToId)
+    } else if (fundId) {
       const { data: fund } = await supabase.from('funds').select('balance').eq('id', fundId).single()
       if (fund) {
         const delta = confirmItem.kind === 'income' ? confirmAmount : -confirmAmount
@@ -156,7 +177,7 @@ export default function Dashboard() {
 
     setConfirmSaving(false)
     setConfirmItem(null)
-    toast.success(confirmItem.kind === 'income' ? 'Entrata registrata' : 'Spesa registrata')
+    toast.success(confirmItem.kind === 'transfer' ? 'Trasferimento registrato' : confirmItem.kind === 'income' ? 'Entrata registrata' : 'Spesa registrata')
     load()
   }
 
@@ -189,13 +210,29 @@ export default function Dashboard() {
   const forecast = generateForecast(funds, expenses, income, budgets, varExp, 3)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
-  const upcoming = [...expenses].filter(e => e.is_active && (!e.end_date || e.end_date >= today)).sort((a, b) => {
-    const now = new Date()
-    const todayD = now.getDate()
-    const ad = a.day_of_month >= todayD ? a.day_of_month - todayD : a.day_of_month + 30 - todayD
-    const bd = b.day_of_month >= todayD ? b.day_of_month - todayD : b.day_of_month + 30 - todayD
-    return ad - bd
-  }).slice(0, 5)
+  const { start: pStart, end: pEnd } = getBillingPeriod()
+  const periodStartDate = new Date(pStart)
+  const periodEndDate = new Date(pEnd)
+  const nowDate = new Date()
+
+  const getDateInPeriod = (day: number): Date => {
+    const startMonth = periodStartDate.getMonth()
+    const startYear = periodStartDate.getFullYear()
+    if (day >= 15) return new Date(startYear, startMonth, day)
+    return new Date(startYear, startMonth + 1, day)
+  }
+
+  const upcoming = expenses
+    .filter(e => e.is_active && (!e.end_date || e.end_date >= today))
+    .map(e => ({ ...e, dueDate: getDateInPeriod(e.day_of_month) }))
+    .filter(e => e.dueDate > nowDate && e.dueDate <= periodEndDate)
+    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+    .slice(0, 5)
+
+  const recentTx = [...periodTx]
+    .filter(tx => !tx.is_memo)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 8)
 
   if (funds.length === 0) {
     return (
@@ -239,26 +276,31 @@ export default function Dashboard() {
             <div className="mb-3">
               <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Spese Fisse del Mese</p>
               <div className="space-y-2">
-                {pendingRecurring.map(item => (
-                  <div key={item.id} className={`bg-white rounded-xl border-l-4 border border-slate-200 p-4 flex items-center justify-between ${item.confirmed ? 'border-l-emerald-400 opacity-60' : 'border-l-red-400'}`}>
-                    <div>
-                      <p className={`font-medium text-slate-800 ${item.confirmed ? 'line-through' : ''}`}>{item.name}</p>
-                      <p className="text-xs text-slate-400">{item.label} · {cur(item.amount)}</p>
+                {pendingRecurring.map(item => {
+                  const borderColor = item.confirmed ? 'border-l-emerald-400 opacity-60' : item.kind === 'transfer' ? 'border-l-blue-400' : 'border-l-red-400'
+                  const btnClass = item.kind === 'transfer' ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-red-50 text-red-600 hover:bg-red-100'
+                  const btnLabel = item.kind === 'transfer' ? 'Trasferisci' : 'Paga'
+                  return (
+                    <div key={item.id} className={`bg-white rounded-xl border-l-4 border border-slate-200 p-4 flex items-center justify-between ${borderColor}`}>
+                      <div>
+                        <p className={`font-medium text-slate-800 ${item.confirmed ? 'line-through' : ''}`}>{item.name}</p>
+                        <p className="text-xs text-slate-400">{item.label} · {cur(item.amount)}</p>
+                      </div>
+                      {item.confirmed ? (
+                        <span className="flex items-center gap-1 text-sm text-emerald-600 font-medium">
+                          <Check className="w-4 h-4" /> Fatto
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => openConfirm(item)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${btnClass}`}
+                        >
+                          {btnLabel}
+                        </button>
+                      )}
                     </div>
-                    {item.confirmed ? (
-                      <span className="flex items-center gap-1 text-sm text-emerald-600 font-medium">
-                        <Check className="w-4 h-4" /> Pagato
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => openConfirm(item)}
-                        className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition"
-                      >
-                        Paga
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -379,59 +421,84 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-700">Prossime Scadenze</h3>
-            <Calendar className="w-4 h-4 text-slate-400" />
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">Prossime Scadenze</h3>
+              <Calendar className="w-4 h-4 text-slate-400" />
+            </div>
+            {upcoming.length > 0 ? (
+              <div className="space-y-3">
+                {upcoming.map(exp => {
+                  const diff = Math.ceil((exp.dueDate.getTime() - nowDate.getTime()) / 86400000)
+                  return (
+                    <div key={exp.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">{exp.name}</p>
+                        <p className="text-xs text-slate-400">
+                          {diff === 0 ? 'Oggi' : diff === 1 ? 'Domani' : `Tra ${diff} giorni`} &middot; {format(exp.dueDate, 'd MMM', { locale: it })}
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-red-500">-{cur(Number(exp.amount))}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 py-4 text-center">Nessuna scadenza in arrivo</p>
+            )}
           </div>
-          {upcoming.length > 0 ? (
-            <div className="space-y-3">
-              {upcoming.map(exp => {
-                const now = new Date()
-                const todayD = now.getDate()
-                const daysUntil = exp.day_of_month >= todayD ? exp.day_of_month - todayD : exp.day_of_month + 30 - todayD
-                const nextDate = exp.day_of_month >= todayD
-                  ? new Date(now.getFullYear(), now.getMonth(), exp.day_of_month)
-                  : new Date(now.getFullYear(), now.getMonth() + 1, exp.day_of_month)
-                return (
-                  <div key={exp.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">Ultime Transazioni</h3>
+              <Clock className="w-4 h-4 text-slate-400" />
+            </div>
+            {recentTx.length > 0 ? (
+              <div className="space-y-3">
+                {recentTx.map(tx => (
+                  <div key={tx.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                     <div>
-                      <p className="text-sm font-medium text-slate-700">{exp.name}</p>
+                      <p className="text-sm font-medium text-slate-700">{tx.description}</p>
                       <p className="text-xs text-slate-400">
-                        {daysUntil === 0 ? 'Oggi' : daysUntil === 1 ? 'Domani' : `Tra ${daysUntil} giorni`} &middot; {format(nextDate, 'd MMM', { locale: it })}
+                        {format(new Date(tx.date), 'd MMM', { locale: it })} &middot; {tx.category}
                       </p>
                     </div>
-                    <span className="text-sm font-semibold text-red-500">-{cur(Number(exp.amount))}</span>
+                    <span className={`text-sm font-semibold ${tx.type === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {tx.type === 'income' ? '+' : '-'}{cur(Number(tx.amount))}
+                    </span>
                   </div>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400 py-4 text-center">Nessuna spesa ricorrente configurata</p>
-          )}
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 py-4 text-center">Nessuna transazione nel periodo</p>
+            )}
+          </div>
         </div>
       </div>
 
-      <Modal isOpen={!!confirmItem} onClose={() => setConfirmItem(null)} title={confirmItem?.kind === 'income' ? 'Conferma Entrata' : 'Conferma Pagamento'}>
+      <Modal isOpen={!!confirmItem} onClose={() => setConfirmItem(null)} title={confirmItem?.kind === 'transfer' ? 'Conferma Trasferimento' : confirmItem?.kind === 'income' ? 'Conferma Entrata' : 'Conferma Pagamento'}>
         {confirmItem && (
           <div className="space-y-4">
-            <div className={`p-3 rounded-lg ${confirmItem.kind === 'income' ? 'bg-emerald-50' : 'bg-red-50'}`}>
-              <p className={`font-medium ${confirmItem.kind === 'income' ? 'text-emerald-700' : 'text-red-700'}`}>{confirmItem.name}</p>
-              <p className={`text-xs ${confirmItem.kind === 'income' ? 'text-emerald-500' : 'text-red-500'}`}>{confirmItem.label}</p>
+            <div className={`p-3 rounded-lg ${confirmItem.kind === 'income' ? 'bg-emerald-50' : confirmItem.kind === 'transfer' ? 'bg-blue-50' : 'bg-red-50'}`}>
+              <p className={`font-medium ${confirmItem.kind === 'income' ? 'text-emerald-700' : confirmItem.kind === 'transfer' ? 'text-blue-700' : 'text-red-700'}`}>{confirmItem.name}</p>
+              <p className={`text-xs ${confirmItem.kind === 'income' ? 'text-emerald-500' : confirmItem.kind === 'transfer' ? 'text-blue-500' : 'text-red-500'}`}>{confirmItem.label}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
               <input type="number" step="0.01" value={confirmAmount || ''} onChange={e => setConfirmAmount(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {confirmItem.kind === 'income' ? 'Accredita su' : 'Paga con'}
-              </label>
-              <select value={confirmFundId} onChange={e => setConfirmFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
-                <option value="">Nessun fondo</option>
-                {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
-              </select>
-            </div>
+            {confirmItem.kind !== 'transfer' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  {confirmItem.kind === 'income' ? 'Accredita su' : 'Paga con'}
+                </label>
+                <select value={confirmFundId} onChange={e => setConfirmFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                  <option value="">Nessun fondo</option>
+                  {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
+                </select>
+              </div>
+            )}
             <div className="flex gap-2">
               <button onClick={handleConfirm} disabled={confirmSaving || confirmAmount <= 0} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition text-sm">
                 {confirmSaving ? 'Registrazione...' : 'Conferma e registra'}

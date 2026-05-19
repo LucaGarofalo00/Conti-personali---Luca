@@ -18,7 +18,9 @@ export interface RecurringExpense {
   amount: number
   day_of_month: number
   fund_id: string | null
+  fund_to_id: string | null
   category: string
+  type: 'expense' | 'transfer'
   is_active: boolean
   end_date: string | null
   created_at: string

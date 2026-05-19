@@ -4,13 +4,20 @@ import { it } from 'date-fns/locale'
 
 export const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
-export function getBillingPeriodStart(): string {
+export function getBillingPeriod(): { start: string; end: string } {
   const now = new Date()
   if (now.getDate() >= 15) {
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-15`
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 14)
+    return {
+      start: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-15`,
+      end: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-14`,
+    }
   }
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 15)
-  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-15`
+  const start = new Date(now.getFullYear(), now.getMonth() - 1, 15)
+  return {
+    start: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-15`,
+    end: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-14`,
+  }
 }
 
 export function formatDayMonth(dayOfMonth: number): string {
