@@ -20,13 +20,18 @@ export function getBillingPeriod(): { start: string; end: string } {
   }
 }
 
+export function getDateInCurrentPeriod(dayOfMonth: number): Date {
+  const { start, end } = getBillingPeriod()
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+  if (dayOfMonth >= 15) {
+    return new Date(startDate.getFullYear(), startDate.getMonth(), dayOfMonth)
+  }
+  return new Date(endDate.getFullYear(), endDate.getMonth(), dayOfMonth)
+}
+
 export function formatDayMonth(dayOfMonth: number): string {
-  const now = new Date()
-  const thisMonth = new Date(now.getFullYear(), now.getMonth(), dayOfMonth)
-  const target = thisMonth.getDate() === dayOfMonth && thisMonth >= now
-    ? thisMonth
-    : new Date(now.getFullYear(), now.getMonth() + 1, dayOfMonth)
-  return format(target, 'd MMM', { locale: it })
+  return format(getDateInCurrentPeriod(dayOfMonth), 'd MMM', { locale: it })
 }
 
 export const iconMap: Record<string, React.ElementType> = {

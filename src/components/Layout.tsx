@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Wallet, CreditCard, TrendingUp,
   PiggyBank, ArrowLeftRight, LineChart, LogOut, Menu, X,
@@ -20,6 +20,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const { signOut } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  const currentPage = nav.find(n => n.path === location.pathname)
+  const pageTitle = currentPage?.label || 'FinanzApp'
 
   const handleSignOut = async () => {
     await signOut()
@@ -66,12 +70,13 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="sticky top-0 bg-white/80 backdrop-blur border-b border-slate-200 z-30 lg:hidden">
-          <div className="flex items-center p-4">
-            <button onClick={() => setOpen(true)}>
+        <header className="sticky top-0 bg-white/95 backdrop-blur border-b border-slate-200 z-30 shrink-0">
+          <div className="flex items-center gap-3 px-4 py-3 lg:px-8">
+            <button onClick={() => setOpen(true)} className="lg:hidden p-1 rounded hover:bg-slate-100">
               <Menu className="w-5 h-5 text-slate-600" />
             </button>
-            <span className="ml-3 font-semibold text-slate-800">FinanzApp</span>
+            {currentPage && <currentPage.icon className="w-5 h-5 text-indigo-600 hidden lg:block" />}
+            <span className="font-semibold text-slate-800 text-lg">{pageTitle}</span>
           </div>
         </header>
         <main className="flex-1 overflow-auto p-4 lg:p-8">

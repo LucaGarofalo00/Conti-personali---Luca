@@ -6,7 +6,9 @@ import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
+import FundExcluder from '../components/FundExcluder'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
+import { useExcludedFunds } from '../lib/excludedFunds'
 import { cur } from '../lib/utils'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, ForecastPoint } from '../types'
 
@@ -33,6 +35,7 @@ export default function Forecast() {
   const [varExp, setVarExp] = useState<VariableExpense[]>([])
   const [loading, setLoading] = useState(true)
   const [months, setMonths] = useState(6)
+  const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
 
   useEffect(() => {
     if (!user) return
@@ -57,8 +60,10 @@ export default function Forecast() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const forecast = generateForecast(funds, expenses, income, budgets, varExp, months)
-  const est = getMonthlyEstimates(expenses, income, budgets, varExp)
+  const forecast = generateForecast(funds, expenses, income, budgets, varExp, months, excludedFundIds)
+  const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds)
+  const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
+  const excludedNames = funds.filter(f => excludedFundIds.includes(f.id)).map(f => f.name)
 
   const minPoint = forecast.reduce((min, p) => p.balance < min.balance ? p : min, forecast[0])
   const endBalance = forecast[forecast.length - 1]?.balance || 0
@@ -83,14 +88,26 @@ export default function Forecast() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-slate-800">Previsione Finanziaria</h2>
-        <select value={months} onChange={e => setMonths(parseInt(e.target.value))} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-          <option value={3}>3 mesi</option>
-          <option value={6}>6 mesi</option>
-          <option value={9}>9 mesi</option>
-          <option value={12}>12 mesi</option>
-        </select>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          {hasExclusions && (
+            <p className="text-xs text-slate-500 mt-1">Esclusi: {excludedNames.join(', ')}</p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <FundExcluder
+            funds={funds}
+            excludedIds={excludedFundIds}
+            onToggle={toggleExcluded}
+            onClear={() => excludedFundIds.forEach(id => toggleExcluded(id))}
+          />
+          <select value={months} onChange={e => setMonths(parseInt(e.target.value))} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+            <option value={3}>3 mesi</option>
+            <option value={6}>6 mesi</option>
+            <option value={9}>9 mesi</option>
+            <option value={12}>12 mesi</option>
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

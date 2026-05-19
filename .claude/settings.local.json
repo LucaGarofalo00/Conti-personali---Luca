@@ -1,9 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(node --version)",
-      "PowerShell(npm --version)",
-      "mcp__Claude_Preview__preview_start"
+      "Bash(npx tsc *)",
+      "Bash(npm install *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(npx eslint *)",
+      "Bash(python -c \"import json,sys; data=json.loads\\(sys.stdin.read\\(\\)\\); [print\\(r['filePath'], m['line'], m['message']\\) for r in data for m in r.get\\('messages', []\\)]\")",
+      "Bash(node -e \"const d=require\\('./eslint-out.json'\\); d.forEach\\(r=>r.messages.forEach\\(m=>console.log\\(r.filePath.split\\('Conti-personali---Luca'\\)[1], m.line, m.severity===2?'ERR':'warn', m.message\\)\\)\\)\")",
+      "Bash(rm -f eslint-out.json)",
+      "Bash(npx vite *)"
     ]
   }
 }

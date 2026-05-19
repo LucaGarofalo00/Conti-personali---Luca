@@ -8,8 +8,11 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
+import FundExcluder from '../components/FundExcluder'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
-import { cur, iconMap, getBillingPeriod, formatDayMonth } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getDateInCurrentPeriod, formatDayMonth } from '../lib/utils'
+import { useExcludedFunds } from '../lib/excludedFunds'
+import { processAutoDeducts } from '../lib/autoDeduct'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction } from '../types'
 
 interface PendingItem {
@@ -47,6 +50,7 @@ export default function Dashboard() {
   const [varExp, setVarExp] = useState<VariableExpense[]>([])
   const [periodTx, setPeriodTx] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
 
   const [confirmItem, setConfirmItem] = useState<PendingItem | null>(null)
   const [confirmAmount, setConfirmAmount] = useState(0)
@@ -67,12 +71,36 @@ export default function Dashboard() {
     if (f.error || e.error || i.error || b.error || v.error) {
       toast.error('Errore nel caricamento dei dati')
     }
-    setFunds(f.data || [])
-    setExpenses(e.data || [])
+
+    const expensesData = e.data || []
+    const periodTxData = tx.data || []
+
+    let fundsData = f.data || []
+    let finalPeriodTx = periodTxData
+
+    if (user) {
+      const processed = await processAutoDeducts({
+        userId: user.id,
+        expenses: expensesData,
+        periodTx: periodTxData,
+      })
+      if (processed > 0) {
+        const [fRefetch, txRefetch] = await Promise.all([
+          supabase.from('funds').select('*').order('sort_order'),
+          supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd),
+        ])
+        fundsData = fRefetch.data || fundsData
+        finalPeriodTx = txRefetch.data || finalPeriodTx
+        toast.success(`${processed} ${processed === 1 ? 'spesa automatica registrata' : 'spese automatiche registrate'}`)
+      }
+    }
+
+    setFunds(fundsData)
+    setExpenses(expensesData)
     setIncome(i.data || [])
     setBudgets(b.data || [])
     setVarExp(v.data || [])
-    setPeriodTx(tx.data || [])
+    setPeriodTx(finalPeriodTx)
     setLoading(false)
   }
 
@@ -84,8 +112,12 @@ export default function Dashboard() {
     periodTx.some(tx => tx.description === name && (type === 'transfer' ? tx.type === 'transfer' : tx.type === 'expense'))
 
   const pendingRecurring: PendingItem[] = expenses
-    .filter(exp => exp.is_active && (!exp.end_date || exp.end_date >= today))
-    .sort((a, b) => a.day_of_month - b.day_of_month)
+    .filter(exp => exp.is_active && !exp.auto_deduct && (!exp.end_date || exp.end_date >= today))
+    .sort((a, b) => {
+      const aDate = getDateInCurrentPeriod(a.day_of_month).getTime()
+      const bDate = getDateInCurrentPeriod(b.day_of_month).getTime()
+      return aDate - bDate
+    })
     .map(exp => {
       const isTransfer = (exp.type || 'expense') === 'transfer'
       const fromName = funds.find(f => f.id === exp.fund_id)?.name
@@ -205,26 +237,21 @@ export default function Dashboard() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const totalBalance = funds.reduce((s, f) => s + Number(f.balance), 0)
-  const est = getMonthlyEstimates(expenses, income, budgets, varExp)
-  const forecast = generateForecast(funds, expenses, income, budgets, varExp, 3)
+  const includedFunds = funds.filter(f => !excludedFundIds.includes(f.id))
+  const totalBalance = includedFunds.reduce((s, f) => s + Number(f.balance), 0)
+  const totalBalanceAll = funds.reduce((s, f) => s + Number(f.balance), 0)
+  const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
+  const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds)
+  const forecast = generateForecast(funds, expenses, income, budgets, varExp, 3, excludedFundIds)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
-  const { start: pStart, end: pEnd } = getBillingPeriod()
-  const periodStartDate = new Date(pStart)
+  const { end: pEnd } = getBillingPeriod()
   const periodEndDate = new Date(pEnd)
   const nowDate = new Date()
 
-  const getDateInPeriod = (day: number): Date => {
-    const startMonth = periodStartDate.getMonth()
-    const startYear = periodStartDate.getFullYear()
-    if (day >= 15) return new Date(startYear, startMonth, day)
-    return new Date(startYear, startMonth + 1, day)
-  }
-
   const upcoming = expenses
     .filter(e => e.is_active && (!e.end_date || e.end_date >= today))
-    .map(e => ({ ...e, dueDate: getDateInPeriod(e.day_of_month) }))
+    .map(e => ({ ...e, dueDate: getDateInCurrentPeriod(e.day_of_month) }))
     .filter(e => e.dueDate > nowDate && e.dueDate <= periodEndDate)
     .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
     .slice(0, 5)
@@ -249,10 +276,25 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-slate-800 mb-6">Dashboard</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          {hasExclusions && (
+            <p className="text-xs text-slate-500 mt-1">
+              Stime calcolate escludendo {excludedFundIds.filter(id => funds.some(f => f.id === id)).length} fondo/i ·
+              Saldo totale reale: <span className="font-semibold text-slate-700">{cur(totalBalanceAll)}</span>
+            </p>
+          )}
+        </div>
+        <FundExcluder
+          funds={funds}
+          excludedIds={excludedFundIds}
+          onToggle={toggleExcluded}
+          onClear={() => excludedFundIds.forEach(id => toggleExcluded(id))}
+        />
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card icon={Wallet} color="bg-indigo-100 text-indigo-600" label="Saldo Totale" value={cur(totalBalance)} />
+        <Card icon={Wallet} color="bg-indigo-100 text-indigo-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
         <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate / Mese" value={cur(est.monthlyIncome)} />
         <Card icon={TrendingDown} color="bg-red-100 text-red-600" label="Uscite / Mese" value={cur(est.monthlyExpenses)} />
         <Card icon={Target} color="bg-amber-100 text-amber-600" label="Netto / Mese" value={cur(est.monthlyNet)} valueColor={est.monthlyNet >= 0 ? 'text-emerald-600' : 'text-red-600'} />

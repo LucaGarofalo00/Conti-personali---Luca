@@ -27,10 +27,20 @@ create table recurring_expenses (
   amount numeric(12,2) not null,
   day_of_month integer not null check (day_of_month between 1 and 31),
   fund_id uuid references funds(id) on delete set null,
+  fund_to_id uuid references funds(id) on delete set null,
   category text not null default 'altro',
+  type text not null default 'expense' check (type in ('expense', 'transfer')),
   is_active boolean not null default true,
+  auto_deduct boolean not null default false,
+  end_date date,
   created_at timestamptz default now()
 );
+
+-- Migration per database esistenti:
+-- alter table recurring_expenses add column if not exists auto_deduct boolean not null default false;
+-- alter table recurring_expenses add column if not exists fund_to_id uuid references funds(id) on delete set null;
+-- alter table recurring_expenses add column if not exists type text not null default 'expense' check (type in ('expense', 'transfer'));
+-- alter table recurring_expenses add column if not exists end_date date;
 
 -- Entrate ricorrenti (stipendio, lavoro sabato, etc.)
 create table recurring_income (
@@ -82,9 +92,16 @@ create table transactions (
   fund_id uuid references funds(id) on delete set null,
   fund_to_id uuid references funds(id) on delete set null,
   category text not null default 'altro',
+  budget_id uuid references weekly_budgets(id) on delete set null,
+  is_memo boolean not null default false,
   date date not null default current_date,
   created_at timestamptz default now()
 );
+
+-- Migration per database esistenti:
+-- alter table transactions add column if not exists budget_id uuid references weekly_budgets(id) on delete set null;
+-- alter table transactions add column if not exists is_memo boolean not null default false;
+-- alter table variable_expenses add column if not exists needs_confirmation boolean not null default false;
 
 -- =============================================
 -- Row Level Security (RLS)

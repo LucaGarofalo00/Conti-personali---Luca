@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ArrowRightLeft } from 'lucide-react'
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ArrowRightLeft, Zap, Hand } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
@@ -7,7 +7,7 @@ import Modal from '../components/Modal'
 import { cur, EXPENSE_CATEGORIES, formatDayMonth } from '../lib/utils'
 import type { RecurringExpense, Fund } from '../types'
 
-const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, fund_to_id: '' as string, category: 'altro', type: 'expense' as 'expense' | 'transfer', end_date: '' }
+const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, fund_to_id: '' as string, category: 'altro', type: 'expense' as 'expense' | 'transfer', auto_deduct: false, end_date: '' }
 
 export default function RecurringExpenses() {
   const { user } = useAuth()
@@ -44,6 +44,7 @@ export default function RecurringExpenses() {
       fund_to_id: item.fund_to_id || '',
       category: item.category,
       type: item.type || 'expense',
+      auto_deduct: item.auto_deduct || false,
       end_date: item.end_date || '',
     })
     setShowModal(true)
@@ -67,6 +68,7 @@ export default function RecurringExpenses() {
       fund_to_id: form.type === 'transfer' ? (form.fund_to_id || null) : null,
       category: form.type === 'transfer' ? 'trasferimento' : form.category,
       type: form.type,
+      auto_deduct: form.auto_deduct && !!form.fund_id,
       end_date: form.end_date || null,
     }
     const { error } = editing
@@ -130,9 +132,14 @@ export default function RecurringExpenses() {
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-indigo-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-slate-800">{item.name}</p>
                       {isTransfer && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-medium">Trasferimento</span>}
+                      {item.auto_deduct ? (
+                        <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium flex items-center gap-1"><Zap className="w-3 h-3" /> Automatica</span>
+                      ) : (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium flex items-center gap-1"><Hand className="w-3 h-3" /> Da confermare</span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-400">
                       {formatDayMonth(item.day_of_month)} &middot; {isTransfer
@@ -242,6 +249,37 @@ export default function RecurringExpenses() {
               </div>
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Modalità di addebito</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setForm({ ...form, auto_deduct: false })}
+                className={`p-3 rounded-lg border text-left transition ${!form.auto_deduct ? 'border-amber-500 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'}`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Hand className={`w-4 h-4 ${!form.auto_deduct ? 'text-amber-600' : 'text-slate-400'}`} />
+                  <span className={`text-sm font-medium ${!form.auto_deduct ? 'text-amber-700' : 'text-slate-600'}`}>Da confermare</span>
+                </div>
+                <p className="text-xs text-slate-500">Compare nella dashboard, da confermare manualmente</p>
+              </button>
+              <button
+                onClick={() => setForm({ ...form, auto_deduct: true })}
+                disabled={!form.fund_id && form.type !== 'transfer'}
+                className={`p-3 rounded-lg border text-left transition disabled:opacity-50 disabled:cursor-not-allowed ${form.auto_deduct ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                title={!form.fund_id && form.type !== 'transfer' ? 'Seleziona un fondo per abilitare' : ''}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className={`w-4 h-4 ${form.auto_deduct ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <span className={`text-sm font-medium ${form.auto_deduct ? 'text-emerald-700' : 'text-slate-600'}`}>Automatica</span>
+                </div>
+                <p className="text-xs text-slate-500">Scalata automaticamente dal fondo nel giorno previsto</p>
+              </button>
+            </div>
+            {form.auto_deduct && !form.fund_id && form.type !== 'transfer' && (
+              <p className="text-xs text-red-500 mt-2">Seleziona un fondo predefinito sopra per l'addebito automatico</p>
+            )}
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Data ultimo accredito (opzionale)</label>

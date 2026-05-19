@@ -22,6 +22,7 @@ export interface RecurringExpense {
   category: string
   type: 'expense' | 'transfer'
   is_active: boolean
+  auto_deduct: boolean
   end_date: string | null
   created_at: string
 }
