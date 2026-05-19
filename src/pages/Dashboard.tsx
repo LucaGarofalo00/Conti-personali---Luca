@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, Calendar, PiggyBank, CheckCircle2, Check } from 'lucide-react'
-import { getDate } from 'date-fns'
+import { format } from 'date-fns'
+import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
-import { cur, iconMap } from '../lib/utils'
+import { cur, iconMap, getBillingPeriodStart, formatDayMonth } from '../lib/utils'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction } from '../types'
 
 interface PendingItem {
@@ -43,7 +44,7 @@ export default function Dashboard() {
   const [income, setIncome] = useState<RecurringIncome[]>([])
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
   const [varExp, setVarExp] = useState<VariableExpense[]>([])
-  const [monthTx, setMonthTx] = useState<Transaction[]>([])
+  const [periodTx, setPeriodTx] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
 
   const [confirmItem, setConfirmItem] = useState<PendingItem | null>(null)
@@ -52,8 +53,7 @@ export default function Dashboard() {
   const [confirmSaving, setConfirmSaving] = useState(false)
 
   const load = async () => {
-    const now = new Date()
-    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const periodStart = getBillingPeriodStart()
 
     const [f, e, i, b, v, tx] = await Promise.all([
       supabase.from('funds').select('*').order('sort_order'),
@@ -61,7 +61,7 @@ export default function Dashboard() {
       supabase.from('recurring_income').select('*'),
       supabase.from('weekly_budgets').select('*'),
       supabase.from('variable_expenses').select('*'),
-      supabase.from('transactions').select('*').gte('date', monthStart),
+      supabase.from('transactions').select('*').gte('date', periodStart),
     ])
     if (f.error || e.error || i.error || b.error || v.error) {
       toast.error('Errore nel caricamento dei dati')
@@ -71,7 +71,7 @@ export default function Dashboard() {
     setIncome(i.data || [])
     setBudgets(b.data || [])
     setVarExp(v.data || [])
-    setMonthTx(tx.data || [])
+    setPeriodTx(tx.data || [])
     setLoading(false)
   }
 
@@ -80,7 +80,7 @@ export default function Dashboard() {
   const today = new Date().toISOString().split('T')[0]
 
   const isExpenseConfirmed = (name: string) =>
-    monthTx.some(tx => tx.type === 'expense' && tx.description === name)
+    periodTx.some(tx => tx.type === 'expense' && tx.description === name)
 
   const pendingRecurring: PendingItem[] = expenses
     .filter(exp => exp.is_active && (!exp.end_date || exp.end_date >= today))
@@ -92,7 +92,7 @@ export default function Dashboard() {
       amount: Number(exp.amount),
       fund_id: exp.fund_id,
       category: exp.category,
-      label: `Giorno ${exp.day_of_month} · ${exp.category}`,
+      label: `${formatDayMonth(exp.day_of_month)} · ${exp.category}`,
       confirmed: isExpenseConfirmed(exp.name),
     }))
 
@@ -160,6 +160,28 @@ export default function Dashboard() {
     load()
   }
 
+  const handleMarkOnly = async () => {
+    if (!confirmItem) return
+    setConfirmSaving(true)
+
+    await supabase.from('transactions').insert({
+      user_id: user!.id,
+      type: confirmItem.kind === 'income' ? 'income' : 'expense',
+      amount: confirmItem.amount,
+      description: confirmItem.name,
+      fund_id: null,
+      fund_to_id: null,
+      category: confirmItem.category,
+      is_memo: true,
+      date: new Date().toISOString().split('T')[0],
+    })
+
+    setConfirmSaving(false)
+    setConfirmItem(null)
+    toast.success('Segnato come pagato')
+    load()
+  }
+
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
   const totalBalance = funds.reduce((s, f) => s + Number(f.balance), 0)
@@ -167,10 +189,11 @@ export default function Dashboard() {
   const forecast = generateForecast(funds, expenses, income, budgets, varExp, 3)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
-  const todayDay = getDate(new Date())
   const upcoming = [...expenses].filter(e => e.is_active && (!e.end_date || e.end_date >= today)).sort((a, b) => {
-    const ad = a.day_of_month >= todayDay ? a.day_of_month - todayDay : a.day_of_month + 30 - todayDay
-    const bd = b.day_of_month >= todayDay ? b.day_of_month - todayDay : b.day_of_month + 30 - todayDay
+    const now = new Date()
+    const todayD = now.getDate()
+    const ad = a.day_of_month >= todayD ? a.day_of_month - todayD : a.day_of_month + 30 - todayD
+    const bd = b.day_of_month >= todayD ? b.day_of_month - todayD : b.day_of_month + 30 - todayD
     return ad - bd
   }).slice(0, 5)
 
@@ -364,13 +387,18 @@ export default function Dashboard() {
           {upcoming.length > 0 ? (
             <div className="space-y-3">
               {upcoming.map(exp => {
-                const daysUntil = exp.day_of_month >= todayDay ? exp.day_of_month - todayDay : exp.day_of_month + 30 - todayDay
+                const now = new Date()
+                const todayD = now.getDate()
+                const daysUntil = exp.day_of_month >= todayD ? exp.day_of_month - todayD : exp.day_of_month + 30 - todayD
+                const nextDate = exp.day_of_month >= todayD
+                  ? new Date(now.getFullYear(), now.getMonth(), exp.day_of_month)
+                  : new Date(now.getFullYear(), now.getMonth() + 1, exp.day_of_month)
                 return (
                   <div key={exp.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                     <div>
                       <p className="text-sm font-medium text-slate-700">{exp.name}</p>
                       <p className="text-xs text-slate-400">
-                        {daysUntil === 0 ? 'Oggi' : daysUntil === 1 ? 'Domani' : `Tra ${daysUntil} giorni`} &middot; Giorno {exp.day_of_month}
+                        {daysUntil === 0 ? 'Oggi' : daysUntil === 1 ? 'Domani' : `Tra ${daysUntil} giorni`} &middot; {format(nextDate, 'd MMM', { locale: it })}
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-red-500">-{cur(Number(exp.amount))}</span>
@@ -404,9 +432,14 @@ export default function Dashboard() {
                 {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
               </select>
             </div>
-            <button onClick={handleConfirm} disabled={confirmSaving || confirmAmount <= 0} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
-              {confirmSaving ? 'Registrazione...' : 'Conferma'}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={handleConfirm} disabled={confirmSaving || confirmAmount <= 0} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition text-sm">
+                {confirmSaving ? 'Registrazione...' : 'Conferma e registra'}
+              </button>
+              <button onClick={handleMarkOnly} disabled={confirmSaving} className="py-2.5 px-4 bg-slate-100 text-slate-600 rounded-lg font-medium hover:bg-slate-200 disabled:opacity-50 transition text-sm">
+                Solo pagato
+              </button>
+            </div>
           </div>
         )}
       </Modal>

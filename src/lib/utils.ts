@@ -1,6 +1,26 @@
 import { CreditCard, Smartphone, Globe, Banknote, BookOpen, PiggyBank, Wallet } from 'lucide-react'
+import { format } from 'date-fns'
+import { it } from 'date-fns/locale'
 
 export const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+
+export function getBillingPeriodStart(): string {
+  const now = new Date()
+  if (now.getDate() >= 15) {
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-15`
+  }
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 15)
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-15`
+}
+
+export function formatDayMonth(dayOfMonth: number): string {
+  const now = new Date()
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), dayOfMonth)
+  const target = thisMonth.getDate() === dayOfMonth && thisMonth >= now
+    ? thisMonth
+    : new Date(now.getFullYear(), now.getMonth() + 1, dayOfMonth)
+  return format(target, 'd MMM', { locale: it })
+}
 
 export const iconMap: Record<string, React.ElementType> = {
   'credit-card': CreditCard, 'smartphone': Smartphone, 'globe': Globe,

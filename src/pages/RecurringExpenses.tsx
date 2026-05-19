@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur, EXPENSE_CATEGORIES } from '../lib/utils'
+import { cur, EXPENSE_CATEGORIES, formatDayMonth } from '../lib/utils'
 import type { RecurringExpense, Fund } from '../types'
 
 const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, category: 'altro', end_date: '' }
@@ -106,7 +106,7 @@ export default function RecurringExpenses() {
                   <div>
                     <p className="font-medium text-slate-800">{item.name}</p>
                     <p className="text-xs text-slate-400">
-                      Giorno {item.day_of_month} &middot; {item.category}
+                      {formatDayMonth(item.day_of_month)} &middot; {item.category}
                       {fundName && ` · ${fundName}`}
                       {item.end_date && ` · Ultimo accredito: ${new Date(item.end_date).toLocaleDateString('it-IT')}`}
                     </p>
