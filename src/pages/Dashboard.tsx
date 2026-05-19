@@ -10,6 +10,7 @@ import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import FundExcluder from '../components/FundExcluder'
 import SchemaBanner from '../components/SchemaBanner'
+import InfoBox from '../components/InfoBox'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
 import { cur, iconMap, getBillingPeriod, getDateInCurrentPeriod, formatDayMonth, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
 import { useExcludedFunds } from '../lib/excludedFunds'
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const [confirmSaving, setConfirmSaving] = useState(false)
 
   const [plannedModal, setPlannedModal] = useState(false)
+  const [plannedListOpen, setPlannedListOpen] = useState(false)
   const [plannedForm, setPlannedForm] = useState({
     type: 'expense' as 'income' | 'expense',
     amount: 0, description: '', fund_id: '', category: 'altro', date: todayString(),
@@ -373,7 +375,9 @@ export default function Dashboard() {
   const totalBalance = includedFunds.reduce((s, f) => s + Number(f.balance), 0)
   const totalBalanceAll = funds.reduce((s, f) => s + Number(f.balance), 0)
   const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
-  const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds)
+  const { start: pStartForEst, end: pEndForEst } = getBillingPeriod()
+  const plannedInPeriod = planned.filter(p => p.date >= pStartForEst && p.date <= pEndForEst)
+  const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds, plannedInPeriod)
   const forecast = generateForecast(funds, expenses, income, budgets, varExp, 3, excludedFundIds, planned)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
@@ -431,15 +435,28 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <Card icon={Wallet} color="bg-indigo-100 text-indigo-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
-        <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate / Mese" value={cur(est.monthlyIncome)} />
-        <Card icon={TrendingDown} color="bg-red-100 text-red-600" label="Uscite / Mese" value={cur(est.monthlyExpenses)} />
+        <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate / Mese" value={cur(est.monthlyIncome)} sub={est.plannedIncomeInPeriod > 0 ? `incl. ${cur(est.plannedIncomeInPeriod)} pianif.` : undefined} />
+        <Card icon={TrendingDown} color="bg-red-100 text-red-600" label="Uscite / Mese" value={cur(est.monthlyExpenses)} sub={est.plannedExpensesInPeriod > 0 ? `incl. ${cur(est.plannedExpensesInPeriod)} pianif.` : undefined} />
         <Card icon={Target} color="bg-amber-100 text-amber-600" label="Netto / Mese" value={cur(est.monthlyNet)} valueColor={est.monthlyNet >= 0 ? 'text-emerald-600' : 'text-red-600'} />
       </div>
+      <InfoBox title="Come vengono calcolate queste cifre" tone="indigo">
+        <p><strong>Saldo Totale</strong>: somma di tutti i fondi (escluso quelli filtrati col selettore in alto).</p>
+        <p><strong>Entrate / Mese</strong>: stipendio mensile + (sabato settimanale × 4.33 settimane) + pianificate del periodo corrente (15-14).</p>
+        <p><strong>Uscite / Mese</strong>: spese ricorrenti + budget settimanali × 4.33 + spese variabili (settimanali × 4.33, mensili tal quale) + pianificate del periodo.</p>
+        <p><strong>Netto / Mese</strong>: Entrate − Uscite. Se positivo, mediamente risparmi.</p>
+        <p>Le pianificate del periodo corrente vengono incluse e mostrate sotto la cifra.</p>
+      </InfoBox>
 
       {(pendingRecurring.length > 0 || pendingIncome.length > 0 || pendingVarExp.length > 0) && (
         <div className="mb-8">
+          <InfoBox title="Come funziona 'Da Confermare'" tone="emerald">
+            <p>Mostra tutte le voci del periodo corrente (15-14) che <strong>non hanno ancora una transazione</strong>.</p>
+            <p><strong>Spese fisse del mese</strong>: spese ricorrenti manuali (non auto). Le auto-deduct non compaiono qui — sono già state scalate dal fondo automaticamente.</p>
+            <p><strong>Entrate da confermare</strong>: ogni sabato lavorato (con la data di pagamento attesa) e lo stipendio mensile. Se non li confermi, si accumulano.</p>
+            <p>Conferma → crea una transazione e aggiorna il saldo del fondo. "Non lavorato" su un sabato → memo che lo segna come gestito senza generare entrata.</p>
+          </InfoBox>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-indigo-600" />
@@ -545,53 +562,68 @@ export default function Dashboard() {
         </div>
       )}
 
-      {planned.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-purple-600" />
-              <h3 className="text-lg font-semibold text-slate-700">Pianificate</h3>
-              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full">{planned.length}</span>
+      {(() => {
+        const { start: pStart, end: pEnd } = getBillingPeriod()
+        const periodPlanned = planned.filter(p => p.date >= pStart && p.date <= pEnd)
+        const futurePlanned = planned.filter(p => p.date > pEnd)
+        if (planned.length === 0) return null
+        return (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="w-5 h-5 text-purple-600" />
+                <h3 className="text-lg font-semibold text-slate-700">Pianificate del periodo</h3>
+                <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full">{periodPlanned.length}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setPlannedListOpen(true)} className="text-sm text-purple-600 hover:text-purple-700 font-medium">
+                  Vedi tutte ({planned.length})
+                </button>
+                <button onClick={() => setPlannedModal(true)} className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700 font-medium">
+                  <Plus className="w-3.5 h-3.5" /> Aggiungi
+                </button>
+              </div>
             </div>
-            <button onClick={() => setPlannedModal(true)} className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700 font-medium">
-              <Plus className="w-3.5 h-3.5" /> Aggiungi
-            </button>
-          </div>
-          <div className="space-y-2">
-            {planned.slice(0, 5).map(p => {
-              const fundName = funds.find(f => f.id === p.fund_id)?.name
-              const dueDate = new Date(p.date)
-              const isPast = dueDate <= nowDate
-              return (
-                <div key={p.id} className={`bg-white rounded-xl border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-4 flex items-center justify-between`}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-slate-800 truncate">{p.description}</p>
-                      {isPast && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium uppercase">scaduta</span>}
+            {periodPlanned.length === 0 ? (
+              <div className="bg-white rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">
+                Nessuna pianificata in questo periodo
+                {futurePlanned.length > 0 && <span> · {futurePlanned.length} future visibili nella vista completa</span>}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {periodPlanned.map(p => {
+                  const fundName = funds.find(f => f.id === p.fund_id)?.name
+                  const dueDate = new Date(p.date)
+                  const isPast = dueDate <= nowDate
+                  return (
+                    <div key={p.id} className={`bg-white rounded-xl border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-4 flex items-center justify-between`}>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-slate-800 truncate">{p.description}</p>
+                          {isPast && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium uppercase">scaduta</span>}
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          {format(dueDate, 'd MMM yyyy', { locale: it })}
+                          {fundName && ` · ${fundName}`}
+                          {' · '}{p.type === 'income' ? '+' : '-'}{cur(Number(p.amount))}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => completePlanned(p)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-100 transition">
+                          Fatto
+                        </button>
+                        <button onClick={() => deletePlanned(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400">
-                      {format(dueDate, 'd MMM yyyy', { locale: it })}
-                      {fundName && ` · ${fundName}`}
-                      {' · '}{p.type === 'income' ? '+' : '-'}{cur(Number(p.amount))}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => completePlanned(p)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-100 transition">
-                      Fatto
-                    </button>
-                    <button onClick={() => deletePlanned(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-            {planned.length > 5 && (
-              <p className="text-xs text-slate-400 text-center mt-2">+ altre {planned.length - 5} pianificazioni</p>
+                  )
+                })}
+              </div>
             )}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -753,6 +785,43 @@ export default function Dashboard() {
         )}
       </Modal>
 
+      <Modal isOpen={plannedListOpen} onClose={() => setPlannedListOpen(false)} title={`Tutte le pianificazioni (${planned.length})`}>
+        {planned.length === 0 ? (
+          <p className="text-center text-sm text-slate-400 py-6">Nessuna pianificazione</p>
+        ) : (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+            {planned.map(p => {
+              const fundName = funds.find(f => f.id === p.fund_id)?.name
+              const dueDate = new Date(p.date)
+              const isPast = dueDate <= nowDate
+              return (
+                <div key={p.id} className={`bg-white rounded-lg border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-3 flex items-center justify-between gap-2`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-sm text-slate-800 truncate">{p.description}</p>
+                      {isPast && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium uppercase">scaduta</span>}
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {format(dueDate, 'd MMM yyyy', { locale: it })}
+                      {fundName && ` · ${fundName}`}
+                      {' · '}{p.type === 'income' ? '+' : '-'}{cur(Number(p.amount))}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => completePlanned(p)} className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs font-medium hover:bg-purple-100 transition">
+                      Fatto
+                    </button>
+                    <button onClick={() => deletePlanned(p.id)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Modal>
+
       <Modal isOpen={plannedModal} onClose={() => setPlannedModal(false)} title="Pianifica spesa o entrata">
         <div className="space-y-4">
           <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-700">
@@ -805,7 +874,7 @@ export default function Dashboard() {
   )
 }
 
-function Card({ icon: Icon, color, label, value, valueColor }: { icon: React.ElementType; color: string; label: string; value: string; valueColor?: string }) {
+function Card({ icon: Icon, color, label, value, valueColor, sub }: { icon: React.ElementType; color: string; label: string; value: string; valueColor?: string; sub?: string }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4">
       <div className="flex items-center gap-3 mb-2">
@@ -815,6 +884,7 @@ function Card({ icon: Icon, color, label, value, valueColor }: { icon: React.Ele
         <span className="text-sm text-slate-500">{label}</span>
       </div>
       <p className={`text-xl font-bold ${valueColor || 'text-slate-800'}`}>{value}</p>
+      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
     </div>
   )
 }

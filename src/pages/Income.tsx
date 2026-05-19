@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { cur } from '../lib/utils'
+import InfoBox from '../components/InfoBox'
 import type { RecurringIncome, Fund } from '../types'
 
 const DAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
@@ -101,15 +102,21 @@ export default function Income() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Entrate</h2>
-          <p className="text-sm text-slate-500 mt-1">Stima mensile: <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
+          <p className="text-sm text-slate-500">Stima mensile: <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
         </button>
       </div>
+      <InfoBox title="Come funzionano le entrate" tone="emerald">
+        <p><strong>Mensile</strong>: arriva una volta al mese nel giorno indicato (es. stipendio il 27).</p>
+        <p><strong>Settimanale + ritardo</strong>: si lavora un giorno specifico (es. sabato) ma viene pagato dopo X giorni (es. lunedì = ritardo 2). Nella dashboard vedi <strong>ogni sabato del periodo</strong> separato, da confermare individualmente. Se non confermi, si accumulano.</p>
+        <p><strong>Importo variabile</strong>: la cifra è una stima — al momento della conferma puoi inserire il valore effettivo.</p>
+        <p><strong>Fondo destinazione</strong>: dove finiranno i soldi una volta confermati. Puoi anche scegliere al momento della conferma.</p>
+        <p>Nelle previsioni: mensile = importo, settimanale = importo × 4.33 (settimane medie in un mese).</p>
+      </InfoBox>
 
       {items.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-slate-200">

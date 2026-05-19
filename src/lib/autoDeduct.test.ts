@@ -96,7 +96,7 @@ describe('processAutoDeducts - idempotency (the critical bug)', () => {
     const existing: Transaction = {
       id: 'pre-existing', user_id: 'u1', type: 'expense', amount: 100,
       description: 'Different name', fund_id: 'fund-1', fund_to_id: null,
-      category: 'altro', budget_id: null, recurring_expense_id: 'e1',
+      category: 'altro', budget_id: null, variable_expense_id: null, recurring_expense_id: 'e1',
       recurring_income_id: null, is_memo: false, is_planned: false,
       date: '2026-05-15', created_at: '',
     }
@@ -110,7 +110,7 @@ describe('processAutoDeducts - idempotency (the critical bug)', () => {
     const existing: Transaction = {
       id: 'manual', user_id: 'u1', type: 'expense', amount: 100,
       description: 'Exp-e1', fund_id: 'fund-1', fund_to_id: null,
-      category: 'altro', budget_id: null, recurring_expense_id: null,
+      category: 'altro', budget_id: null, variable_expense_id: null, recurring_expense_id: null,
       recurring_income_id: null, is_memo: false, is_planned: false,
       date: '2026-05-15', created_at: '',
     }

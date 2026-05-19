@@ -16,7 +16,7 @@ function mkTx(opts: Partial<Transaction> = {}): Transaction {
   return {
     id: 't1', user_id: 'u1', type: 'income', amount: 50,
     description: 'paid', fund_id: null, fund_to_id: null,
-    category: 'lavoro', budget_id: null,
+    category: 'lavoro', budget_id: null, variable_expense_id: null,
     recurring_expense_id: null, recurring_income_id: null,
     is_memo: false, is_planned: false,
     date: '2026-05-16', created_at: '',

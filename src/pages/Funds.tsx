@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { cur, iconMap, ICONS, COLORS, todayString } from '../lib/utils'
+import InfoBox from '../components/InfoBox'
 import type { Fund } from '../types'
 
 const emptyForm = { name: '', type: 'main' as 'main' | 'sub', parent_id: null as string | null, balance: 0, icon: 'wallet', color: '#3B82F6', sort_order: 0 }
@@ -99,8 +100,15 @@ export default function Funds() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-slate-800">Fondi</h2>
+      <InfoBox title="Come funzionano i fondi" tone="indigo">
+        <p>Un <strong>fondo</strong> è un contenitore di denaro: conto in banca, contanti, carta, salvadanaio, ecc.</p>
+        <p>Il saldo dei fondi si aggiorna automaticamente quando: confermi una transazione dalla dashboard, registri una spesa in un budget/variable, scatti un'auto-deduct, o aggiungi/elimini una transazione.</p>
+        <p><strong>Salvadanaio (sub)</strong>: fondo "figlio" di un fondo principale, utile per organizzare (es. "Risparmio Vacanze" sotto "Carta").</p>
+        <p><strong>Trasferisci</strong>: sposta denaro da un fondo a un altro. Crea una transazione di tipo "transfer".</p>
+        <p>Nel filtro globale puoi <strong>escludere</strong> fondi dalle previsioni e dalle stime mensili (utile per simulare scenari "se non avessi accesso ai risparmi").</p>
+      </InfoBox>
+      <div className="flex items-center justify-between mb-4">
+        <span />
         <div className="flex gap-2">
           <button onClick={() => { setTransfer(emptyTransfer); setShowTransfer(true) }} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-medium">
             <ArrowLeftRight className="w-4 h-4" /> Trasferisci

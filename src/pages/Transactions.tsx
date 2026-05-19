@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { cur, TRANSACTION_CATEGORIES, todayString } from '../lib/utils'
+import InfoBox from '../components/InfoBox'
 import type { Transaction, Fund } from '../types'
 
 const PAGE_SIZE = 50
@@ -52,7 +53,10 @@ export default function Transactions() {
   const [form, setForm] = useState(emptyForm)
   const [filterType, setFilterType] = useState<string>('all')
   const [filterFund, setFilterFund] = useState<string>('all')
+  const [filterSource, setFilterSource] = useState<string>('all')
   const [filterText, setFilterText] = useState('')
+  const [includePlanned, setIncludePlanned] = useState(false)
+  const [includeMemo, setIncludeMemo] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [hasMore, setHasMore] = useState(true)
@@ -124,7 +128,7 @@ export default function Transactions() {
     }
 
     const newTx: Transaction = {
-      ...(editing || { id: '', user_id: '', created_at: '', is_memo: false, is_planned: false, budget_id: null, recurring_expense_id: null, recurring_income_id: null }),
+      ...(editing || { id: '', user_id: '', created_at: '', is_memo: false, is_planned: false, budget_id: null, variable_expense_id: null, recurring_expense_id: null, recurring_income_id: null }),
       type: form.type,
       amount: form.amount,
       description: form.description,
@@ -235,8 +239,17 @@ export default function Transactions() {
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
   const filtered = items.filter(tx => {
+    if (!includePlanned && tx.is_planned) return false
+    if (!includeMemo && tx.is_memo) return false
     if (filterType !== 'all' && tx.type !== filterType) return false
     if (filterFund !== 'all' && tx.fund_id !== filterFund && tx.fund_to_id !== filterFund) return false
+    if (filterSource !== 'all') {
+      if (filterSource === 'recurring_expense' && !tx.recurring_expense_id) return false
+      if (filterSource === 'recurring_income' && !tx.recurring_income_id) return false
+      if (filterSource === 'budget' && !tx.budget_id) return false
+      if (filterSource === 'variable' && !tx.variable_expense_id) return false
+      if (filterSource === 'manual' && (tx.recurring_expense_id || tx.recurring_income_id || tx.budget_id || tx.variable_expense_id)) return false
+    }
     if (filterText && !tx.description.toLowerCase().includes(filterText.toLowerCase()) && !tx.category.toLowerCase().includes(filterText.toLowerCase())) return false
     return true
   })
@@ -279,6 +292,18 @@ export default function Transactions() {
 
   return (
     <div>
+      <InfoBox title="Cosa vedi qui" tone="indigo">
+        <p>Tutte le transazioni effettive che hanno modificato (o modificheranno) i tuoi fondi. Ogni riga ha badge che indicano da dove proviene:</p>
+        <ul className="list-disc ml-4 space-y-0.5">
+          <li><strong>entrata ric.</strong> / <strong>auto-uscita</strong>: generata confermando una voce ricorrente o da auto-deduct</li>
+          <li><strong>budget</strong>: spesa inserita dentro un budget settimanale</li>
+          <li><strong>var.</strong>: spesa inserita dentro una variable expense (es. GPL)</li>
+          <li><strong>memo</strong>: "solo pagato" o "non lavorato" — non muove i fondi</li>
+          <li><strong>pianif.</strong>: futura/pianificata, non ancora avvenuta — non influisce sul saldo</li>
+        </ul>
+        <p>Le pianificate e i memo sono <strong>nascoste di default</strong>. Spunta le checkbox in alto per vederle.</p>
+        <p>Modifica/elimina: i saldi dei fondi vengono ripristinati automaticamente. Il pulsante "Seleziona duplicati" identifica e seleziona transazioni identiche per eliminarle in blocco.</p>
+      </InfoBox>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <p className="text-sm text-slate-500">
@@ -312,12 +337,28 @@ export default function Transactions() {
           <option value="all">Tutti i fondi</option>
           {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
+        <select value={filterSource} onChange={e => setFilterSource(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <option value="all">Tutte le origini</option>
+          <option value="recurring_income">Entrate ricorrenti</option>
+          <option value="recurring_expense">Spese ricorrenti</option>
+          <option value="budget">Da budget settimanali</option>
+          <option value="variable">Da spese variabili</option>
+          <option value="manual">Solo manuali</option>
+        </select>
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Cerca..." className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
         </div>
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Da" />
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="A" />
+        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={includePlanned} onChange={e => setIncludePlanned(e.target.checked)} className="rounded border-slate-300 text-indigo-600" />
+          Pianificate
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={includeMemo} onChange={e => setIncludeMemo(e.target.checked)} className="rounded border-slate-300 text-indigo-600" />
+          Memo
+        </label>
       </div>
 
       {selectedIds.size > 0 && (
@@ -372,8 +413,12 @@ export default function Transactions() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-slate-800 text-sm truncate">{tx.description || (tx.type === 'income' ? 'Entrata' : tx.type === 'expense' ? 'Uscita' : 'Trasferimento')}</p>
                         {isDuplicate && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium uppercase">duplicato</span>}
+                        {tx.is_planned && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium uppercase">pianif.</span>}
                         {tx.is_memo && <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium uppercase">memo</span>}
-                        {tx.recurring_expense_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">auto</span>}
+                        {tx.recurring_expense_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">auto-uscita</span>}
+                        {tx.recurring_income_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">entrata ric.</span>}
+                        {tx.budget_id && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-medium uppercase">budget</span>}
+                        {tx.variable_expense_id && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium uppercase">var.</span>}
                       </div>
                       <p className="text-xs text-slate-400">
                         {format(new Date(tx.date), 'dd MMM yyyy', { locale: it })}

@@ -94,6 +94,7 @@ create table if not exists transactions (
   fund_to_id uuid references funds(id) on delete set null,
   category text not null default 'altro',
   budget_id uuid references weekly_budgets(id) on delete set null,
+  variable_expense_id uuid references variable_expenses(id) on delete set null,
   recurring_expense_id uuid references recurring_expenses(id) on delete set null,
   recurring_income_id uuid references recurring_income(id) on delete set null,
   is_memo boolean not null default false,
@@ -114,6 +115,7 @@ alter table recurring_expenses add column if not exists end_date date;
 alter table variable_expenses add column if not exists needs_confirmation boolean not null default false;
 
 alter table transactions add column if not exists budget_id uuid references weekly_budgets(id) on delete set null;
+alter table transactions add column if not exists variable_expense_id uuid references variable_expenses(id) on delete set null;
 alter table transactions add column if not exists recurring_expense_id uuid references recurring_expenses(id) on delete set null;
 alter table transactions add column if not exists recurring_income_id uuid references recurring_income(id) on delete set null;
 alter table transactions add column if not exists is_memo boolean not null default false;

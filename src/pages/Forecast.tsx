@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { TrendingUp, TrendingDown, AlertTriangle, Target } from 'lucide-react'
-import { format, parse } from 'date-fns'
+import { format, addMonths, differenceInDays } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import FundExcluder from '../components/FundExcluder'
+import InfoBox from '../components/InfoBox'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
 import { useExcludedFunds } from '../lib/excludedFunds'
-import { cur } from '../lib/utils'
+import { cur, getBillingPeriodFor, toDateString } from '../lib/utils'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction, ForecastPoint } from '../types'
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint }> }) {
@@ -35,7 +36,7 @@ export default function Forecast() {
   const [varExp, setVarExp] = useState<VariableExpense[]>([])
   const [planned, setPlanned] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
-  const [months, setMonths] = useState(6)
+  const [targetDate, setTargetDate] = useState(() => toDateString(addMonths(new Date(), 6)))
   const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
 
   useEffect(() => {
@@ -69,8 +70,12 @@ export default function Forecast() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const forecast = generateForecast(funds, expenses, income, budgets, varExp, months, excludedFundIds, planned)
-  const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds)
+  const targetDateObj = new Date(targetDate)
+  const daysToTarget = Math.max(1, differenceInDays(targetDateObj, new Date()))
+  const forecast = generateForecast(funds, expenses, income, budgets, varExp, targetDateObj, excludedFundIds, planned)
+  const periodNow = getBillingPeriodFor(new Date())
+  const plannedInCurrent = planned.filter(p => p.date >= periodNow.start && p.date <= periodNow.end)
+  const est = getMonthlyEstimates(expenses, income, budgets, varExp, excludedFundIds, plannedInCurrent)
   const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
   const excludedNames = funds.filter(f => excludedFundIds.includes(f.id)).map(f => f.name)
 
@@ -79,24 +84,42 @@ export default function Forecast() {
   const startBalance = forecast[0]?.balance || 0
   const trend = endBalance - startBalance
 
-  const monthlyAgg = new Map<string, { income: number; expenses: number; endBalance: number }>()
+  type PeriodAgg = { income: number; expenses: number; endBalance: number; minBalance: number; startDate: Date; endDate: Date }
+  const periodAgg = new Map<string, PeriodAgg>()
   for (const p of forecast) {
-    const key = p.date.substring(0, 7)
-    const existing = monthlyAgg.get(key) || { income: 0, expenses: 0, endBalance: 0 }
+    const pDate = new Date(p.date)
+    const { start, startDate, endDate } = getBillingPeriodFor(pDate)
+    const key = start
+    const existing = periodAgg.get(key) || { income: 0, expenses: 0, endBalance: p.balance, minBalance: p.balance, startDate, endDate }
     existing.income += p.income
     existing.expenses += p.expenses
     existing.endBalance = p.balance
-    monthlyAgg.set(key, existing)
+    if (p.balance < existing.minBalance) existing.minBalance = p.balance
+    periodAgg.set(key, existing)
   }
-  const monthlyData = Array.from(monthlyAgg.entries()).map(([month, data]) => ({
-    month,
-    label: format(parse(month + '-01', 'yyyy-MM-dd', new Date()), 'MMMM yyyy', { locale: it }),
+  const monthlyData = Array.from(periodAgg.entries()).map(([key, data]) => ({
+    month: key,
+    label: `${format(data.startDate, 'd MMM', { locale: it })} – ${format(data.endDate, 'd MMM yyyy', { locale: it })}`,
     ...data,
     net: data.income - data.expenses,
   }))
 
   return (
     <div>
+      <InfoBox title="Come funziona la previsione" tone="indigo">
+        <p><strong>Partenza</strong>: la previsione parte dal <strong>saldo attuale</strong> dei tuoi fondi (la somma di quelli non esclusi tramite il filtro).</p>
+        <p><strong>Cosa aggiunge ogni giorno futuro</strong>:</p>
+        <ul className="list-disc ml-4 space-y-0.5">
+          <li>Entrate ricorrenti che cadono in quel giorno (stipendio, sabato pagato col delay)</li>
+          <li>Spese ricorrenti che cadono in quel giorno (affitto, finanziamenti, abbonamenti)</li>
+          <li>Pianificate una tantum con quella data esatta</li>
+        </ul>
+        <p><strong>Cosa aggiunge ogni settimana</strong>: i budget settimanali e le spese variabili (GPL ogni settimana, benzina divisa per 4.33).</p>
+        <p><strong>Trasferimenti tra fondi</strong>: conteggiati come uscite (per scelta tua), tranne se entrambi i fondi sono esclusi.</p>
+        <p><strong>Minimo</strong>: il saldo previsto più basso del periodo. Utile per capire se rischi rosso prima dello stipendio.</p>
+        <p><strong>Saldo al 14</strong>: il saldo previsto a fine periodo billing (giorno 14), prima del nuovo ciclo.</p>
+      </InfoBox>
+
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           {hasExclusions && (
@@ -110,18 +133,23 @@ export default function Forecast() {
             onToggle={toggleExcluded}
             onClear={() => excludedFundIds.forEach(id => toggleExcluded(id))}
           />
-          <select value={months} onChange={e => setMonths(parseInt(e.target.value))} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-            <option value={3}>3 mesi</option>
-            <option value={6}>6 mesi</option>
-            <option value={9}>9 mesi</option>
-            <option value={12}>12 mesi</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">Fino al</label>
+            <input
+              type="date"
+              value={targetDate}
+              min={toDateString(new Date())}
+              onChange={e => setTargetDate(e.target.value)}
+              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+            <span className="text-xs text-slate-400 whitespace-nowrap">({daysToTarget} giorni)</span>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <MetricCard icon={Target} color="bg-indigo-100 text-indigo-600" label="Saldo Attuale" value={cur(startBalance)} />
-        <MetricCard icon={trend >= 0 ? TrendingUp : TrendingDown} color={trend >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} label={`Saldo a ${months} mesi`} value={cur(endBalance)} />
+        <MetricCard icon={trend >= 0 ? TrendingUp : TrendingDown} color={trend >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} label={`Saldo al ${format(targetDateObj, 'd MMM yyyy', { locale: it })}`} value={cur(endBalance)} />
         <MetricCard icon={AlertTriangle} color={minPoint.balance < 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'} label="Minimo Previsto" value={cur(minPoint.balance)} sub={minPoint.label} />
         <MetricCard icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Netto Mensile" value={cur(est.monthlyNet)} sub={est.monthlyNet >= 0 ? 'Positivo' : 'Negativo'} />
       </div>
@@ -151,26 +179,29 @@ export default function Forecast() {
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-700">Riepilogo Mensile</h3>
+          <h3 className="text-lg font-semibold text-slate-700">Riepilogo per Periodo Billing (15-14)</h3>
+          <p className="text-xs text-slate-500 mt-1">Le colonne raggruppano per ciclo billing 15-14, non per mese calendario.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Mese</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-600">Periodo</th>
                 <th className="text-right px-4 py-3 font-medium text-slate-600">Entrate</th>
                 <th className="text-right px-4 py-3 font-medium text-slate-600">Uscite</th>
                 <th className="text-right px-4 py-3 font-medium text-slate-600">Netto</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-600">Saldo Fine Mese</th>
+                <th className="text-right px-4 py-3 font-medium text-slate-600" title="Saldo previsto più basso durante il periodo">Minimo</th>
+                <th className="text-right px-4 py-3 font-medium text-slate-600" title="Saldo previsto al giorno 14, ultimo del periodo prima del nuovo ciclo">Saldo al 14</th>
               </tr>
             </thead>
             <tbody>
               {monthlyData.map(row => (
                 <tr key={row.month} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-700 capitalize">{row.label}</td>
+                  <td className="px-4 py-3 font-medium text-slate-700">{row.label}</td>
                   <td className="px-4 py-3 text-right text-emerald-600">{cur(row.income)}</td>
                   <td className="px-4 py-3 text-right text-red-500">{cur(row.expenses)}</td>
                   <td className={`px-4 py-3 text-right font-medium ${row.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{cur(row.net)}</td>
+                  <td className={`px-4 py-3 text-right ${row.minBalance < 0 ? 'text-red-600 font-semibold' : 'text-amber-600'}`}>{cur(row.minBalance)}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${row.endBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{cur(row.endBalance)}</td>
                 </tr>
               ))}

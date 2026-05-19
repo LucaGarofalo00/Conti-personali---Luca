@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { cur, EXPENSE_CATEGORIES, todayString } from '../lib/utils'
+import InfoBox from '../components/InfoBox'
 import type { RecurringExpense, Fund } from '../types'
 
 const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, fund_to_id: '' as string, category: 'altro', type: 'expense' as 'expense' | 'transfer', auto_deduct: false, end_date: '' }
@@ -114,15 +115,21 @@ export default function RecurringExpenses() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Spese Ricorrenti</h2>
-          <p className="text-sm text-slate-500 mt-1">Totale spese mensili: <span className="font-semibold text-red-500">{cur(totalExpenses)}</span></p>
+          <p className="text-sm text-slate-500">Totale spese mensili: <span className="font-semibold text-red-500">{cur(totalExpenses)}</span></p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
         </button>
       </div>
+      <InfoBox title="Come funzionano le spese ricorrenti" tone="indigo">
+        <p>Una spesa ricorrente si ripete <strong>ogni mese</strong> nel giorno indicato. Compaiono nelle previsioni e nelle stime mensili.</p>
+        <p><strong>Da confermare</strong>: nel giorno di scadenza compare nella sezione "Da Confermare" della dashboard. Clicchi "Paga" → registri la spesa e scegli il fondo.</p>
+        <p><strong>Automatica</strong>: nel giorno di scadenza viene scalata <strong>automaticamente</strong> dal fondo predefinito. Non compare in "Da Confermare". Richiede di aver scelto un fondo.</p>
+        <p><strong>Trasferimento</strong>: sposta soldi da un fondo all'altro (es. risparmio mensile). Conteggiato come uscita nelle previsioni.</p>
+        <p><strong>Data ultimo accredito</strong>: dopo quella data la spesa non viene più contata (es. finanziamento che finisce a giugno).</p>
+      </InfoBox>
 
       {items.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-slate-200">

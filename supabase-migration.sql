@@ -17,6 +17,7 @@ alter table variable_expenses add column if not exists needs_confirmation boolea
 
 -- Transazioni: nuovi campi per budget, link a ricorrenti, memo e pianificate
 alter table transactions add column if not exists budget_id uuid references weekly_budgets(id) on delete set null;
+alter table transactions add column if not exists variable_expense_id uuid references variable_expenses(id) on delete set null;
 alter table transactions add column if not exists fund_to_id uuid references funds(id) on delete set null;
 alter table transactions add column if not exists recurring_expense_id uuid references recurring_expenses(id) on delete set null;
 alter table transactions add column if not exists recurring_income_id uuid references recurring_income(id) on delete set null;

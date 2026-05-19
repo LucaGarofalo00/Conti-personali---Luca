@@ -75,6 +75,7 @@ export interface Transaction {
   fund_to_id: string | null
   category: string
   budget_id: string | null
+  variable_expense_id: string | null
   recurring_expense_id: string | null
   recurring_income_id: string | null
   is_memo: boolean
