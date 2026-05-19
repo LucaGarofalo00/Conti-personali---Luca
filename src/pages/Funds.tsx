@@ -1,0 +1,223 @@
+import { useState, useEffect } from 'react'
+import { CreditCard, Smartphone, Globe, Banknote, BookOpen, PiggyBank, Wallet, Plus, Pencil, Trash2, ArrowLeftRight } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import Modal from '../components/Modal'
+import type { Fund } from '../types'
+
+const iconMap: Record<string, React.ElementType> = {
+  'credit-card': CreditCard, 'smartphone': Smartphone, 'globe': Globe,
+  'banknote': Banknote, 'book-open': BookOpen, 'piggy-bank': PiggyBank, 'wallet': Wallet,
+}
+const ICONS = [
+  { value: 'credit-card', label: 'Carta' }, { value: 'smartphone', label: 'App' },
+  { value: 'globe', label: 'Internazionale' }, { value: 'banknote', label: 'Contanti' },
+  { value: 'book-open', label: 'Libretto' }, { value: 'piggy-bank', label: 'Salvadanaio' },
+  { value: 'wallet', label: 'Portafoglio' },
+]
+const COLORS = ['#3B82F6', '#F59E0B', '#8B5CF6', '#10B981', '#F97316', '#EC4899', '#EF4444', '#06B6D4']
+const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+
+const emptyForm = { name: '', type: 'main' as 'main' | 'sub', parent_id: null as string | null, balance: 0, icon: 'wallet', color: '#3B82F6', sort_order: 0 }
+const emptyTransfer = { from_id: '', to_id: '', amount: 0 }
+
+export default function Funds() {
+  const { user } = useAuth()
+  const [funds, setFunds] = useState<Fund[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [editing, setEditing] = useState<Fund | null>(null)
+  const [form, setForm] = useState(emptyForm)
+  const [transfer, setTransfer] = useState(emptyTransfer)
+
+  const load = async () => {
+    const { data } = await supabase.from('funds').select('*').order('sort_order')
+    setFunds(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { if (user) load() }, [user])
+
+  const openAdd = () => { setEditing(null); setForm(emptyForm); setShowModal(true) }
+  const openEdit = (f: Fund) => {
+    setEditing(f)
+    setForm({ name: f.name, type: f.type as 'main' | 'sub', parent_id: f.parent_id, balance: Number(f.balance), icon: f.icon, color: f.color, sort_order: f.sort_order })
+    setShowModal(true)
+  }
+
+  const save = async () => {
+    if (editing) {
+      await supabase.from('funds').update(form).eq('id', editing.id)
+    } else {
+      await supabase.from('funds').insert({ user_id: user!.id, ...form })
+    }
+    setShowModal(false)
+    load()
+  }
+
+  const remove = async (id: string) => {
+    if (!confirm('Eliminare questo fondo?')) return
+    await supabase.from('funds').delete().eq('id', id)
+    load()
+  }
+
+  const doTransfer = async () => {
+    if (!transfer.from_id || !transfer.to_id || transfer.amount <= 0) return
+    const from = funds.find(f => f.id === transfer.from_id)!
+    const to = funds.find(f => f.id === transfer.to_id)!
+    await Promise.all([
+      supabase.from('funds').update({ balance: Number(from.balance) - transfer.amount }).eq('id', from.id),
+      supabase.from('funds').update({ balance: Number(to.balance) + transfer.amount }).eq('id', to.id),
+      supabase.from('transactions').insert({
+        user_id: user!.id, type: 'transfer', amount: transfer.amount,
+        description: `Trasferimento: ${from.name} → ${to.name}`,
+        fund_id: from.id, fund_to_id: to.id, category: 'trasferimento', date: new Date().toISOString().split('T')[0],
+      }),
+    ])
+    setShowTransfer(false)
+    setTransfer(emptyTransfer)
+    load()
+  }
+
+  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+
+  const mainFunds = funds.filter(f => f.type === 'main')
+  const subFunds = funds.filter(f => f.type === 'sub')
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-slate-800">Fondi</h2>
+        <div className="flex gap-2">
+          <button onClick={() => { setTransfer(emptyTransfer); setShowTransfer(true) }} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-medium">
+            <ArrowLeftRight className="w-4 h-4" /> Trasferisci
+          </button>
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
+            <Plus className="w-4 h-4" /> Aggiungi
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {mainFunds.map(fund => {
+          const Icon = iconMap[fund.icon] || Wallet
+          const subs = subFunds.filter(s => s.parent_id === fund.id)
+          return (
+            <div key={fund.id} className="bg-white rounded-xl border border-slate-200 p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-lg flex items-center justify-center" style={{ backgroundColor: fund.color + '20' }}>
+                    <Icon className="w-5 h-5" style={{ color: fund.color }} />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-800">{fund.name}</p>
+                    <p className="text-xs text-slate-400">Fondo principale</p>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(fund)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(fund.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-slate-800 mb-1">{cur(Number(fund.balance))}</p>
+
+              {subs.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                  {subs.map(sub => (
+                    <div key={sub.id} className="flex items-center justify-between">
+                      <span className="text-sm text-slate-500 flex items-center gap-1.5">
+                        <PiggyBank className="w-3.5 h-3.5" /> {sub.name}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-700">{cur(Number(sub.balance))}</span>
+                        <button onClick={() => openEdit(sub)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-3 h-3" /></button>
+                        <button onClick={() => remove(sub.id)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={() => { setEditing(null); setForm({ ...emptyForm, type: 'sub', parent_id: fund.id, color: fund.color, icon: 'piggy-bank' }); setShowModal(true) }}
+                className="mt-3 w-full text-center text-xs text-indigo-600 hover:text-indigo-700 font-medium py-1.5 rounded-lg hover:bg-indigo-50 transition"
+              >
+                + Aggiungi salvadanaio
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Modal Aggiungi/Modifica */}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? 'Modifica Fondo' : 'Nuovo Fondo'}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
+            <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Saldo</label>
+            <input type="number" step="0.01" value={form.balance} onChange={e => setForm({ ...form, balance: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+          </div>
+          {form.type === 'main' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Icona</label>
+                <div className="flex gap-2 flex-wrap">
+                  {ICONS.map(ic => {
+                    const Ic = iconMap[ic.value]
+                    return (
+                      <button key={ic.value} onClick={() => setForm({ ...form, icon: ic.value })} className={`p-2.5 rounded-lg border transition ${form.icon === ic.value ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50'}`} title={ic.label}>
+                        <Ic className="w-5 h-5 text-slate-600" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Colore</label>
+                <div className="flex gap-2">
+                  {COLORS.map(c => (
+                    <button key={c} onClick={() => setForm({ ...form, color: c })} className={`w-8 h-8 rounded-full border-2 transition ${form.color === c ? 'border-slate-800 scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+          <button onClick={save} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">
+            {editing ? 'Salva Modifiche' : 'Aggiungi Fondo'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Modal Trasferimento */}
+      <Modal isOpen={showTransfer} onClose={() => setShowTransfer(false)} title="Trasferisci Fondi">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Da</label>
+            <select value={transfer.from_id} onChange={e => setTransfer({ ...transfer, from_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              <option value="">Seleziona fondo</option>
+              {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">A</label>
+            <select value={transfer.to_id} onChange={e => setTransfer({ ...transfer, to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              <option value="">Seleziona fondo</option>
+              {funds.filter(f => f.id !== transfer.from_id).map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Importo</label>
+            <input type="number" step="0.01" value={transfer.amount || ''} onChange={e => setTransfer({ ...transfer, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+          </div>
+          <button onClick={doTransfer} disabled={!transfer.from_id || !transfer.to_id || transfer.amount <= 0} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+            Trasferisci
+          </button>
+        </div>
+      </Modal>
+    </div>
+  )
+}

@@ -1,0 +1,151 @@
+import { useState, useEffect } from 'react'
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import Modal from '../components/Modal'
+import type { RecurringExpense, Fund } from '../types'
+
+const CATEGORIES = [
+  'casa', 'bollette', 'trasporti', 'cibo', 'salute',
+  'abbonamenti', 'svago', 'vestiti', 'istruzione', 'risparmio', 'altro',
+]
+const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, category: 'altro' }
+
+export default function RecurringExpenses() {
+  const { user } = useAuth()
+  const [items, setItems] = useState<RecurringExpense[]>([])
+  const [funds, setFunds] = useState<Fund[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [editing, setEditing] = useState<RecurringExpense | null>(null)
+  const [form, setForm] = useState(emptyForm)
+
+  const load = async () => {
+    const [{ data: exp }, { data: fnd }] = await Promise.all([
+      supabase.from('recurring_expenses').select('*').order('day_of_month'),
+      supabase.from('funds').select('*').order('sort_order'),
+    ])
+    setItems(exp || [])
+    setFunds(fnd || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { if (user) load() }, [user])
+
+  const openAdd = () => { setEditing(null); setForm(emptyForm); setShowModal(true) }
+  const openEdit = (item: RecurringExpense) => {
+    setEditing(item)
+    setForm({ name: item.name, amount: Number(item.amount), day_of_month: item.day_of_month, fund_id: item.fund_id || '', category: item.category })
+    setShowModal(true)
+  }
+
+  const save = async () => {
+    const data = { ...form, fund_id: form.fund_id || null }
+    if (editing) {
+      await supabase.from('recurring_expenses').update(data).eq('id', editing.id)
+    } else {
+      await supabase.from('recurring_expenses').insert({ user_id: user!.id, ...data })
+    }
+    setShowModal(false)
+    load()
+  }
+
+  const remove = async (id: string) => {
+    if (!confirm('Eliminare questa spesa?')) return
+    await supabase.from('recurring_expenses').delete().eq('id', id)
+    load()
+  }
+
+  const toggle = async (item: RecurringExpense) => {
+    await supabase.from('recurring_expenses').update({ is_active: !item.is_active }).eq('id', item.id)
+    load()
+  }
+
+  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+
+  const totalActive = items.filter(i => i.is_active).reduce((s, i) => s + Number(i.amount), 0)
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Spese Ricorrenti</h2>
+          <p className="text-sm text-slate-500 mt-1">Totale mensile attivo: <span className="font-semibold text-red-500">{cur(totalActive)}</span></p>
+        </div>
+        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
+          <Plus className="w-4 h-4" /> Aggiungi
+        </button>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+          <p className="text-slate-400 mb-4">Nessuna spesa ricorrente configurata</p>
+          <button onClick={openAdd} className="text-indigo-600 font-medium hover:text-indigo-700">Aggiungi la prima spesa</button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.map(item => {
+            const fundName = funds.find(f => f.id === item.fund_id)?.name
+            return (
+              <div key={item.id} className={`bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between transition ${!item.is_active ? 'opacity-50' : ''}`}>
+                <div className="flex items-center gap-4">
+                  <button onClick={() => toggle(item)} className="text-slate-400 hover:text-indigo-600 transition">
+                    {item.is_active ? <ToggleRight className="w-6 h-6 text-indigo-600" /> : <ToggleLeft className="w-6 h-6" />}
+                  </button>
+                  <div>
+                    <p className="font-medium text-slate-800">{item.name}</p>
+                    <p className="text-xs text-slate-400">
+                      Giorno {item.day_of_month} &middot; {item.category}
+                      {fundName && ` · ${fundName}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-semibold text-red-500">{cur(Number(item.amount))}</span>
+                  <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? 'Modifica Spesa' : 'Nuova Spesa Ricorrente'}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
+            <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="es. Affitto, Netflix..." />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+              <input type="number" step="0.01" value={form.amount || ''} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Giorno del mese</label>
+              <input type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
+            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none capitalize">
+              {CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Fondo (opzionale)</label>
+            <select value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              <option value="">Nessuno</option>
+              {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </div>
+          <button onClick={save} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">
+            {editing ? 'Salva Modifiche' : 'Aggiungi Spesa'}
+          </button>
+        </div>
+      </Modal>
+    </div>
+  )
+}
