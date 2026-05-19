@@ -51,7 +51,7 @@ const mock = (supabaseMod as unknown as { __mock__: { tables: { transactions: Re
 function mkExp(id: string, day: number, amount: number, opts: Partial<RecurringExpense> = {}): RecurringExpense {
   return {
     id, user_id: 'u1', name: 'Exp-' + id, amount,
-    frequency: 'monthly', day_of_month: day, day_of_week: null,
+    frequency: 'monthly', day_of_month: day, day_of_week: null, month_of_year: null,
     fund_id: 'fund-1', fund_to_id: null, category: 'altro', type: 'expense',
     is_active: true, auto_deduct: true, end_date: null, created_at: '',
     ...opts,

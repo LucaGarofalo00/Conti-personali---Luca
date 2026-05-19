@@ -9,7 +9,7 @@ function mkFund(id: string, name: string, balance: number, type: 'main' | 'sub' 
 function mkExp(id: string, name: string, amount: number, day: number, fund_id: string | null = null, opts: Partial<RecurringExpense> = {}): RecurringExpense {
   return {
     id, user_id: 'u1', name, amount,
-    frequency: 'monthly', day_of_month: day, day_of_week: null,
+    frequency: 'monthly', day_of_month: day, day_of_week: null, month_of_year: null,
     fund_id, fund_to_id: null,
     category: 'altro', type: 'expense', is_active: true, auto_deduct: false, end_date: null, created_at: '',
     ...opts,
@@ -239,6 +239,44 @@ describe('generateForecast - planned transactions', () => {
     const planned = [mkPlanned('vacanza', 500, 'expense', '2026-06-10', 'b')]
     const points = generateForecast(funds, [], [], [], 2, ['b'], planned)
     expect(points[points.length - 1].balance).toBe(1000)
+  })
+})
+
+describe('generateForecast - yearly recurring expenses', () => {
+  beforeAll(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 4, 19, 12, 0, 0))
+  })
+  afterAll(() => { vi.useRealTimers() })
+
+  it('subtracts yearly bollo on its month+day', () => {
+    // Bollo €600 il 15 marzo. Today is 19 mag. Target 30 nov 2027.
+    // Occurrences: 15 mar 2027 only (15 mar 2026 was before today)
+    const funds = [mkFund('a', 'Main', 5000)]
+    const bollo = mkExp('bollo', 'Bollo Auto', 600, 15, 'a', {
+      frequency: 'yearly', day_of_month: 15, day_of_week: null, month_of_year: 3,
+    })
+    const points = generateForecast(funds, [bollo], [], [], new Date(2027, 10, 30))
+    const total = points[points.length - 1].balance
+    expect(total).toBe(5000 - 600)
+  })
+
+  it('subtracts yearly twice if range covers 2 anniversaries', () => {
+    const funds = [mkFund('a', 'Main', 5000)]
+    const bollo = mkExp('bollo', 'Bollo Auto', 600, 15, 'a', {
+      frequency: 'yearly', day_of_month: 15, day_of_week: null, month_of_year: 6,
+    })
+    // Today 19 mag 2026. Target 30 giu 2027. Occurrences: 15 giu 2026 and 15 giu 2027.
+    const points = generateForecast(funds, [bollo], [], [], new Date(2027, 5, 30))
+    expect(points[points.length - 1].balance).toBe(5000 - 1200)
+  })
+
+  it('yearly in monthly estimate = amount / 12', () => {
+    const bollo = mkExp('bollo', 'Bollo', 600, 15, null, {
+      frequency: 'yearly', day_of_month: 15, day_of_week: null, month_of_year: 3,
+    })
+    const est = getMonthlyEstimates([bollo], [], [])
+    expect(est.monthlyExpenses).toBeCloseTo(50, 1)
   })
 })
 

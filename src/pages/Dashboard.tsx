@@ -13,7 +13,8 @@ import SchemaBanner from '../components/SchemaBanner'
 import InfoBox from '../components/InfoBox'
 import BreakdownList from '../components/BreakdownList'
 import { getPeriodBreakdown } from '../lib/periodBreakdown'
-import { generateForecast, getMonthlyEstimates, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
+import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
+import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
 import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
 import { useExcludedFunds } from '../lib/excludedFunds'
@@ -192,6 +193,15 @@ export default function Dashboard() {
       } else if (freq === 'monthly' && exp.day_of_month !== null) {
         const due = getDateInCurrentPeriod(exp.day_of_month)
         occurrences.push({ date: due, dateStr: format(due, 'yyyy-MM-dd') })
+      } else if (freq === 'yearly' && exp.day_of_month !== null && exp.month_of_year !== null) {
+        const cursor = new Date(periodStartObj)
+        while (cursor <= periodEndObj) {
+          const dim = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate()
+          if (cursor.getDate() === Math.min(exp.day_of_month, dim) && cursor.getMonth() + 1 === exp.month_of_year) {
+            occurrences.push({ date: new Date(cursor), dateStr: format(cursor, 'yyyy-MM-dd') })
+          }
+          cursor.setDate(cursor.getDate() + 1)
+        }
       }
 
       return occurrences.map(o => {
@@ -393,7 +403,20 @@ export default function Dashboard() {
   const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
   const { start: pStartForEst, end: pEndForEst } = getBillingPeriod()
   const plannedInPeriod = planned.filter(p => p.date >= pStartForEst && p.date <= pEndForEst)
-  const est = getMonthlyEstimates(expenses, income, budgets, excludedFundIds, plannedInPeriod)
+  const periodBreakdown = getPeriodBreakdown({
+    startDate: new Date(pStartForEst),
+    endDate: new Date(pEndForEst),
+    recurringExpenses: expenses,
+    recurringIncome: income,
+    weeklyBudgets: budgets,
+    planned: plannedInPeriod,
+    excludedFundIds,
+    fromToday: false,
+  })
+  const est = totalsFromBreakdown(periodBreakdown)
+  const periodNet = Math.round((est.income - est.expenses) * 100) / 100
+  const plannedIncomeInPeriod = plannedInPeriod.filter(p => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0)
+  const plannedExpensesInPeriod = plannedInPeriod.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0)
   const forecast = generateForecast(funds, expenses, income, budgets, 3, excludedFundIds, planned)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
@@ -461,14 +484,14 @@ export default function Dashboard() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <Card icon={Wallet} color="bg-indigo-100 text-indigo-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
-              <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate / Mese" value={cur(est.monthlyIncome)} sub={est.plannedIncomeInPeriod > 0 ? `incl. ${cur(est.plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
+              <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate del Periodo (15-14)" value={cur(est.income)} sub={plannedIncomeInPeriod > 0 ? `incl. ${cur(plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
               <Card
                 icon={Target}
-                color={est.monthlyNet >= 0 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}
-                label="Netto / Mese"
-                value={cur(est.monthlyNet)}
-                valueColor={est.monthlyNet >= 0 ? 'text-emerald-600' : 'text-red-600'}
-                sub={`Uscite ${cur(est.monthlyExpenses)} · Entrate ${cur(est.monthlyIncome)}`}
+                color={periodNet >= 0 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}
+                label="Netto del Periodo (15-14)"
+                value={cur(periodNet)}
+                valueColor={periodNet >= 0 ? 'text-emerald-600' : 'text-red-600'}
+                sub={`Uscite ${cur(est.expenses)}${plannedExpensesInPeriod > 0 ? ` (incl. ${cur(plannedExpensesInPeriod)} pianif.)` : ''} · Entrate ${cur(est.income)}`}
                 onClick={() => setBreakdownModal('expense')}
               />
               {projection && projectionTarget && nextSalary ? (
@@ -487,8 +510,8 @@ export default function Dashboard() {
             </div>
             <InfoBox title="Come vengono calcolate queste cifre" tone="indigo">
               <p><strong>Saldo Totale</strong>: somma di tutti i fondi (escluso quelli filtrati col selettore in alto).</p>
-              <p><strong>Entrate / Mese</strong>: stipendio mensile + (sabato settimanale × 4.33 settimane) + pianificate del periodo corrente (15-14). Click per dettaglio.</p>
-              <p><strong>Netto / Mese</strong>: Entrate − Uscite (uscite mostrate sotto). Click per vedere il dettaglio delle uscite.</p>
+              <p><strong>Entrate del Periodo (15-14)</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
+              <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo (15-14). Click per vedere il dettaglio.</p>
               {projection && projectionTarget && nextSalary && (
                 <p>
                   <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).

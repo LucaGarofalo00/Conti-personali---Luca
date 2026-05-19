@@ -6,7 +6,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur, todayString, toDateString } from '../lib/utils'
+import { cur, todayString, toDateString, getBillingPeriod } from '../lib/utils'
+import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import InfoBox from '../components/InfoBox'
 import type { WeeklyBudget, Fund, Transaction } from '../types'
 
@@ -129,19 +130,29 @@ export default function Budgets() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const totalWeeklyBudgets = budgets.filter(b => b.is_active).reduce((s, b) => s + Number(b.amount), 0)
-  const totalMonthlyAll = totalWeeklyBudgets * 4.33
+  const { start: pStart, end: pEnd } = getBillingPeriod()
+  const budgetBreakdown = getPeriodBreakdown({
+    startDate: new Date(pStart),
+    endDate: new Date(pEnd),
+    recurringExpenses: [],
+    recurringIncome: [],
+    weeklyBudgets: budgets.filter(b => b.is_active),
+    planned: [],
+    excludedFundIds: [],
+    fromToday: false,
+  })
+  const totalMonthlyAll = totalsFromBreakdown(budgetBreakdown).expenses
 
   return (
     <div>
       <div className="mb-4">
-        <p className="text-sm text-slate-500">Stima mensile budget: <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
+        <p className="text-sm text-slate-500">Totale budget del periodo corrente (15-14): <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="indigo">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
         <p><strong>Reset</strong>: ogni <strong>lunedì 00:00</strong> il contatore riparte da zero (basato su <code>startOfWeek</code> in tempo reale).</p>
         <p><strong>Overbudget</strong>: la barra diventa <strong>rossa</strong> e compare un alert, ma le spese vengono comunque registrate e il fondo viene scalato normalmente.</p>
-        <p><strong>Nelle previsioni</strong>: ogni budget attivo conta <code>importo × 4.33</code>/mese (settimane medie in un mese).</p>
+        <p><strong>Nelle previsioni</strong>: ogni budget attivo conta una volta per ogni lunedì del periodo (es. nel periodo 15 mag - 14 giu ci sono 4 lunedì, quindi un budget di 50€ conta 200€).</p>
         <p>Per spese fisse mensili (affitto, abbonamenti, ecc.) usa la sezione <strong>Spese Ricorrenti</strong>.</p>
       </InfoBox>
 

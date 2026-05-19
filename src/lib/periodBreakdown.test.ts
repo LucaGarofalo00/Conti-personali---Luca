@@ -13,7 +13,7 @@ function mkInc(id: string, opts: Partial<RecurringIncome> = {}): RecurringIncome
 function mkExp(id: string, day: number, amount: number): RecurringExpense {
   return {
     id, user_id: 'u', name: 'Exp-' + id, amount,
-    frequency: 'monthly', day_of_month: day, day_of_week: null,
+    frequency: 'monthly', day_of_month: day, day_of_week: null, month_of_year: null,
     fund_id: null, fund_to_id: null, category: 'altro',
     type: 'expense', is_active: true, auto_deduct: false, end_date: null, created_at: '',
   }

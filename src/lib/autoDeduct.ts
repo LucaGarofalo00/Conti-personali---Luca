@@ -24,6 +24,19 @@ function computeOccurrencesInCurrentPeriod(exp: RecurringExpense): Date[] {
     }
     return dates
   }
+  if (freq === 'yearly' && exp.day_of_month !== null && exp.month_of_year !== null) {
+    const { startDate, endDate } = getBillingPeriodFor(new Date())
+    const dates: Date[] = []
+    const cursor = new Date(startDate)
+    while (cursor <= endDate) {
+      if (cursor.getDate() === Math.min(exp.day_of_month, new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate())
+          && cursor.getMonth() + 1 === exp.month_of_year) {
+        dates.push(new Date(cursor))
+      }
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return dates
+  }
   return []
 }
 

@@ -13,7 +13,10 @@ alter table recurring_expenses add column if not exists auto_deduct boolean not 
 alter table recurring_expenses add column if not exists end_date date;
 alter table recurring_expenses add column if not exists frequency text not null default 'monthly';
 alter table recurring_expenses add column if not exists day_of_week integer;
+alter table recurring_expenses add column if not exists month_of_year integer;
 alter table recurring_expenses alter column day_of_month drop not null;
+alter table recurring_expenses drop constraint if exists recurring_expenses_frequency_check;
+alter table recurring_expenses add constraint recurring_expenses_frequency_check check (frequency in ('monthly', 'weekly', 'yearly'));
 
 -- Spese variabili: campo per la conferma in dashboard
 alter table variable_expenses add column if not exists needs_confirmation boolean not null default false;

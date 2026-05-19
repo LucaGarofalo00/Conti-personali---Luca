@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur } from '../lib/utils'
+import { cur, getBillingPeriod } from '../lib/utils'
+import { generateIncomeOccurrences } from '../lib/incomeOccurrences'
 import InfoBox from '../components/InfoBox'
 import type { RecurringIncome, Fund } from '../types'
 
@@ -96,15 +97,15 @@ export default function Income() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const totalMonthly = items.filter(i => i.is_active).reduce((s, i) => {
-    return s + (i.frequency === 'monthly' ? Number(i.amount) : Number(i.amount) * 4.33)
-  }, 0)
+  const { start: pStart, end: pEnd } = getBillingPeriod()
+  const occurrencesInPeriod = generateIncomeOccurrences(items.filter(i => i.is_active), pStart, pEnd, [])
+  const totalMonthly = occurrencesInPeriod.reduce((s, o) => s + Number(o.income.amount), 0)
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-slate-500">Stima mensile: <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
+          <p className="text-sm text-slate-500">Totale entrate del periodo corrente (15-14): <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
@@ -115,7 +116,7 @@ export default function Income() {
         <p><strong>Settimanale + ritardo</strong>: si lavora un giorno specifico (es. sabato) ma viene pagato dopo X giorni (es. lunedì = ritardo 2). Nella dashboard vedi <strong>ogni sabato del periodo</strong> separato, da confermare individualmente. Se non confermi, si accumulano.</p>
         <p><strong>Importo variabile</strong>: la cifra è una stima — al momento della conferma puoi inserire il valore effettivo.</p>
         <p><strong>Fondo destinazione</strong>: dove finiranno i soldi una volta confermati. Puoi anche scegliere al momento della conferma.</p>
-        <p>Nelle previsioni: mensile = importo, settimanale = importo × 4.33 (settimane medie in un mese).</p>
+        <p><strong>Nelle previsioni e nel totale</strong>: ogni entrata conta per le occorrenze effettive nel periodo corrente (15-14). Es. un sabato settimanale conta 4-5 volte, lo stipendio mensile conta 1 volta. Niente medie, solo occorrenze reali.</p>
       </InfoBox>
 
       {items.length === 0 ? (

@@ -16,9 +16,10 @@ export interface RecurringExpense {
   user_id: string
   name: string
   amount: number
-  frequency: 'monthly' | 'weekly'
+  frequency: 'monthly' | 'weekly' | 'yearly'
   day_of_month: number | null
   day_of_week: number | null
+  month_of_year: number | null
   fund_id: string | null
   fund_to_id: string | null
   category: string

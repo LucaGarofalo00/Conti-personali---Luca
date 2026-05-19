@@ -41,15 +41,16 @@ create table if not exists recurring_income (
   created_at timestamptz default now()
 );
 
--- Spese ricorrenti (mensili o settimanali, con supporto trasferimenti e addebito automatico)
+-- Spese ricorrenti (mensili, settimanali o annuali, con supporto trasferimenti e addebito automatico)
 create table if not exists recurring_expenses (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users(id) on delete cascade not null,
   name text not null,
   amount numeric(12,2) not null,
-  frequency text not null default 'monthly' check (frequency in ('monthly', 'weekly')),
+  frequency text not null default 'monthly' check (frequency in ('monthly', 'weekly', 'yearly')),
   day_of_month integer check (day_of_month between 1 and 31),
   day_of_week integer check (day_of_week between 0 and 6),
+  month_of_year integer check (month_of_year between 1 and 12),
   fund_id uuid references funds(id) on delete set null,
   fund_to_id uuid references funds(id) on delete set null,
   category text not null default 'altro',
@@ -101,7 +102,10 @@ alter table recurring_expenses add column if not exists auto_deduct boolean not 
 alter table recurring_expenses add column if not exists end_date date;
 alter table recurring_expenses add column if not exists frequency text not null default 'monthly';
 alter table recurring_expenses add column if not exists day_of_week integer;
+alter table recurring_expenses add column if not exists month_of_year integer;
 alter table recurring_expenses alter column day_of_month drop not null;
+alter table recurring_expenses drop constraint if exists recurring_expenses_frequency_check;
+alter table recurring_expenses add constraint recurring_expenses_frequency_check check (frequency in ('monthly', 'weekly', 'yearly'));
 
 alter table variable_expenses add column if not exists needs_confirmation boolean not null default false;
 

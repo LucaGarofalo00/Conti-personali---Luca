@@ -86,11 +86,14 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         if (dom === adjusted) occurs = true
       } else if (freq === 'weekly' && exp.day_of_week !== null) {
         if (getDay(cursor) === exp.day_of_week) occurs = true
+      } else if (freq === 'yearly' && exp.day_of_month !== null && exp.month_of_year !== null) {
+        const adjusted = Math.min(exp.day_of_month, dim)
+        if (dom === adjusted && cursor.getMonth() + 1 === exp.month_of_year) occurs = true
       }
       if (occurs) {
         items.push({
           date: dateStr,
-          description: exp.name,
+          description: exp.name + (freq === 'yearly' ? ' (annuale)' : ''),
           amount: Number(exp.amount),
           kind: 'expense',
           source: 'recurring_expense',

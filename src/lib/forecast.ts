@@ -64,6 +64,9 @@ export function generateForecast(
             if (dom === adjusted) expenses += Number(exp.amount)
           } else if (freq === 'weekly' && exp.day_of_week !== null) {
             if (getDay(cursor) === exp.day_of_week) expenses += Number(exp.amount)
+          } else if (freq === 'yearly' && exp.day_of_month !== null && exp.month_of_year !== null) {
+            const adjusted = Math.min(exp.day_of_month, dim)
+            if (dom === adjusted && cursor.getMonth() + 1 === exp.month_of_year) expenses += Number(exp.amount)
           }
         }
 
@@ -218,7 +221,9 @@ export function getMonthlyEstimates(
     if ((exp.type || 'expense') === 'transfer') continue
     if (isExcluded(exp.fund_id, excluded)) continue
     const freq = exp.frequency || 'monthly'
-    monthlyExpenses += freq === 'weekly' ? Number(exp.amount) * 4.33 : Number(exp.amount)
+    if (freq === 'weekly') monthlyExpenses += Number(exp.amount) * 4.33
+    else if (freq === 'yearly') monthlyExpenses += Number(exp.amount) / 12
+    else monthlyExpenses += Number(exp.amount)
   }
 
   for (const b of weeklyBudgets) {

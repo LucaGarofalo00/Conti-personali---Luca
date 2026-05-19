@@ -4,17 +4,20 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur, EXPENSE_CATEGORIES, todayString } from '../lib/utils'
+import { cur, EXPENSE_CATEGORIES, todayString, getBillingPeriod } from '../lib/utils'
+import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import InfoBox from '../components/InfoBox'
 import type { RecurringExpense, Fund } from '../types'
 
 const DAYS_OF_WEEK = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
+const MONTHS = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
 
 const emptyForm = {
   name: '', amount: 0,
-  frequency: 'monthly' as 'monthly' | 'weekly',
+  frequency: 'monthly' as 'monthly' | 'weekly' | 'yearly',
   day_of_month: 1,
   day_of_week: 1,
+  month_of_year: 1,
   fund_id: '' as string,
   fund_to_id: '' as string,
   category: 'altro',
@@ -66,6 +69,7 @@ export default function RecurringExpenses() {
       frequency: item.frequency || 'monthly',
       day_of_month: item.day_of_month ?? 1,
       day_of_week: item.day_of_week ?? 1,
+      month_of_year: item.month_of_year ?? 1,
       fund_id: item.fund_id || '',
       fund_to_id: item.fund_to_id || '',
       category: item.category,
@@ -90,8 +94,9 @@ export default function RecurringExpenses() {
       name: form.name,
       amount: form.amount,
       frequency: form.frequency,
-      day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
+      day_of_month: form.frequency === 'monthly' || form.frequency === 'yearly' ? form.day_of_month : null,
       day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
+      month_of_year: form.frequency === 'yearly' ? form.month_of_year : null,
       fund_id: form.fund_id || null,
       fund_to_id: form.type === 'transfer' ? (form.fund_to_id || null) : null,
       category: form.type === 'transfer' ? 'trasferimento' : form.category,
@@ -128,15 +133,24 @@ export default function RecurringExpenses() {
   const today = todayString()
   const activeItems = items.filter(i => i.is_active && (!i.end_date || i.end_date >= today))
   const expiredItems = items.filter(i => i.end_date && i.end_date < today)
-  const totalExpenses = activeItems
-    .filter(i => (i.type || 'expense') === 'expense')
-    .reduce((s, i) => s + ((i.frequency || 'monthly') === 'weekly' ? Number(i.amount) * 4.33 : Number(i.amount)), 0)
+  const { start: pStart, end: pEnd } = getBillingPeriod()
+  const periodBreakdown = getPeriodBreakdown({
+    startDate: new Date(pStart),
+    endDate: new Date(pEnd),
+    recurringExpenses: activeItems,
+    recurringIncome: [],
+    weeklyBudgets: [],
+    planned: [],
+    excludedFundIds: [],
+    fromToday: false,
+  })
+  const totalExpenses = totalsFromBreakdown(periodBreakdown).expenses
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-slate-500">Totale spese mensili: <span className="font-semibold text-red-500">{cur(totalExpenses)}</span></p>
+          <p className="text-sm text-slate-500">Totale spese del periodo corrente (15-14): <span className="font-semibold text-red-500">{cur(totalExpenses)}</span></p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
@@ -145,7 +159,9 @@ export default function RecurringExpenses() {
       <InfoBox title="Come funzionano le spese ricorrenti" tone="indigo">
         <p>Una spesa ricorrente si ripete con la frequenza indicata. Compare nelle previsioni e nelle stime.</p>
         <p><strong>Frequenza mensile</strong>: scatta ogni mese nel giorno indicato (es. affitto il 1, Netflix il 5).</p>
-        <p><strong>Frequenza settimanale</strong>: scatta ogni settimana nel giorno indicato (es. GPL ogni venerdì). Nelle previsioni conta come <code>importo × 4.33</code>/mese.</p>
+        <p><strong>Frequenza settimanale</strong>: scatta ogni settimana nel giorno indicato (es. GPL ogni venerdì).</p>
+        <p><strong>Frequenza annuale</strong>: scatta una volta l'anno nel mese e giorno indicato (es. bollo auto a marzo).</p>
+        <p><strong>Nei totali e previsioni</strong>: ogni spesa conta per le occorrenze effettive nel periodo (15-14). Niente medie: una spesa annuale conta 600€ solo nel mese in cui cade, e 0€ negli altri periodi. Una spesa settimanale conta 4-5 volte (quanti lunedì/venerdì/ecc. ci sono nel periodo).</p>
         <p><strong>Da confermare</strong>: nel giorno di scadenza compare nella sezione "Da Confermare" della dashboard. Clicchi "Paga" → puoi modificare l'importo prima di confermare (per esempio se questo mese hai pagato 25€ di GPL invece di 30€).</p>
         <p><strong>Automatica</strong>: nel giorno di scadenza viene scalata <strong>automaticamente</strong> dal fondo predefinito con l'importo fisso. Non compare in "Da Confermare". Richiede di aver scelto un fondo.</p>
         <p><strong>Trasferimento</strong>: sposta soldi da un fondo all'altro (es. salvadanaio Bollo, risparmio mensile). <strong>NON viene contato come spesa</strong> nelle previsioni perché è un movimento interno tra i tuoi conti. La spesa vera la registri solo quando paghi davvero (es. annuale del bollo).</p>
@@ -180,9 +196,12 @@ export default function RecurringExpenses() {
                       )}
                     </div>
                     <p className="text-xs text-slate-400">
-                      {(item.frequency || 'monthly') === 'weekly'
-                        ? `Ogni ${DAYS_OF_WEEK[item.day_of_week ?? 1]}`
-                        : `Ogni mese il ${item.day_of_month}`} &middot; {isTransfer
+                      {(() => {
+                        const f = item.frequency || 'monthly'
+                        if (f === 'weekly') return `Ogni ${DAYS_OF_WEEK[item.day_of_week ?? 1]}`
+                        if (f === 'yearly') return `Ogni anno il ${item.day_of_month} ${MONTHS[(item.month_of_year ?? 1) - 1]}`
+                        return `Ogni mese il ${item.day_of_month}`
+                      })()} &middot; {isTransfer
                         ? `${fromFund || '?'} → ${toFund || '?'}`
                         : item.category}
                       {!isTransfer && fromFund && ` · ${fromFund}`}
@@ -249,24 +268,41 @@ export default function RecurringExpenses() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
-              <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' | 'yearly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
                 <option value="monthly">Mensile</option>
                 <option value="weekly">Settimanale</option>
+                <option value="yearly">Annuale</option>
               </select>
             </div>
           </div>
-          {form.frequency === 'monthly' ? (
+          {form.frequency === 'monthly' && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Giorno del mese</label>
               <input type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
             </div>
-          ) : (
+          )}
+          {form.frequency === 'weekly' && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Giorno della settimana</label>
               <select value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
                 {DAYS_OF_WEEK.map((d, i) => <option key={i} value={i}>{d}</option>)}
               </select>
               <p className="text-xs text-slate-400 mt-1">La spesa verrà conteggiata ogni {DAYS_OF_WEEK[form.day_of_week]} (~{form.amount > 0 ? (form.amount * 4.33).toFixed(2) : 0}€/mese stimato).</p>
+            </div>
+          )}
+          {form.frequency === 'yearly' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Mese</label>
+                <select value={form.month_of_year} onChange={e => setForm({ ...form, month_of_year: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                  {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Giorno</label>
+                <input type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+              </div>
+              <p className="col-span-2 text-xs text-slate-400">La spesa verrà conteggiata ogni {form.day_of_month} {MONTHS[form.month_of_year - 1]} (~{form.amount > 0 ? (form.amount / 12).toFixed(2) : 0}€/mese stimato).</p>
             </div>
           )}
 
