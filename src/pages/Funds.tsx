@@ -23,10 +23,19 @@ export default function Funds() {
   const [transfer, setTransfer] = useState(emptyTransfer)
 
   const load = async () => {
-    const { data, error } = await supabase.from('funds').select('*').order('sort_order')
-    if (error) toast.error('Errore nel caricamento dei fondi')
-    setFunds(data || [])
-    setLoading(false)
+    try {
+      const { data, error } = await supabase.from('funds').select('*').order('sort_order')
+      if (error) {
+        console.error('Errore Supabase:', error)
+        toast.error('Errore: ' + (error.message || 'caricamento fondi'))
+      }
+      setFunds(data || [])
+    } catch (err) {
+      console.error('Errore fatale:', err)
+      toast.error('Errore imprevisto (F12 per dettagli)')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { if (user) load() }, [user])

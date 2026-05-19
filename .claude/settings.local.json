@@ -9,7 +9,8 @@
       "Bash(node -e \"const d=require\\('./eslint-out.json'\\); d.forEach\\(r=>r.messages.forEach\\(m=>console.log\\(r.filePath.split\\('Conti-personali---Luca'\\)[1], m.line, m.severity===2?'ERR':'warn', m.message\\)\\)\\)\")",
       "Bash(rm -f eslint-out.json)",
       "Bash(npx vite *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(npm test *)"
     ]
   }
 }

@@ -21,14 +21,24 @@ export default function RecurringExpenses() {
   const [form, setForm] = useState(emptyForm)
 
   const load = async () => {
-    const [{ data: exp, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
-      supabase.from('recurring_expenses').select('*').order('day_of_month'),
-      supabase.from('funds').select('*').order('sort_order'),
-    ])
-    if (e1 || e2) toast.error('Errore nel caricamento')
-    setItems(exp || [])
-    setFunds(fnd || [])
-    setLoading(false)
+    try {
+      const [{ data: exp, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
+        supabase.from('recurring_expenses').select('*').order('day_of_month'),
+        supabase.from('funds').select('*').order('sort_order'),
+      ])
+      const firstError = e1 || e2
+      if (firstError) {
+        console.error('Errore Supabase:', firstError)
+        toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
+      }
+      setItems(exp || [])
+      setFunds(fnd || [])
+    } catch (err) {
+      console.error('Errore fatale:', err)
+      toast.error('Errore imprevisto (F12 per dettagli)')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { if (user) load() }, [user])

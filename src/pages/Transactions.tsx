@@ -60,29 +60,39 @@ export default function Transactions() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const load = async (reset = true) => {
-    const offset = reset ? 0 : items.length
-    let query = supabase.from('transactions').select('*')
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1)
+    try {
+      const offset = reset ? 0 : items.length
+      let query = supabase.from('transactions').select('*')
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1)
 
-    if (dateFrom) query = query.gte('date', dateFrom)
-    if (dateTo) query = query.lte('date', dateTo)
+      if (dateFrom) query = query.gte('date', dateFrom)
+      if (dateTo) query = query.lte('date', dateTo)
 
-    const [{ data: tx, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
-      query,
-      reset ? supabase.from('funds').select('*').order('sort_order') : Promise.resolve({ data: funds, error: null }),
-    ])
-    if (e1 || e2) toast.error('Errore nel caricamento')
-    if (reset) {
-      setItems(tx || [])
-      setFunds(fnd || [])
-      setSelectedIds(new Set())
-    } else {
-      setItems(prev => [...prev, ...(tx || [])])
+      const [{ data: tx, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
+        query,
+        reset ? supabase.from('funds').select('*').order('sort_order') : Promise.resolve({ data: funds, error: null }),
+      ])
+      const firstError = e1 || e2
+      if (firstError) {
+        console.error('Errore Supabase:', firstError)
+        toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
+      }
+      if (reset) {
+        setItems(tx || [])
+        setFunds(fnd || [])
+        setSelectedIds(new Set())
+      } else {
+        setItems(prev => [...prev, ...(tx || [])])
+      }
+      setHasMore((tx?.length || 0) === PAGE_SIZE)
+    } catch (err) {
+      console.error('Errore fatale:', err)
+      toast.error('Errore imprevisto (F12 per dettagli)')
+    } finally {
+      setLoading(false)
     }
-    setHasMore((tx?.length || 0) === PAGE_SIZE)
-    setLoading(false)
   }
 
   useEffect(() => { if (user) load() }, [user, dateFrom, dateTo])

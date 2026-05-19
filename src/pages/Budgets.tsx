@@ -33,18 +33,28 @@ export default function Budgets() {
   const weekStart = toDateString(startOfWeek(new Date(), { weekStartsOn: 1 }))
 
   const load = async () => {
-    const [{ data: b, error: e1 }, { data: v, error: e2 }, { data: f, error: e3 }, { data: tx, error: e4 }] = await Promise.all([
-      supabase.from('weekly_budgets').select('*').order('created_at'),
-      supabase.from('variable_expenses').select('*').order('created_at'),
-      supabase.from('funds').select('*').order('sort_order'),
-      supabase.from('transactions').select('*').gte('date', weekStart).not('budget_id', 'is', null),
-    ])
-    if (e1 || e2 || e3 || e4) toast.error('Errore nel caricamento')
-    setBudgets(b || [])
-    setVarExp(v || [])
-    setFunds(f || [])
-    setWeekTx(tx || [])
-    setLoading(false)
+    try {
+      const [{ data: b, error: e1 }, { data: v, error: e2 }, { data: f, error: e3 }, { data: tx, error: e4 }] = await Promise.all([
+        supabase.from('weekly_budgets').select('*').order('created_at'),
+        supabase.from('variable_expenses').select('*').order('created_at'),
+        supabase.from('funds').select('*').order('sort_order'),
+        supabase.from('transactions').select('*').gte('date', weekStart).not('budget_id', 'is', null),
+      ])
+      const firstError = e1 || e2 || e3 || e4
+      if (firstError) {
+        console.error('Errore Supabase:', firstError)
+        toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
+      }
+      setBudgets(b || [])
+      setVarExp(v || [])
+      setFunds(f || [])
+      setWeekTx(tx || [])
+    } catch (err) {
+      console.error('Errore fatale:', err)
+      toast.error('Errore imprevisto (F12 per dettagli)')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { if (user) load() }, [user])

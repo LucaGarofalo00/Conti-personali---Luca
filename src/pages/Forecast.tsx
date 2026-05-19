@@ -48,8 +48,10 @@ export default function Forecast() {
       supabase.from('variable_expenses').select('*'),
       supabase.from('transactions').select('*').eq('is_planned', true),
     ]).then(([f, e, i, b, v, p]) => {
-      if (f.error || e.error || i.error || b.error || v.error || p.error) {
-        toast.error('Errore nel caricamento dei dati')
+      const firstError = [f, e, i, b, v, p].find(r => r.error)?.error
+      if (firstError) {
+        console.error('Errore Supabase:', firstError)
+        toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
       }
       setFunds(f.data || [])
       setExpenses(e.data || [])
@@ -57,6 +59,10 @@ export default function Forecast() {
       setBudgets(b.data || [])
       setVarExp(v.data || [])
       setPlanned(p.data || [])
+    }).catch(err => {
+      console.error('Errore fatale:', err)
+      toast.error('Errore imprevisto (F12 per dettagli)')
+    }).finally(() => {
       setLoading(false)
     })
   }, [user])

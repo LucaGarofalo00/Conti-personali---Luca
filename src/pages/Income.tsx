@@ -26,14 +26,24 @@ export default function Income() {
   const [form, setForm] = useState(emptyForm)
 
   const load = async () => {
-    const [{ data: inc, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
-      supabase.from('recurring_income').select('*').order('created_at'),
-      supabase.from('funds').select('*').order('sort_order'),
-    ])
-    if (e1 || e2) toast.error('Errore nel caricamento')
-    setItems(inc || [])
-    setFunds(fnd || [])
-    setLoading(false)
+    try {
+      const [{ data: inc, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
+        supabase.from('recurring_income').select('*').order('created_at'),
+        supabase.from('funds').select('*').order('sort_order'),
+      ])
+      const firstError = e1 || e2
+      if (firstError) {
+        console.error('Errore Supabase:', firstError)
+        toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
+      }
+      setItems(inc || [])
+      setFunds(fnd || [])
+    } catch (err) {
+      console.error('Errore fatale:', err)
+      toast.error('Errore imprevisto (F12 per dettagli)')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { if (user) load() }, [user])

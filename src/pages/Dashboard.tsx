@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import FundExcluder from '../components/FundExcluder'
+import SchemaBanner from '../components/SchemaBanner'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
 import { cur, iconMap, getBillingPeriod, getDateInCurrentPeriod, formatDayMonth, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
 import { useExcludedFunds } from '../lib/excludedFunds'
@@ -52,6 +53,7 @@ export default function Dashboard() {
   const [periodTx, setPeriodTx] = useState<Transaction[]>([])
   const [planned, setPlanned] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [missingColumns, setMissingColumns] = useState<string[]>([])
   const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
 
   const [confirmItem, setConfirmItem] = useState<PendingItem | null>(null)
@@ -67,52 +69,88 @@ export default function Dashboard() {
   const [plannedSaving, setPlannedSaving] = useState(false)
 
   const load = async () => {
-    const { start: periodStart, end: periodEnd } = getBillingPeriod()
+    try {
+      const { start: periodStart, end: periodEnd } = getBillingPeriod()
 
-    const [f, e, i, b, v, tx, pl] = await Promise.all([
-      supabase.from('funds').select('*').order('sort_order'),
-      supabase.from('recurring_expenses').select('*'),
-      supabase.from('recurring_income').select('*'),
-      supabase.from('weekly_budgets').select('*'),
-      supabase.from('variable_expenses').select('*'),
-      supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd).eq('is_planned', false),
-      supabase.from('transactions').select('*').eq('is_planned', true).order('date', { ascending: true }),
-    ])
-    if (f.error || e.error || i.error || b.error || v.error || tx.error || pl.error) {
-      toast.error('Errore nel caricamento dei dati')
-    }
+      const [f, e, i, b, v] = await Promise.all([
+        supabase.from('funds').select('*').order('sort_order'),
+        supabase.from('recurring_expenses').select('*'),
+        supabase.from('recurring_income').select('*'),
+        supabase.from('weekly_budgets').select('*'),
+        supabase.from('variable_expenses').select('*'),
+      ])
 
-    const expensesData = e.data || []
-    const periodTxData = tx.data || []
+      let periodTxData: Transaction[] = []
+      let plannedData: Transaction[] = []
+      const missing: string[] = []
 
-    let fundsData = f.data || []
-    let finalPeriodTx = periodTxData
-
-    if (user) {
-      const processed = await processAutoDeducts({
-        userId: user.id,
-        expenses: expensesData,
-        periodTx: periodTxData,
-      })
-      if (processed > 0) {
-        const [fRefetch, txRefetch] = await Promise.all([
-          supabase.from('funds').select('*').order('sort_order'),
-          supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd).eq('is_planned', false),
-        ])
-        fundsData = fRefetch.data || fundsData
-        finalPeriodTx = txRefetch.data || finalPeriodTx
-        toast.success(`${processed} ${processed === 1 ? 'spesa automatica registrata' : 'spese automatiche registrate'}`)
+      const txRes = await supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd).eq('is_planned', false)
+      if (txRes.error && /column.*is_planned.*does not exist/i.test(txRes.error.message || '')) {
+        missing.push('transactions.is_planned')
+        const fallback = await supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd)
+        periodTxData = fallback.data || []
+      } else if (txRes.error) {
+        console.error('Errore tx:', txRes.error)
+        toast.error('Errore caricamento transazioni: ' + txRes.error.message)
+      } else {
+        periodTxData = txRes.data || []
       }
-    }
 
-    setFunds(fundsData)
-    setExpenses(expensesData)
-    setIncome(i.data || [])
-    setBudgets(b.data || [])
-    setVarExp(v.data || [])
-    setPeriodTx(finalPeriodTx)
-    setPlanned(pl.data || [])
-    setLoading(false)
+      const plRes = await supabase.from('transactions').select('*').eq('is_planned', true).order('date', { ascending: true })
+      if (plRes.error && /column.*is_planned.*does not exist/i.test(plRes.error.message || '')) {
+        if (!missing.includes('transactions.is_planned')) missing.push('transactions.is_planned')
+      } else if (plRes.error) {
+        console.error('Errore planned:', plRes.error)
+      } else {
+        plannedData = plRes.data || []
+      }
+
+      const firstError = [f, e, i, b, v].find(r => r.error)?.error
+      if (firstError) {
+        console.error('Errore Supabase:', firstError)
+        toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
+      }
+
+      const expensesData = e.data || []
+
+      let fundsData = f.data || []
+      let finalPeriodTx = periodTxData
+
+      if (user && !firstError && missing.length === 0) {
+        try {
+          const processed = await processAutoDeducts({
+            userId: user.id,
+            expenses: expensesData,
+            periodTx: periodTxData,
+          })
+          if (processed > 0) {
+            const [fRefetch, txRefetch] = await Promise.all([
+              supabase.from('funds').select('*').order('sort_order'),
+              supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd).eq('is_planned', false),
+            ])
+            fundsData = fRefetch.data || fundsData
+            finalPeriodTx = txRefetch.data || finalPeriodTx
+            toast.success(`${processed} ${processed === 1 ? 'spesa automatica registrata' : 'spese automatiche registrate'}`)
+          }
+        } catch (err) {
+          console.error('Errore auto-deduct:', err)
+        }
+      }
+
+      setFunds(fundsData)
+      setExpenses(expensesData)
+      setIncome(i.data || [])
+      setBudgets(b.data || [])
+      setVarExp(v.data || [])
+      setPeriodTx(finalPeriodTx)
+      setPlanned(plannedData)
+      setMissingColumns(missing)
+    } catch (err) {
+      console.error('Errore fatale in load:', err)
+      toast.error('Errore imprevisto: controlla la console (F12)')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { if (user) load() }, [user])
@@ -326,6 +364,7 @@ export default function Dashboard() {
 
   return (
     <div>
+      <SchemaBanner missingColumns={missingColumns} />
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           {hasExclusions && (
