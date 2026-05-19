@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { TrendingUp, TrendingDown, AlertTriangle, Target } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, Target, ChevronDown, ChevronRight } from 'lucide-react'
 import { format, addMonths, differenceInDays } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
@@ -8,7 +8,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import FundExcluder from '../components/FundExcluder'
 import InfoBox from '../components/InfoBox'
+import BreakdownList from '../components/BreakdownList'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
+import { getPeriodBreakdown } from '../lib/periodBreakdown'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { cur, getBillingPeriodFor, toDateString } from '../lib/utils'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction, ForecastPoint } from '../types'
@@ -38,6 +40,16 @@ export default function Forecast() {
   const [loading, setLoading] = useState(true)
   const [targetDate, setTargetDate] = useState(() => toDateString(addMonths(new Date(), 6)))
   const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
+  const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set())
+
+  const toggleExpand = (key: string) => {
+    setExpandedPeriods(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!user) return
@@ -180,12 +192,13 @@ export default function Forecast() {
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-200">
           <h3 className="text-lg font-semibold text-slate-700">Riepilogo per Periodo Billing (15-14)</h3>
-          <p className="text-xs text-slate-500 mt-1">Le colonne raggruppano per ciclo billing 15-14, non per mese calendario.</p>
+          <p className="text-xs text-slate-500 mt-1">Clicca su una riga per vedere quali entrate e uscite la compongono.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
+                <th className="text-left px-4 py-3 font-medium text-slate-600 w-6"></th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Periodo</th>
                 <th className="text-right px-4 py-3 font-medium text-slate-600">Entrate</th>
                 <th className="text-right px-4 py-3 font-medium text-slate-600">Uscite</th>
@@ -195,16 +208,54 @@ export default function Forecast() {
               </tr>
             </thead>
             <tbody>
-              {monthlyData.map(row => (
-                <tr key={row.month} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-700">{row.label}</td>
-                  <td className="px-4 py-3 text-right text-emerald-600">{cur(row.income)}</td>
-                  <td className="px-4 py-3 text-right text-red-500">{cur(row.expenses)}</td>
-                  <td className={`px-4 py-3 text-right font-medium ${row.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{cur(row.net)}</td>
-                  <td className={`px-4 py-3 text-right ${row.minBalance < 0 ? 'text-red-600 font-semibold' : 'text-amber-600'}`}>{cur(row.minBalance)}</td>
-                  <td className={`px-4 py-3 text-right font-semibold ${row.endBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{cur(row.endBalance)}</td>
-                </tr>
-              ))}
+              {monthlyData.map(row => {
+                const isOpen = expandedPeriods.has(row.month)
+                const breakdown = isOpen ? getPeriodBreakdown({
+                  startDate: row.startDate,
+                  endDate: row.endDate,
+                  recurringExpenses: expenses,
+                  recurringIncome: income,
+                  weeklyBudgets: budgets,
+                  variableExpenses: varExp,
+                  planned,
+                  excludedFundIds,
+                  fromToday: true,
+                }) : []
+                return (
+                  <Fragment key={row.month}>
+                    <tr
+                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      onClick={() => toggleExpand(row.month)}
+                    >
+                      <td className="px-2 py-3 text-slate-400">
+                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-700">{row.label}</td>
+                      <td className="px-4 py-3 text-right text-emerald-600">{cur(row.income)}</td>
+                      <td className="px-4 py-3 text-right text-red-500">{cur(row.expenses)}</td>
+                      <td className={`px-4 py-3 text-right font-medium ${row.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{cur(row.net)}</td>
+                      <td className={`px-4 py-3 text-right ${row.minBalance < 0 ? 'text-red-600 font-semibold' : 'text-amber-600'}`}>{cur(row.minBalance)}</td>
+                      <td className={`px-4 py-3 text-right font-semibold ${row.endBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{cur(row.endBalance)}</td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="bg-slate-50/50">
+                        <td colSpan={7} className="px-4 py-4">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="bg-white rounded-lg border border-emerald-100 p-3">
+                              <p className="text-xs font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Entrate previste</p>
+                              <BreakdownList items={breakdown} kind="income" emptyText="Nessuna entrata in questo periodo" compact />
+                            </div>
+                            <div className="bg-white rounded-lg border border-red-100 p-3">
+                              <p className="text-xs font-semibold text-red-700 mb-2 uppercase tracking-wide">Uscite previste</p>
+                              <BreakdownList items={breakdown} kind="expense" emptyText="Nessuna uscita in questo periodo" compact />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>

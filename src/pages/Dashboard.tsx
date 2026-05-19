@@ -11,8 +11,10 @@ import Modal from '../components/Modal'
 import FundExcluder from '../components/FundExcluder'
 import SchemaBanner from '../components/SchemaBanner'
 import InfoBox from '../components/InfoBox'
+import BreakdownList from '../components/BreakdownList'
+import { getPeriodBreakdown } from '../lib/periodBreakdown'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
-import { cur, iconMap, getBillingPeriod, getDateInCurrentPeriod, formatDayMonth, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, formatDayMonth, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
@@ -72,6 +74,7 @@ export default function Dashboard() {
 
   const [plannedModal, setPlannedModal] = useState(false)
   const [plannedListOpen, setPlannedListOpen] = useState(false)
+  const [breakdownModal, setBreakdownModal] = useState<'income' | 'expense' | null>(null)
   const [plannedForm, setPlannedForm] = useState({
     type: 'expense' as 'income' | 'expense',
     amount: 0, description: '', fund_id: '', category: 'altro', date: todayString(),
@@ -437,8 +440,8 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <Card icon={Wallet} color="bg-indigo-100 text-indigo-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
-        <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate / Mese" value={cur(est.monthlyIncome)} sub={est.plannedIncomeInPeriod > 0 ? `incl. ${cur(est.plannedIncomeInPeriod)} pianif.` : undefined} />
-        <Card icon={TrendingDown} color="bg-red-100 text-red-600" label="Uscite / Mese" value={cur(est.monthlyExpenses)} sub={est.plannedExpensesInPeriod > 0 ? `incl. ${cur(est.plannedExpensesInPeriod)} pianif.` : undefined} />
+        <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate / Mese" value={cur(est.monthlyIncome)} sub={est.plannedIncomeInPeriod > 0 ? `incl. ${cur(est.plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
+        <Card icon={TrendingDown} color="bg-red-100 text-red-600" label="Uscite / Mese" value={cur(est.monthlyExpenses)} sub={est.plannedExpensesInPeriod > 0 ? `incl. ${cur(est.plannedExpensesInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('expense')} />
         <Card icon={Target} color="bg-amber-100 text-amber-600" label="Netto / Mese" value={cur(est.monthlyNet)} valueColor={est.monthlyNet >= 0 ? 'text-emerald-600' : 'text-red-600'} />
       </div>
       <InfoBox title="Come vengono calcolate queste cifre" tone="indigo">
@@ -785,6 +788,32 @@ export default function Dashboard() {
         )}
       </Modal>
 
+      <Modal
+        isOpen={!!breakdownModal}
+        onClose={() => setBreakdownModal(null)}
+        title={breakdownModal === 'income' ? 'Entrate del periodo (15-14)' : 'Uscite del periodo (15-14)'}
+      >
+        {breakdownModal && (() => {
+          const { startDate, endDate } = getBillingPeriodFor(new Date())
+          const breakdown = getPeriodBreakdown({
+            startDate, endDate,
+            recurringExpenses: expenses, recurringIncome: income,
+            weeklyBudgets: budgets, variableExpenses: varExp, planned,
+            excludedFundIds, fromToday: false,
+          })
+          return (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">
+                Dettaglio di {breakdownModal === 'income' ? 'tutte le entrate' : 'tutte le uscite'} previste nel periodo corrente. Include ricorrenti, budget settimanali (1× per settimana), spese variabili e pianificate una tantum.
+              </p>
+              <div className="max-h-[60vh] overflow-y-auto">
+                <BreakdownList items={breakdown} kind={breakdownModal} emptyText="Nessuna voce nel periodo" />
+              </div>
+            </div>
+          )
+        })()}
+      </Modal>
+
       <Modal isOpen={plannedListOpen} onClose={() => setPlannedListOpen(false)} title={`Tutte le pianificazioni (${planned.length})`}>
         {planned.length === 0 ? (
           <p className="text-center text-sm text-slate-400 py-6">Nessuna pianificazione</p>
@@ -874,17 +903,22 @@ export default function Dashboard() {
   )
 }
 
-function Card({ icon: Icon, color, label, value, valueColor, sub }: { icon: React.ElementType; color: string; label: string; value: string; valueColor?: string; sub?: string }) {
+function Card({ icon: Icon, color, label, value, valueColor, sub, onClick }: { icon: React.ElementType; color: string; label: string; value: string; valueColor?: string; sub?: string; onClick?: () => void }) {
+  const Wrapper = onClick ? 'button' : 'div'
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4">
+    <Wrapper
+      onClick={onClick}
+      className={`bg-white rounded-xl border border-slate-200 p-4 text-left w-full ${onClick ? 'hover:border-indigo-300 hover:shadow-sm transition cursor-pointer' : ''}`}
+    >
       <div className="flex items-center gap-3 mb-2">
         <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}>
           <Icon className="w-4.5 h-4.5" />
         </div>
-        <span className="text-sm text-slate-500">{label}</span>
+        <span className="text-sm text-slate-500 flex-1">{label}</span>
+        {onClick && <span className="text-[10px] text-indigo-500 font-medium">vedi →</span>}
       </div>
       <p className={`text-xl font-bold ${valueColor || 'text-slate-800'}`}>{value}</p>
       {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
-    </div>
+    </Wrapper>
   )
 }
