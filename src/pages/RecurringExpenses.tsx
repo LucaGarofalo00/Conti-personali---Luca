@@ -108,7 +108,7 @@ export default function RecurringExpenses() {
                     <p className="text-xs text-slate-400">
                       Giorno {item.day_of_month} &middot; {item.category}
                       {fundName && ` · ${fundName}`}
-                      {item.end_date && ` · Fino al ${new Date(item.end_date).toLocaleDateString('it-IT')}`}
+                      {item.end_date && ` · Ultimo accredito: ${new Date(item.end_date).toLocaleDateString('it-IT')}`}
                     </p>
                   </div>
                 </div>
@@ -123,14 +123,14 @@ export default function RecurringExpenses() {
 
           {expiredItems.length > 0 && (
             <>
-              <p className="text-sm font-medium text-slate-400 mt-6 mb-2">Scadute</p>
+              <p className="text-sm font-medium text-slate-400 mt-6 mb-2">Terminate</p>
               {expiredItems.map(item => (
                 <div key={item.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between opacity-40">
                   <div className="flex items-center gap-4">
                     <div className="w-6" />
                     <div>
                       <p className="font-medium text-slate-800 line-through">{item.name}</p>
-                      <p className="text-xs text-slate-400">Scaduta il {new Date(item.end_date!).toLocaleDateString('it-IT')}</p>
+                      <p className="text-xs text-slate-400">Ultimo accredito: {new Date(item.end_date!).toLocaleDateString('it-IT')}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -174,10 +174,10 @@ export default function RecurringExpenses() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Data di fine (opzionale)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Data ultimo accredito (opzionale)</label>
             <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
             {form.end_date && (
-              <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-indigo-600 mt-1 hover:text-indigo-700">Rimuovi data di fine</button>
+              <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-indigo-600 mt-1 hover:text-indigo-700">Rimuovi data</button>
             )}
           </div>
           <button onClick={save} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">

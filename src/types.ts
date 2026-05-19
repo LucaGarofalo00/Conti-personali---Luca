@@ -58,6 +58,7 @@ export interface VariableExpense {
   fund_id: string | null
   category: string
   is_active: boolean
+  needs_confirmation: boolean
   created_at: string
 }
 
@@ -70,6 +71,7 @@ export interface Transaction {
   fund_id: string | null
   fund_to_id: string | null
   category: string
+  budget_id: string | null
   date: string
   created_at: string
 }

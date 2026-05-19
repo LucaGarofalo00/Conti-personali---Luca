@@ -110,7 +110,7 @@ export default function Dashboard() {
     }))
 
   const pendingVarExp: PendingItem[] = varExp
-    .filter(v => v.is_active)
+    .filter(v => v.is_active && v.needs_confirmation)
     .map(v => ({
       id: 'var-' + v.id,
       kind: 'expense',
