@@ -1,30 +1,21 @@
 import { useState, useEffect } from 'react'
-import { CreditCard, Smartphone, Globe, Banknote, BookOpen, PiggyBank, Wallet, Plus, Pencil, Trash2, ArrowLeftRight } from 'lucide-react'
+import { Wallet, Plus, Pencil, Trash2, ArrowLeftRight, PiggyBank } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
+import { cur, iconMap, ICONS, COLORS } from '../lib/utils'
 import type { Fund } from '../types'
-
-const iconMap: Record<string, React.ElementType> = {
-  'credit-card': CreditCard, 'smartphone': Smartphone, 'globe': Globe,
-  'banknote': Banknote, 'book-open': BookOpen, 'piggy-bank': PiggyBank, 'wallet': Wallet,
-}
-const ICONS = [
-  { value: 'credit-card', label: 'Carta' }, { value: 'smartphone', label: 'App' },
-  { value: 'globe', label: 'Internazionale' }, { value: 'banknote', label: 'Contanti' },
-  { value: 'book-open', label: 'Libretto' }, { value: 'piggy-bank', label: 'Salvadanaio' },
-  { value: 'wallet', label: 'Portafoglio' },
-]
-const COLORS = ['#3B82F6', '#F59E0B', '#8B5CF6', '#10B981', '#F97316', '#EC4899', '#EF4444', '#06B6D4']
-const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
 const emptyForm = { name: '', type: 'main' as 'main' | 'sub', parent_id: null as string | null, balance: 0, icon: 'wallet', color: '#3B82F6', sort_order: 0 }
 const emptyTransfer = { from_id: '', to_id: '', amount: 0 }
 
 export default function Funds() {
   const { user } = useAuth()
+  const toast = useToast()
   const [funds, setFunds] = useState<Fund[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
   const [editing, setEditing] = useState<Fund | null>(null)
@@ -32,7 +23,8 @@ export default function Funds() {
   const [transfer, setTransfer] = useState(emptyTransfer)
 
   const load = async () => {
-    const { data } = await supabase.from('funds').select('*').order('sort_order')
+    const { data, error } = await supabase.from('funds').select('*').order('sort_order')
+    if (error) toast.error('Errore nel caricamento dei fondi')
     setFunds(data || [])
     setLoading(false)
   }
@@ -47,18 +39,23 @@ export default function Funds() {
   }
 
   const save = async () => {
-    if (editing) {
-      await supabase.from('funds').update(form).eq('id', editing.id)
-    } else {
-      await supabase.from('funds').insert({ user_id: user!.id, ...form })
-    }
+    if (!form.name.trim()) { toast.error('Inserisci un nome'); return }
+    setSaving(true)
+    const { error } = editing
+      ? await supabase.from('funds').update(form).eq('id', editing.id)
+      : await supabase.from('funds').insert({ user_id: user!.id, ...form })
+    setSaving(false)
+    if (error) { toast.error('Errore nel salvataggio'); return }
+    toast.success(editing ? 'Fondo aggiornato' : 'Fondo creato')
     setShowModal(false)
     load()
   }
 
   const remove = async (id: string) => {
     if (!confirm('Eliminare questo fondo?')) return
-    await supabase.from('funds').delete().eq('id', id)
+    const { error } = await supabase.from('funds').delete().eq('id', id)
+    if (error) { toast.error('Errore nell\'eliminazione'); return }
+    toast.success('Fondo eliminato')
     load()
   }
 
@@ -66,15 +63,21 @@ export default function Funds() {
     if (!transfer.from_id || !transfer.to_id || transfer.amount <= 0) return
     const from = funds.find(f => f.id === transfer.from_id)!
     const to = funds.find(f => f.id === transfer.to_id)!
-    await Promise.all([
-      supabase.from('funds').update({ balance: Number(from.balance) - transfer.amount }).eq('id', from.id),
-      supabase.from('funds').update({ balance: Number(to.balance) + transfer.amount }).eq('id', to.id),
-      supabase.from('transactions').insert({
-        user_id: user!.id, type: 'transfer', amount: transfer.amount,
-        description: `Trasferimento: ${from.name} → ${to.name}`,
-        fund_id: from.id, fund_to_id: to.id, category: 'trasferimento', date: new Date().toISOString().split('T')[0],
-      }),
-    ])
+    if (transfer.amount > Number(from.balance)) {
+      toast.error('Saldo insufficiente')
+      return
+    }
+    setSaving(true)
+    const { error } = await supabase.from('funds').update({ balance: Number(from.balance) - transfer.amount }).eq('id', from.id)
+    if (error) { setSaving(false); toast.error('Errore nel trasferimento'); return }
+    await supabase.from('funds').update({ balance: Number(to.balance) + transfer.amount }).eq('id', to.id)
+    await supabase.from('transactions').insert({
+      user_id: user!.id, type: 'transfer', amount: transfer.amount,
+      description: `Trasferimento: ${from.name} → ${to.name}`,
+      fund_id: from.id, fund_to_id: to.id, category: 'trasferimento', date: new Date().toISOString().split('T')[0],
+    })
+    setSaving(false)
+    toast.success('Trasferimento completato')
     setShowTransfer(false)
     setTransfer(emptyTransfer)
     load()
@@ -150,7 +153,6 @@ export default function Funds() {
         })}
       </div>
 
-      {/* Modal Aggiungi/Modifica */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? 'Modifica Fondo' : 'Nuovo Fondo'}>
         <div className="space-y-4">
           <div>
@@ -186,13 +188,12 @@ export default function Funds() {
               </div>
             </>
           )}
-          <button onClick={save} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">
-            {editing ? 'Salva Modifiche' : 'Aggiungi Fondo'}
+          <button onClick={save} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+            {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Aggiungi Fondo'}
           </button>
         </div>
       </Modal>
 
-      {/* Modal Trasferimento */}
       <Modal isOpen={showTransfer} onClose={() => setShowTransfer(false)} title="Trasferisci Fondi">
         <div className="space-y-4">
           <div>
@@ -213,8 +214,8 @@ export default function Funds() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Importo</label>
             <input type="number" step="0.01" value={transfer.amount || ''} onChange={e => setTransfer({ ...transfer, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
           </div>
-          <button onClick={doTransfer} disabled={!transfer.from_id || !transfer.to_id || transfer.amount <= 0} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
-            Trasferisci
+          <button onClick={doTransfer} disabled={!transfer.from_id || !transfer.to_id || transfer.amount <= 0 || saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+            {saving ? 'Trasferimento...' : 'Trasferisci'}
           </button>
         </div>
       </Modal>

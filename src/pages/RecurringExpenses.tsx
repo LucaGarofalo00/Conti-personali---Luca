@@ -2,30 +2,30 @@ import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
+import { cur, EXPENSE_CATEGORIES } from '../lib/utils'
 import type { RecurringExpense, Fund } from '../types'
 
-const CATEGORIES = [
-  'casa', 'bollette', 'trasporti', 'cibo', 'salute',
-  'abbonamenti', 'svago', 'vestiti', 'istruzione', 'risparmio', 'altro',
-]
-const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 const emptyForm = { name: '', amount: 0, day_of_month: 1, fund_id: '' as string, category: 'altro' }
 
 export default function RecurringExpenses() {
   const { user } = useAuth()
+  const toast = useToast()
   const [items, setItems] = useState<RecurringExpense[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<RecurringExpense | null>(null)
   const [form, setForm] = useState(emptyForm)
 
   const load = async () => {
-    const [{ data: exp }, { data: fnd }] = await Promise.all([
+    const [{ data: exp, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
       supabase.from('recurring_expenses').select('*').order('day_of_month'),
       supabase.from('funds').select('*').order('sort_order'),
     ])
+    if (e1 || e2) toast.error('Errore nel caricamento')
     setItems(exp || [])
     setFunds(fnd || [])
     setLoading(false)
@@ -41,24 +41,31 @@ export default function RecurringExpenses() {
   }
 
   const save = async () => {
+    if (!form.name.trim()) { toast.error('Inserisci un nome'); return }
+    if (form.amount <= 0) { toast.error('Inserisci un importo valido'); return }
+    setSaving(true)
     const data = { ...form, fund_id: form.fund_id || null }
-    if (editing) {
-      await supabase.from('recurring_expenses').update(data).eq('id', editing.id)
-    } else {
-      await supabase.from('recurring_expenses').insert({ user_id: user!.id, ...data })
-    }
+    const { error } = editing
+      ? await supabase.from('recurring_expenses').update(data).eq('id', editing.id)
+      : await supabase.from('recurring_expenses').insert({ user_id: user!.id, ...data })
+    setSaving(false)
+    if (error) { toast.error('Errore nel salvataggio'); return }
+    toast.success(editing ? 'Spesa aggiornata' : 'Spesa aggiunta')
     setShowModal(false)
     load()
   }
 
   const remove = async (id: string) => {
     if (!confirm('Eliminare questa spesa?')) return
-    await supabase.from('recurring_expenses').delete().eq('id', id)
+    const { error } = await supabase.from('recurring_expenses').delete().eq('id', id)
+    if (error) { toast.error('Errore nell\'eliminazione'); return }
+    toast.success('Spesa eliminata')
     load()
   }
 
   const toggle = async (item: RecurringExpense) => {
-    await supabase.from('recurring_expenses').update({ is_active: !item.is_active }).eq('id', item.id)
+    const { error } = await supabase.from('recurring_expenses').update({ is_active: !item.is_active }).eq('id', item.id)
+    if (error) toast.error('Errore nell\'aggiornamento')
     load()
   }
 
@@ -131,7 +138,7 @@ export default function RecurringExpenses() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
             <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none capitalize">
-              {CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
+              {EXPENSE_CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
             </select>
           </div>
           <div>
@@ -141,8 +148,8 @@ export default function RecurringExpenses() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <button onClick={save} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">
-            {editing ? 'Salva Modifiche' : 'Aggiungi Spesa'}
+          <button onClick={save} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+            {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Aggiungi Spesa'}
           </button>
         </div>
       </Modal>

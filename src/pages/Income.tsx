@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Clock, Calendar } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
+import { cur } from '../lib/utils'
 import type { RecurringIncome, Fund } from '../types'
 
 const DAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
-const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
 const emptyForm = {
   name: '', amount: 0, is_variable: false, frequency: 'monthly' as 'monthly' | 'weekly',
@@ -15,18 +16,21 @@ const emptyForm = {
 
 export default function Income() {
   const { user } = useAuth()
+  const toast = useToast()
   const [items, setItems] = useState<RecurringIncome[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<RecurringIncome | null>(null)
   const [form, setForm] = useState(emptyForm)
 
   const load = async () => {
-    const [{ data: inc }, { data: fnd }] = await Promise.all([
+    const [{ data: inc, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
       supabase.from('recurring_income').select('*').order('created_at'),
       supabase.from('funds').select('*').order('sort_order'),
     ])
+    if (e1 || e2) toast.error('Errore nel caricamento')
     setItems(inc || [])
     setFunds(fnd || [])
     setLoading(false)
@@ -46,29 +50,36 @@ export default function Income() {
   }
 
   const save = async () => {
+    if (!form.name.trim()) { toast.error('Inserisci un nome'); return }
+    if (form.amount <= 0) { toast.error('Inserisci un importo valido'); return }
+    setSaving(true)
     const data = {
       ...form,
       fund_id: form.fund_id || null,
       day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
       day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
     }
-    if (editing) {
-      await supabase.from('recurring_income').update(data).eq('id', editing.id)
-    } else {
-      await supabase.from('recurring_income').insert({ user_id: user!.id, ...data })
-    }
+    const { error } = editing
+      ? await supabase.from('recurring_income').update(data).eq('id', editing.id)
+      : await supabase.from('recurring_income').insert({ user_id: user!.id, ...data })
+    setSaving(false)
+    if (error) { toast.error('Errore nel salvataggio'); return }
+    toast.success(editing ? 'Entrata aggiornata' : 'Entrata aggiunta')
     setShowModal(false)
     load()
   }
 
   const remove = async (id: string) => {
     if (!confirm('Eliminare questa entrata?')) return
-    await supabase.from('recurring_income').delete().eq('id', id)
+    const { error } = await supabase.from('recurring_income').delete().eq('id', id)
+    if (error) { toast.error('Errore nell\'eliminazione'); return }
+    toast.success('Entrata eliminata')
     load()
   }
 
   const toggle = async (item: RecurringIncome) => {
-    await supabase.from('recurring_income').update({ is_active: !item.is_active }).eq('id', item.id)
+    const { error } = await supabase.from('recurring_income').update({ is_active: !item.is_active }).eq('id', item.id)
+    if (error) toast.error('Errore nell\'aggiornamento')
     load()
   }
 
@@ -181,8 +192,8 @@ export default function Income() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <button onClick={save} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">
-            {editing ? 'Salva Modifiche' : 'Aggiungi Entrata'}
+          <button onClick={save} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+            {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Aggiungi Entrata'}
           </button>
         </div>
       </Modal>

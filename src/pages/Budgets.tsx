@@ -2,18 +2,19 @@ import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ShoppingBag, Fuel } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
+import { cur, VARIABLE_CATEGORIES } from '../lib/utils'
 import type { WeeklyBudget, VariableExpense, Fund } from '../types'
-
-const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
-const CATEGORIES = ['trasporti', 'cibo', 'svago', 'salute', 'altro']
 
 export default function Budgets() {
   const { user } = useAuth()
+  const toast = useToast()
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
   const [varExp, setVarExp] = useState<VariableExpense[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
   const [showBudgetModal, setShowBudgetModal] = useState(false)
   const [editingBudget, setEditingBudget] = useState<WeeklyBudget | null>(null)
@@ -24,11 +25,12 @@ export default function Budgets() {
   const [varForm, setVarForm] = useState({ name: '', estimated_amount: 0, frequency: 'weekly' as 'weekly' | 'monthly', fund_id: '', category: 'trasporti' })
 
   const load = async () => {
-    const [{ data: b }, { data: v }, { data: f }] = await Promise.all([
+    const [{ data: b, error: e1 }, { data: v, error: e2 }, { data: f, error: e3 }] = await Promise.all([
       supabase.from('weekly_budgets').select('*').order('created_at'),
       supabase.from('variable_expenses').select('*').order('created_at'),
       supabase.from('funds').select('*').order('sort_order'),
     ])
+    if (e1 || e2 || e3) toast.error('Errore nel caricamento')
     setBudgets(b || [])
     setVarExp(v || [])
     setFunds(f || [])
@@ -38,25 +40,62 @@ export default function Budgets() {
   useEffect(() => { if (user) load() }, [user])
 
   const saveBudget = async () => {
+    if (!budgetForm.name.trim()) { toast.error('Inserisci un nome'); return }
+    if (budgetForm.amount <= 0) { toast.error('Inserisci un importo valido'); return }
+    setSaving(true)
     const data = { name: budgetForm.name, amount: budgetForm.amount, fund_id: budgetForm.fund_id || null }
-    if (editingBudget) await supabase.from('weekly_budgets').update(data).eq('id', editingBudget.id)
-    else await supabase.from('weekly_budgets').insert({ user_id: user!.id, ...data })
+    const { error } = editingBudget
+      ? await supabase.from('weekly_budgets').update(data).eq('id', editingBudget.id)
+      : await supabase.from('weekly_budgets').insert({ user_id: user!.id, ...data })
+    setSaving(false)
+    if (error) { toast.error('Errore nel salvataggio'); return }
+    toast.success(editingBudget ? 'Budget aggiornato' : 'Budget aggiunto')
     setShowBudgetModal(false)
     load()
   }
 
   const saveVar = async () => {
+    if (!varForm.name.trim()) { toast.error('Inserisci un nome'); return }
+    if (varForm.estimated_amount <= 0) { toast.error('Inserisci un importo valido'); return }
+    setSaving(true)
     const data = { ...varForm, fund_id: varForm.fund_id || null }
-    if (editingVar) await supabase.from('variable_expenses').update(data).eq('id', editingVar.id)
-    else await supabase.from('variable_expenses').insert({ user_id: user!.id, ...data })
+    const { error } = editingVar
+      ? await supabase.from('variable_expenses').update(data).eq('id', editingVar.id)
+      : await supabase.from('variable_expenses').insert({ user_id: user!.id, ...data })
+    setSaving(false)
+    if (error) { toast.error('Errore nel salvataggio'); return }
+    toast.success(editingVar ? 'Spesa aggiornata' : 'Spesa aggiunta')
     setShowVarModal(false)
     load()
   }
 
-  const removeBudget = async (id: string) => { if (confirm('Eliminare?')) { await supabase.from('weekly_budgets').delete().eq('id', id); load() } }
-  const removeVar = async (id: string) => { if (confirm('Eliminare?')) { await supabase.from('variable_expenses').delete().eq('id', id); load() } }
-  const toggleBudget = async (b: WeeklyBudget) => { await supabase.from('weekly_budgets').update({ is_active: !b.is_active }).eq('id', b.id); load() }
-  const toggleVar = async (v: VariableExpense) => { await supabase.from('variable_expenses').update({ is_active: !v.is_active }).eq('id', v.id); load() }
+  const removeBudget = async (id: string) => {
+    if (!confirm('Eliminare?')) return
+    const { error } = await supabase.from('weekly_budgets').delete().eq('id', id)
+    if (error) { toast.error('Errore'); return }
+    toast.success('Eliminato')
+    load()
+  }
+
+  const removeVar = async (id: string) => {
+    if (!confirm('Eliminare?')) return
+    const { error } = await supabase.from('variable_expenses').delete().eq('id', id)
+    if (error) { toast.error('Errore'); return }
+    toast.success('Eliminato')
+    load()
+  }
+
+  const toggleBudget = async (b: WeeklyBudget) => {
+    const { error } = await supabase.from('weekly_budgets').update({ is_active: !b.is_active }).eq('id', b.id)
+    if (error) toast.error('Errore')
+    load()
+  }
+
+  const toggleVar = async (v: VariableExpense) => {
+    const { error } = await supabase.from('variable_expenses').update({ is_active: !v.is_active }).eq('id', v.id)
+    if (error) toast.error('Errore')
+    load()
+  }
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
@@ -72,7 +111,6 @@ export default function Budgets() {
         <p className="text-sm text-slate-500 mt-1">Stima mensile totale: <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
       </div>
 
-      {/* Budget Settimanali */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -110,7 +148,6 @@ export default function Budgets() {
         )}
       </div>
 
-      {/* Spese Variabili */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -148,7 +185,6 @@ export default function Budgets() {
         )}
       </div>
 
-      {/* Budget Modal */}
       <Modal isOpen={showBudgetModal} onClose={() => setShowBudgetModal(false)} title={editingBudget ? 'Modifica Budget' : 'Nuovo Budget Settimanale'}>
         <div className="space-y-4">
           <div>
@@ -166,13 +202,12 @@ export default function Budgets() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <button onClick={saveBudget} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">
-            {editingBudget ? 'Salva' : 'Aggiungi'}
+          <button onClick={saveBudget} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+            {saving ? 'Salvataggio...' : editingBudget ? 'Salva' : 'Aggiungi'}
           </button>
         </div>
       </Modal>
 
-      {/* Variable Expense Modal */}
       <Modal isOpen={showVarModal} onClose={() => setShowVarModal(false)} title={editingVar ? 'Modifica Spesa Variabile' : 'Nuova Spesa Variabile'}>
         <div className="space-y-4">
           <div>
@@ -195,7 +230,7 @@ export default function Budgets() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
             <select value={varForm.category} onChange={e => setVarForm({ ...varForm, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none capitalize">
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {VARIABLE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
@@ -205,8 +240,8 @@ export default function Budgets() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <button onClick={saveVar} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">
-            {editingVar ? 'Salva' : 'Aggiungi'}
+          <button onClick={saveVar} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+            {saving ? 'Salvataggio...' : editingVar ? 'Salva' : 'Aggiungi'}
           </button>
         </div>
       </Modal>

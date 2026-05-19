@@ -1,17 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, Calendar, CreditCard, Smartphone, Globe, Banknote, BookOpen, PiggyBank } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, Calendar, PiggyBank } from 'lucide-react'
 import { getDate } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
+import { cur, iconMap } from '../lib/utils'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense } from '../types'
-
-const iconMap: Record<string, React.ElementType> = {
-  'credit-card': CreditCard, 'smartphone': Smartphone, 'globe': Globe,
-  'banknote': Banknote, 'book-open': BookOpen, 'piggy-bank': PiggyBank, 'wallet': Wallet,
-}
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { label: string; balance: number; income: number; expenses: number } }> }) {
   if (!active || !payload?.length) return null
@@ -26,10 +23,9 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
   )
 }
 
-const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
-
 export default function Dashboard() {
   const { user } = useAuth()
+  const toast = useToast()
   const [funds, setFunds] = useState<Fund[]>([])
   const [expenses, setExpenses] = useState<RecurringExpense[]>([])
   const [income, setIncome] = useState<RecurringIncome[]>([])
@@ -46,6 +42,9 @@ export default function Dashboard() {
       supabase.from('weekly_budgets').select('*'),
       supabase.from('variable_expenses').select('*'),
     ]).then(([f, e, i, b, v]) => {
+      if (f.error || e.error || i.error || b.error || v.error) {
+        toast.error('Errore nel caricamento dei dati')
+      }
       setFunds(f.data || [])
       setExpenses(e.data || [])
       setIncome(i.data || [])

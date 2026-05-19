@@ -5,10 +5,10 @@ import { format, parse } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
+import { cur } from '../lib/utils'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, ForecastPoint } from '../types'
-
-const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint }> }) {
   if (!active || !payload?.length) return null
@@ -25,6 +25,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
 
 export default function Forecast() {
   const { user } = useAuth()
+  const toast = useToast()
   const [funds, setFunds] = useState<Fund[]>([])
   const [expenses, setExpenses] = useState<RecurringExpense[]>([])
   const [income, setIncome] = useState<RecurringIncome[]>([])
@@ -42,6 +43,9 @@ export default function Forecast() {
       supabase.from('weekly_budgets').select('*'),
       supabase.from('variable_expenses').select('*'),
     ]).then(([f, e, i, b, v]) => {
+      if (f.error || e.error || i.error || b.error || v.error) {
+        toast.error('Errore nel caricamento dei dati')
+      }
       setFunds(f.data || [])
       setExpenses(e.data || [])
       setIncome(i.data || [])
@@ -89,7 +93,6 @@ export default function Forecast() {
         </select>
       </div>
 
-      {/* Metriche */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <MetricCard icon={Target} color="bg-indigo-100 text-indigo-600" label="Saldo Attuale" value={cur(startBalance)} />
         <MetricCard icon={trend >= 0 ? TrendingUp : TrendingDown} color={trend >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} label={`Saldo a ${months} mesi`} value={cur(endBalance)} />
@@ -97,7 +100,6 @@ export default function Forecast() {
         <MetricCard icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Netto Mensile" value={cur(est.monthlyNet)} sub={est.monthlyNet >= 0 ? 'Positivo' : 'Negativo'} />
       </div>
 
-      {/* Grafico */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 mb-8">
         <h3 className="text-lg font-semibold text-slate-700 mb-4">Proiezione Saldo</h3>
         {forecast.length > 1 ? (
@@ -121,7 +123,6 @@ export default function Forecast() {
         )}
       </div>
 
-      {/* Tabella mensile */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-200">
           <h3 className="text-lg font-semibold text-slate-700">Riepilogo Mensile</h3>

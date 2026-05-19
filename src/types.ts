@@ -66,7 +66,7 @@ export interface Transaction {
   type: 'income' | 'expense' | 'transfer'
   amount: number
   description: string
-  fund_id: string
+  fund_id: string | null
   fund_to_id: string | null
   category: string
   date: string

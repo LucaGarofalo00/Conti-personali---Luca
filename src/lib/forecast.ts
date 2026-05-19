@@ -37,7 +37,6 @@ export function generateForecast(
       if (isBefore(day, today) || isAfter(day, endDate)) continue
 
       const dom = getDate(day)
-      const dow = getDay(day)
       const dim = getDaysInMonth(day)
 
       for (const inc of recurringIncome) {
@@ -46,8 +45,9 @@ export function generateForecast(
           const adjusted = Math.min(inc.day_of_month, dim)
           if (dom === adjusted) weekIncome += Number(inc.amount)
         } else if (inc.frequency === 'weekly' && inc.day_of_week !== null) {
-          const effectiveDay = (inc.day_of_week + (inc.delay_days || 0)) % 7
-          if (dow === effectiveDay) weekIncome += Number(inc.amount)
+          const delayDays = inc.delay_days || 0
+          const baseDay = addDays(day, -delayDays)
+          if (getDay(baseDay) === inc.day_of_week) weekIncome += Number(inc.amount)
         }
       }
 
