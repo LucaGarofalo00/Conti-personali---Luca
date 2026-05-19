@@ -6,8 +6,9 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur, todayString, toDateString, getBillingPeriod } from '../lib/utils'
+import { cur, todayString, getBillingPeriod } from '../lib/utils'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
+import { computeBudgetRollover } from '../lib/budgetRollover'
 import InfoBox from '../components/InfoBox'
 import type { WeeklyBudget, Fund, Transaction } from '../types'
 
@@ -27,14 +28,13 @@ export default function Budgets() {
   const [expBudgetId, setExpBudgetId] = useState<{ id: string; name: string } | null>(null)
   const [expForm, setExpForm] = useState({ description: '', amount: 0, fund_id: '', date: todayString() })
 
-  const weekStart = toDateString(startOfWeek(new Date(), { weekStartsOn: 1 }))
 
   const load = async () => {
     try {
       const [{ data: b, error: e1 }, { data: f, error: e2 }, { data: btx, error: e3 }] = await Promise.all([
         supabase.from('weekly_budgets').select('*').order('created_at'),
         supabase.from('funds').select('*').order('sort_order'),
-        supabase.from('transactions').select('*').gte('date', weekStart).not('budget_id', 'is', null),
+        supabase.from('transactions').select('*').not('budget_id', 'is', null),
       ])
       const firstError = e1 || e2 || e3
       if (firstError) {
@@ -150,9 +150,10 @@ export default function Budgets() {
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="indigo">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
-        <p><strong>Reset</strong>: ogni <strong>lunedì 00:00</strong> il contatore riparte da zero (basato su <code>startOfWeek</code> in tempo reale).</p>
-        <p><strong>Overbudget</strong>: la barra diventa <strong>rossa</strong> e compare un alert, ma le spese vengono comunque registrate e il fondo viene scalato normalmente.</p>
-        <p><strong>Nelle previsioni</strong>: ogni budget attivo conta una volta per ogni lunedì del periodo (es. nel periodo 15 mag - 14 giu ci sono 4 lunedì, quindi un budget di 50€ conta 200€).</p>
+        <p><strong>Reset settimanale</strong>: ogni <strong>lunedì 00:00</strong> il contatore della settimana riparte da zero.</p>
+        <p><strong>Rollover positivo</strong>: se hai speso meno del budget in settimane passate, l'avanzo si <strong>accumula</strong> nella settimana corrente. Es. budget 50€/sett, settimana scorsa hai speso 30€ → questa settimana hai 50 + 20 = <strong>70€ disponibili</strong>. L'avanzo viene mostrato con un badge verde sopra la barra.</p>
+        <p><strong>Sforamento</strong>: se spendi più del disponibile, la barra diventa rossa e compare un alert, MA le spese sono comunque registrate normalmente nel fondo. Il "debito" <strong>NON si scala</strong> dalla settimana successiva (l'avanzo si accumula solo, mai negativo).</p>
+        <p><strong>Nelle previsioni</strong>: ogni budget conta una volta per ogni lunedì futuro del periodo, con il valore <strong>base</strong> (non considera il rollover, che è solo per la settimana corrente).</p>
         <p>Per spese fisse mensili (affitto, abbonamenti, ecc.) usa la sezione <strong>Spese Ricorrenti</strong>.</p>
       </InfoBox>
 
@@ -174,12 +175,14 @@ export default function Budgets() {
         ) : (
           <div className="space-y-4">
             {budgets.map(b => {
-              const txs = budgetTx.filter(t => t.budget_id === b.id)
-              const spent = txs.reduce((s, t) => s + Number(t.amount), 0)
+              const rollInfo = computeBudgetRollover(b, budgetTx)
               const limit = Number(b.amount)
-              const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0
-              const remaining = limit - spent
-              const overBudget = remaining < 0
+              const txsThisWeekObjs = budgetTx.filter(t => t.budget_id === b.id && new Date(t.date) >= startOfWeek(new Date(), { weekStartsOn: 1 }))
+              const effective = rollInfo.effectiveBudget
+              const spentThisWeek = rollInfo.spentThisWeek
+              const remaining = rollInfo.remaining
+              const overBudget = rollInfo.overBudget
+              const pct = effective > 0 ? Math.min((spentThisWeek / effective) * 100, 100) : 0
               const fundName = funds.find(f => f.id === b.fund_id)?.name
 
               return (
@@ -198,9 +201,16 @@ export default function Budgets() {
                     </div>
                   </div>
 
+                  {rollInfo.rollover > 0 && (
+                    <div className="mb-2 flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5">
+                      <span className="font-medium">+{cur(rollInfo.rollover)} di avanzo</span>
+                      <span className="text-emerald-600">accumulato da {rollInfo.weeksTracked} {rollInfo.weeksTracked === 1 ? 'settimana' : 'settimane'} precedenti → questa settimana disponibili <strong>{cur(effective)}</strong> ({cur(limit)} base + {cur(rollInfo.rollover)} avanzo)</span>
+                    </div>
+                  )}
+
                   <div className="mb-2">
                     <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-slate-500">Speso: <span className="font-medium text-slate-700">{cur(spent)}</span> / {cur(limit)}</span>
+                      <span className="text-slate-500">Speso questa settimana: <span className="font-medium text-slate-700">{cur(spentThisWeek)}</span> / {cur(effective)}</span>
                       <span className={`font-medium ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
                         {overBudget ? `Sforato di ${cur(Math.abs(remaining))}` : `Rimangono ${cur(remaining)}`}
                       </span>
@@ -214,14 +224,15 @@ export default function Budgets() {
                     {overBudget && (
                       <div className="mt-2 flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        <span>Hai superato il budget. Le spese vengono registrate comunque.</span>
+                        <span>Hai superato il budget. Le spese vengono registrate comunque. Il "debito" NON si scala dal budget della prossima settimana.</span>
                       </div>
                     )}
                   </div>
 
-                  {txs.length > 0 && (
+                  {txsThisWeekObjs.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
-                      {txs.map(tx => (
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Spese questa settimana</p>
+                      {txsThisWeekObjs.map(tx => (
                         <div key={tx.id} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2 min-w-0">
                             <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" />
