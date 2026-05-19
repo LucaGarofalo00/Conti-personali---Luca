@@ -142,6 +142,51 @@ describe("generateForecast - user's scenario", () => {
   })
 })
 
+describe('generateForecast - weekly budgets respect date range', () => {
+  beforeAll(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 4, 19, 12, 0, 0))
+  })
+  afterAll(() => { vi.useRealTimers() })
+
+  it('REGRESSION: weekly budget NOT counted for 1-day range (Tue→Wed, no Monday in range)', () => {
+    const funds = [mkFund('a', 'Main', 1000)]
+    const sfizi = mkBudget('sfizi', 'Sfizi', 50)
+    const points = generateForecast(funds, [], [], [sfizi], new Date(2026, 4, 20))
+    const total = points[points.length - 1].balance
+    expect(total).toBe(1000)
+  })
+
+  it('REGRESSION: weekly budget counted ONCE per Monday in range', () => {
+    const funds = [mkFund('a', 'Main', 1000)]
+    const sfizi = mkBudget('sfizi', 'Sfizi', 50)
+    const points = generateForecast(funds, [], [], [sfizi], new Date(2026, 4, 26))
+    const total = points[points.length - 1].balance
+    expect(total).toBe(950)
+  })
+
+  it('weekly budget counted for each Monday in 1-month range', () => {
+    const funds = [mkFund('a', 'Main', 1000)]
+    const sfizi = mkBudget('sfizi', 'Sfizi', 50)
+    const points = generateForecast(funds, [], [], [sfizi], new Date(2026, 5, 19))
+    const total = points[points.length - 1].balance
+    expect(total).toBe(1000 - 50 * 4)
+  })
+
+  it("REGRESSION: user's exact scenario: 15 mag - 14 giu period totals match breakdown", () => {
+    // Today: Tue 19 mag 2026. Budget end: 14 giu.
+    // Mondays >= today in [19 mag, 14 giu]: 25 mag, 1 giu, 8 giu = 3 Mondays
+    // Expected: 3 × Sfizi (50€) + 3 × GPL (30€) + 1 × Parrucchiere (17€) = 257€
+    const funds = [mkFund('a', 'Main', 1000)]
+    const sfizi = mkBudget('sfizi', 'Sfizi', 50)
+    const parrucchiere = mkExp('par', 'Parrucchiere', 17, 20, 'a')
+    const gpl = mkExp('gpl', 'GPL', 30, 1, 'a', { frequency: 'weekly', day_of_week: 1, day_of_month: null })
+    const points = generateForecast(funds, [parrucchiere, gpl], [], [sfizi], new Date(2026, 5, 14))
+    const total = points[points.length - 1].balance
+    expect(total).toBe(1000 - 257)
+  })
+})
+
 describe('generateForecast - planned transactions', () => {
   beforeAll(() => {
     vi.useFakeTimers()
@@ -193,6 +238,43 @@ describe('generateForecast - planned transactions', () => {
     const funds = [mkFund('a', 'Main', 1000), mkFund('b', 'Savings', 0)]
     const planned = [mkPlanned('vacanza', 500, 'expense', '2026-06-10', 'b')]
     const points = generateForecast(funds, [], [], [], 2, ['b'], planned)
+    expect(points[points.length - 1].balance).toBe(1000)
+  })
+})
+
+describe('generateForecast - transfers NOT counted as expenses (user choice)', () => {
+  beforeAll(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 4, 19, 12, 0, 0))
+  })
+  afterAll(() => { vi.useRealTimers() })
+
+  it("transfer source incluso → dest esclusa NOT counted", () => {
+    // Bollo €50 from Sella (incl) → Spese MG (excl) — internal movement, not an expense
+    const funds = [mkFund('sella', 'Sella', 1000), mkFund('mg', 'Spese MG', 100)]
+    const bollo = mkExp('bollo', 'Bollo', 50, 15, 'sella', { type: 'transfer', fund_to_id: 'mg' })
+    const points = generateForecast(funds, [bollo], [], [], new Date(2026, 6, 15), ['mg'])
+    expect(points[points.length - 1].balance).toBe(1000)
+  })
+
+  it("transfer source esclusa → dest incluso NOT counted as income", () => {
+    const funds = [mkFund('sella', 'Sella', 100), mkFund('mg', 'Spese MG', 1000)]
+    const giro = mkExp('giro', 'Rimborso', 50, 20, 'mg', { type: 'transfer', fund_to_id: 'sella' })
+    const points = generateForecast(funds, [giro], [], [], new Date(2026, 5, 14), ['mg'])
+    expect(points[points.length - 1].balance).toBe(100)
+  })
+
+  it("transfer between two included funds NOT counted as expense", () => {
+    const funds = [mkFund('a', 'A', 1000), mkFund('b', 'B', 500)]
+    const giro = mkExp('giro', 'Risparmio', 100, 20, 'a', { type: 'transfer', fund_to_id: 'b' })
+    const points = generateForecast(funds, [giro], [], [], new Date(2026, 5, 14))
+    expect(points[points.length - 1].balance).toBe(1500)
+  })
+
+  it("transfer between two excluded funds NOT counted", () => {
+    const funds = [mkFund('a', 'A', 1000), mkFund('mg1', 'MG1', 0), mkFund('mg2', 'MG2', 0)]
+    const giro = mkExp('giro', 'Giro', 50, 20, 'mg1', { type: 'transfer', fund_to_id: 'mg2' })
+    const points = generateForecast(funds, [giro], [], [], new Date(2026, 5, 14), ['mg1', 'mg2'])
     expect(points[points.length - 1].balance).toBe(1000)
   })
 })

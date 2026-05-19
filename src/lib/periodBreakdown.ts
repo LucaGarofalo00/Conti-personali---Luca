@@ -77,9 +77,8 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
     for (const exp of recurringExpenses) {
       if (!exp.is_active) continue
       if (exp.end_date && isAfter(cursor, new Date(exp.end_date))) continue
+      if ((exp.type || 'expense') === 'transfer') continue
       if (exp.fund_id && excluded.has(exp.fund_id)) continue
-      const isTransfer = (exp.type || 'expense') === 'transfer'
-      if (isTransfer && exp.fund_to_id && excluded.has(exp.fund_to_id)) continue
       const freq = exp.frequency || 'monthly'
       let occurs = false
       if (freq === 'monthly' && exp.day_of_month !== null) {
@@ -90,10 +89,12 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       }
       if (occurs) {
         items.push({
-          date: dateStr, description: exp.name, amount: Number(exp.amount),
+          date: dateStr,
+          description: exp.name,
+          amount: Number(exp.amount),
           kind: 'expense',
-          source: isTransfer ? 'transfer' : 'recurring_expense',
-          sourceLabel: isTransfer ? SOURCE_LABELS.transfer : SOURCE_LABELS.recurring_expense,
+          source: 'recurring_expense',
+          sourceLabel: SOURCE_LABELS.recurring_expense,
           category: exp.category,
         })
       }

@@ -148,7 +148,7 @@ export default function RecurringExpenses() {
         <p><strong>Frequenza settimanale</strong>: scatta ogni settimana nel giorno indicato (es. GPL ogni venerdì). Nelle previsioni conta come <code>importo × 4.33</code>/mese.</p>
         <p><strong>Da confermare</strong>: nel giorno di scadenza compare nella sezione "Da Confermare" della dashboard. Clicchi "Paga" → puoi modificare l'importo prima di confermare (per esempio se questo mese hai pagato 25€ di GPL invece di 30€).</p>
         <p><strong>Automatica</strong>: nel giorno di scadenza viene scalata <strong>automaticamente</strong> dal fondo predefinito con l'importo fisso. Non compare in "Da Confermare". Richiede di aver scelto un fondo.</p>
-        <p><strong>Trasferimento</strong>: sposta soldi da un fondo all'altro (es. risparmio mensile). Conteggiato come uscita nelle previsioni.</p>
+        <p><strong>Trasferimento</strong>: sposta soldi da un fondo all'altro (es. salvadanaio Bollo, risparmio mensile). <strong>NON viene contato come spesa</strong> nelle previsioni perché è un movimento interno tra i tuoi conti. La spesa vera la registri solo quando paghi davvero (es. annuale del bollo).</p>
         <p><strong>Data ultimo accredito</strong>: dopo quella data la spesa non viene più contata (es. finanziamento che finisce a giugno).</p>
       </InfoBox>
 

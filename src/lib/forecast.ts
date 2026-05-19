@@ -32,7 +32,7 @@ export function generateForecast(
     .filter(p => p.type !== 'transfer' || !isExcluded(p.fund_to_id, excluded))
     .map(p => ({ ...p, dateObj: startOfDay(new Date(p.date)) }))
 
-  function aggregateRange(start: Date, end: Date, includeWeeklyBudgets: boolean): { income: number; expenses: number } {
+  function aggregateRange(start: Date, end: Date): { income: number; expenses: number } {
     let income = 0, expenses = 0
     const cursor = new Date(start)
     while (!isAfter(cursor, end) && !isAfter(cursor, endDate)) {
@@ -56,8 +56,8 @@ export function generateForecast(
         for (const exp of recurringExpenses) {
           if (!exp.is_active) continue
           if (exp.end_date && isAfter(cursor, new Date(exp.end_date))) continue
+          if ((exp.type || 'expense') === 'transfer') continue
           if (isExcluded(exp.fund_id, excluded)) continue
-          if ((exp.type || 'expense') === 'transfer' && isExcluded(exp.fund_to_id, excluded)) continue
           const freq = exp.frequency || 'monthly'
           if (freq === 'monthly' && exp.day_of_month !== null) {
             const adjusted = Math.min(exp.day_of_month, dim)
@@ -72,16 +72,16 @@ export function generateForecast(
           if (planned.type === 'income') income += Number(planned.amount)
           else if (planned.type === 'expense') expenses += Number(planned.amount)
         }
+
+        if (getDay(cursor) === 1) {
+          for (const b of weeklyBudgets) {
+            if (!b.is_active) continue
+            if (isExcluded(b.fund_id, excluded)) continue
+            expenses += Number(b.amount)
+          }
+        }
       }
       cursor.setDate(cursor.getDate() + 1)
-    }
-
-    if (includeWeeklyBudgets) {
-      for (const b of weeklyBudgets) {
-        if (!b.is_active) continue
-        if (isExcluded(b.fund_id, excluded)) continue
-        expenses += Number(b.amount)
-      }
     }
 
     return { income, expenses }
@@ -99,7 +99,7 @@ export function generateForecast(
   let weekStart = startOfWeek(today, { weekStartsOn: 1 })
   while (!isAfter(weekStart, endDate)) {
     const weekEnd = addDays(weekStart, 6)
-    const { income, expenses } = aggregateRange(weekStart, weekEnd, true)
+    const { income, expenses } = aggregateRange(weekStart, weekEnd)
     runningBalance += income - expenses
 
     const labelDate = isBefore(weekStart, today) ? today : weekStart
@@ -215,8 +215,8 @@ export function getMonthlyEstimates(
   for (const exp of recurringExpenses) {
     if (!exp.is_active) continue
     if (exp.end_date && new Date(exp.end_date) < new Date()) continue
+    if ((exp.type || 'expense') === 'transfer') continue
     if (isExcluded(exp.fund_id, excluded)) continue
-    if ((exp.type || 'expense') === 'transfer' && isExcluded(exp.fund_to_id, excluded)) continue
     const freq = exp.frequency || 'monthly'
     monthlyExpenses += freq === 'weekly' ? Number(exp.amount) * 4.33 : Number(exp.amount)
   }

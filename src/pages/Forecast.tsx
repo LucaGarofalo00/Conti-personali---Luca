@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { TrendingUp, TrendingDown, AlertTriangle, Target, ChevronDown, ChevronRight } from 'lucide-react'
-import { format, addMonths, differenceInDays } from 'date-fns'
+import { format, addMonths, addDays, differenceInDays, startOfDay } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -88,45 +88,101 @@ export default function Forecast() {
   const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
   const excludedNames = funds.filter(f => excludedFundIds.includes(f.id)).map(f => f.name)
 
-  const minPoint = forecast.reduce((min, p) => p.balance < min.balance ? p : min, forecast[0])
-  const endBalance = forecast[forecast.length - 1]?.balance || 0
-  const startBalance = forecast[0]?.balance || 0
-  const trend = endBalance - startBalance
+  const includedFundsBalance = funds.filter(f => !excludedFundIds.includes(f.id)).reduce((s, f) => s + Number(f.balance), 0)
+  const startBalance = includedFundsBalance
 
-  type PeriodAgg = { income: number; expenses: number; endBalance: number; minBalance: number; startDate: Date; endDate: Date }
-  const periodAgg = new Map<string, PeriodAgg>()
-  for (const p of forecast) {
-    const pDate = new Date(p.date)
-    const { start, startDate, endDate } = getBillingPeriodFor(pDate)
-    const key = start
-    const existing = periodAgg.get(key) || { income: 0, expenses: 0, endBalance: p.balance, minBalance: p.balance, startDate, endDate }
-    existing.income += p.income
-    existing.expenses += p.expenses
-    existing.endBalance = p.balance
-    if (p.balance < existing.minBalance) existing.minBalance = p.balance
-    periodAgg.set(key, existing)
+  const today = startOfDay(new Date())
+  const targetEnd = startOfDay(targetDateObj)
+
+  type PeriodRow = {
+    month: string
+    label: string
+    income: number
+    expenses: number
+    net: number
+    endBalance: number
+    minBalance: number
+    minBalanceDate: Date
+    startDate: Date
+    endDate: Date
+    effectiveEnd: Date
   }
-  const monthlyData = Array.from(periodAgg.entries()).map(([key, data]) => ({
-    month: key,
-    label: `${format(data.startDate, 'd MMM', { locale: it })} – ${format(data.endDate, 'd MMM yyyy', { locale: it })}`,
-    ...data,
-    net: data.income - data.expenses,
-  }))
+
+  const monthlyData: PeriodRow[] = []
+  let runningBalance = startBalance
+  let globalMinBalance = startBalance
+  let globalMinDate = today
+  let cursor = today
+
+  while (cursor <= targetEnd) {
+    const { startDate, endDate, start } = getBillingPeriodFor(cursor)
+    const effectiveEnd = targetEnd < endDate ? targetEnd : endDate
+
+    const items = getPeriodBreakdown({
+      startDate, endDate: effectiveEnd,
+      recurringExpenses: expenses, recurringIncome: income,
+      weeklyBudgets: budgets, planned,
+      excludedFundIds, fromToday: true,
+    })
+    const sorted = [...items].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+
+    let periodIncome = 0
+    let periodExpenses = 0
+    let balance = runningBalance
+    let periodMinBalance = runningBalance
+    let periodMinDate = cursor
+
+    for (const it of sorted) {
+      if (it.kind === 'income') { balance += it.amount; periodIncome += it.amount }
+      else { balance -= it.amount; periodExpenses += it.amount }
+      if (balance < periodMinBalance) {
+        periodMinBalance = balance
+        periodMinDate = new Date(it.date)
+      }
+      if (balance < globalMinBalance) {
+        globalMinBalance = balance
+        globalMinDate = new Date(it.date)
+      }
+    }
+
+    const isTruncated = effectiveEnd < endDate
+    monthlyData.push({
+      month: start,
+      label: `${format(startDate, 'd MMM', { locale: it })} – ${format(effectiveEnd, 'd MMM yyyy', { locale: it })}${isTruncated ? ' (parziale)' : ''}`,
+      income: Math.round(periodIncome * 100) / 100,
+      expenses: Math.round(periodExpenses * 100) / 100,
+      net: Math.round((periodIncome - periodExpenses) * 100) / 100,
+      endBalance: Math.round(balance * 100) / 100,
+      minBalance: Math.round(periodMinBalance * 100) / 100,
+      minBalanceDate: periodMinDate,
+      startDate, endDate, effectiveEnd,
+    })
+
+    runningBalance = balance
+    cursor = addDays(endDate, 1)
+  }
+
+  const endBalance = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1].endBalance : startBalance
+  const trend = endBalance - startBalance
+  const minPoint = { balance: globalMinBalance, label: format(globalMinDate, 'dd MMM', { locale: it }) }
 
   return (
     <div>
       <InfoBox title="Come funziona la previsione" tone="indigo">
-        <p><strong>Partenza</strong>: la previsione parte dal <strong>saldo attuale</strong> dei tuoi fondi (la somma di quelli non esclusi tramite il filtro).</p>
-        <p><strong>Cosa aggiunge ogni giorno futuro</strong>:</p>
+        <p><strong>Partenza</strong>: la previsione parte dal <strong>saldo attuale</strong> dei tuoi fondi (escluso quelli filtrati col selettore).</p>
+        <p><strong>Filtro data "Fino al"</strong>: limita la proiezione a una data specifica. La previsione conta solo gli eventi che cadono <strong>tra oggi e quella data</strong>. Se imposti 1 giorno, vedi solo eventi di domani.</p>
+        <p><strong>Cosa aggiunge giorno per giorno</strong>:</p>
         <ul className="list-disc ml-4 space-y-0.5">
-          <li>Entrate ricorrenti che cadono in quel giorno (stipendio, sabato pagato col delay)</li>
-          <li>Spese ricorrenti che cadono in quel giorno (affitto, finanziamenti, abbonamenti)</li>
-          <li>Pianificate una tantum con quella data esatta</li>
+          <li><strong>Entrate ricorrenti</strong>: stipendio mensile (sul day_of_month), sabato settimanale (sul day_of_week + delay)</li>
+          <li><strong>Spese ricorrenti mensili</strong>: cadono sul giorno del mese indicato</li>
+          <li><strong>Spese ricorrenti settimanali</strong>: cadono sul giorno della settimana indicato (es. GPL ogni venerdì)</li>
+          <li><strong>Budget settimanali</strong>: contati una volta per ogni <strong>lunedì</strong> nel range (es. Sfizi 50€/sett → 50€ per ogni lunedì futuro)</li>
+          <li><strong>Pianificate</strong>: una tantum con quella data esatta</li>
         </ul>
-        <p><strong>Cosa aggiunge ogni settimana</strong>: i budget settimanali e le spese variabili (GPL ogni settimana, benzina divisa per 4.33).</p>
-        <p><strong>Trasferimenti tra fondi</strong>: conteggiati come uscite (per scelta tua), tranne se entrambi i fondi sono esclusi.</p>
-        <p><strong>Minimo</strong>: il saldo previsto più basso del periodo. Utile per capire se rischi rosso prima dello stipendio.</p>
-        <p><strong>Saldo al 14</strong>: il saldo previsto a fine periodo billing (giorno 14), prima del nuovo ciclo.</p>
+        <p><strong>Esempio</strong>: oggi è martedì, filtro fino a mercoledì. Nessun lunedì nel range → il budget Sfizi NON viene contato. Solo eventi del 19-20 maggio.</p>
+        <p><strong>Trasferimenti tra fondi</strong>: <strong>NON contati nelle previsioni</strong>. Sono solo movimenti tra i tuoi conti, non spese reali. Per esempio: se sposti 50€/mese dal Sella a un salvadanaio "Spese MG", non riduce il tuo netto. La vera spesa la registri quando paghi davvero (es. annuale del bollo).</p>
+        <p><strong>Minimo</strong>: il saldo previsto più basso del periodo.</p>
+        <p><strong>Saldo al 14</strong>: saldo previsto a fine periodo billing (giorno 14), prima del nuovo ciclo. Se "(parziale)" nel label, significa che il periodo è stato troncato dal filtro data.</p>
       </InfoBox>
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -207,9 +263,10 @@ export default function Forecast() {
             <tbody>
               {monthlyData.map(row => {
                 const isOpen = expandedPeriods.has(row.month)
+                const effectiveEnd = targetDateObj < row.endDate ? targetDateObj : row.endDate
                 const breakdown = isOpen ? getPeriodBreakdown({
                   startDate: row.startDate,
-                  endDate: row.endDate,
+                  endDate: effectiveEnd,
                   recurringExpenses: expenses,
                   recurringIncome: income,
                   weeklyBudgets: budgets,
