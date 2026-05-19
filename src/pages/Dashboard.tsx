@@ -15,6 +15,7 @@ import { cur, iconMap, getBillingPeriod, getDateInCurrentPeriod, formatDayMonth,
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
+import { generateIncomeOccurrences, type IncomeOccurrence } from '../lib/incomeOccurrences'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, VariableExpense, Transaction } from '../types'
 
 interface PendingItem {
@@ -27,6 +28,13 @@ interface PendingItem {
   category: string
   label: string
   confirmed: boolean
+  occurrence?: IncomeOccurrence
+  recurring_income_id?: string
+  occurrence_date?: string
+}
+
+function formatItalianDayMonth(d: Date): string {
+  return format(d, 'EEE d MMM', { locale: it })
 }
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { label: string; balance: number; income: number; expenses: number } }> }) {
@@ -186,19 +194,34 @@ export default function Dashboard() {
       }
     })
 
-  const pendingIncome: PendingItem[] = income
-    .filter(i => i.is_active && i.frequency === 'weekly')
-    .map(i => ({
-      id: 'inc-' + i.id,
+  const { start: pStartStr, end: pEndStr } = getBillingPeriod()
+  const incomeOccurrences = generateIncomeOccurrences(income, pStartStr, pEndStr, periodTx)
+    .filter(o => o.status === 'pending')
+
+  const pendingIncome: PendingItem[] = incomeOccurrences.map(o => {
+    const inc = o.income
+    const isWeekly = inc.frequency === 'weekly'
+    const sameDay = o.workDateStr === o.paymentDateStr
+    const label = isWeekly
+      ? sameDay
+        ? `${formatItalianDayMonth(o.workDate)}`
+        : `Lavoro ${formatItalianDayMonth(o.workDate)} · pagamento ${formatItalianDayMonth(o.paymentDate)}`
+      : `Atteso il ${formatItalianDayMonth(o.workDate)}`
+    return {
+      id: 'inc-' + inc.id + '-' + o.workDateStr,
       kind: 'income' as const,
-      name: i.name,
-      amount: Number(i.amount),
-      fund_id: i.fund_id,
+      name: inc.name,
+      amount: Number(inc.amount),
+      fund_id: inc.fund_id,
       fund_to_id: null,
       category: 'lavoro',
-      label: 'Entrata settimanale',
+      label,
       confirmed: false,
-    }))
+      occurrence: o,
+      recurring_income_id: inc.id,
+      occurrence_date: o.workDateStr,
+    }
+  })
 
   const pendingVarExp: PendingItem[] = varExp
     .filter(v => v.is_active && v.needs_confirmation)
@@ -229,6 +252,7 @@ export default function Dashboard() {
     const fundId = confirmFundId || null
     const fundToId = confirmItem.kind === 'transfer' ? (confirmItem.fund_to_id || null) : null
     const txType = confirmItem.kind === 'transfer' ? 'transfer' : confirmItem.kind === 'income' ? 'income' : 'expense'
+    const txDate = confirmItem.occurrence_date || todayString()
 
     await supabase.from('transactions').insert({
       user_id: user!.id,
@@ -238,7 +262,8 @@ export default function Dashboard() {
       fund_id: fundId,
       fund_to_id: fundToId,
       category: confirmItem.category,
-      date: todayString(),
+      recurring_income_id: confirmItem.recurring_income_id || null,
+      date: txDate,
     })
 
     if (confirmItem.kind === 'transfer' && fundId && fundToId) {
@@ -259,6 +284,25 @@ export default function Dashboard() {
     setConfirmSaving(false)
     setConfirmItem(null)
     toast.success(confirmItem.kind === 'transfer' ? 'Trasferimento registrato' : confirmItem.kind === 'income' ? 'Entrata registrata' : 'Spesa registrata')
+    load()
+  }
+
+  const skipIncomeOccurrence = async (item: PendingItem) => {
+    if (!item.recurring_income_id || !item.occurrence_date) return
+    const { error } = await supabase.from('transactions').insert({
+      user_id: user!.id,
+      type: 'income',
+      amount: 0,
+      description: item.name + ' (non lavorato)',
+      fund_id: null,
+      fund_to_id: null,
+      category: item.category,
+      recurring_income_id: item.recurring_income_id,
+      is_memo: true,
+      date: item.occurrence_date,
+    })
+    if (error) { toast.error('Errore: ' + error.message); return }
+    toast.success('Segnato come "non lavorato"')
     load()
   }
 
@@ -443,22 +487,36 @@ export default function Dashboard() {
 
           {pendingIncome.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Entrate da Confermare</p>
+              <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Entrate da Confermare ({pendingIncome.length})</p>
               <div className="space-y-2">
-                {pendingIncome.map(item => (
-                  <div key={item.id} className="bg-white rounded-xl border-l-4 border-l-emerald-500 border border-slate-200 p-4 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-slate-800">{item.name}</p>
-                      <p className="text-xs text-slate-400">{item.label} · ~{cur(item.amount)}</p>
+                {pendingIncome.map(item => {
+                  const isWeekly = item.occurrence?.income.frequency === 'weekly'
+                  return (
+                    <div key={item.id} className="bg-white rounded-xl border-l-4 border-l-emerald-500 border border-slate-200 p-4 flex items-center justify-between flex-wrap gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-400">{item.label} · ~{cur(item.amount)}</p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        {isWeekly && (
+                          <button
+                            onClick={() => skipIncomeOccurrence(item)}
+                            className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 transition"
+                            title="Segnala come non lavorato (non genera entrata)"
+                          >
+                            Non lavorato
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openConfirm(item)}
+                          className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-sm font-medium hover:bg-emerald-100 transition"
+                        >
+                          Ricevuto
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => openConfirm(item)}
-                      className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-sm font-medium hover:bg-emerald-100 transition"
-                    >
-                      Ricevuto
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
