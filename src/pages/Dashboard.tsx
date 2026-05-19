@@ -122,8 +122,6 @@ export default function Dashboard() {
       confirmed: false,
     }))
 
-  const allPending = [...pendingRecurring, ...pendingIncome, ...pendingVarExp]
-  const unconfirmedCount = allPending.filter(p => !p.confirmed).length
   const confirmedRecurringCount = pendingRecurring.filter(p => p.confirmed).length
 
   const openConfirm = (item: PendingItem) => {
@@ -200,7 +198,7 @@ export default function Dashboard() {
         <Card icon={Target} color="bg-amber-100 text-amber-600" label="Netto / Mese" value={cur(est.monthlyNet)} valueColor={est.monthlyNet >= 0 ? 'text-emerald-600' : 'text-red-600'} />
       </div>
 
-      {allPending.length > 0 && (
+      {(pendingRecurring.length > 0 || pendingIncome.length > 0 || pendingVarExp.length > 0) && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
