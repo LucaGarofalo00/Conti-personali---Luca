@@ -21,6 +21,7 @@ import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
 import { generateIncomeOccurrences, type IncomeOccurrence } from '../lib/incomeOccurrences'
+import { fuelConsumption } from '../lib/fuelConsumption'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
 interface PendingItem {
@@ -84,6 +85,7 @@ export default function Dashboard() {
   const [confirmFuelKm, setConfirmFuelKm] = useState('')
   const [confirmFuelLiters, setConfirmFuelLiters] = useState('')
   const [confirmFuelPrice, setConfirmFuelPrice] = useState('')
+  const [confirmPrevFill, setConfirmPrevFill] = useState<{ liters: number; cost: number } | null>(null)
 
   const [plannedModal, setPlannedModal] = useState(false)
   const [plannedListOpen, setPlannedListOpen] = useState(false)
@@ -294,6 +296,27 @@ export default function Dashboard() {
     setConfirmFuelKm('')
     setConfirmFuelLiters('')
     setConfirmFuelPrice('')
+    setConfirmPrevFill(null)
+    if (item.kind === 'expense' && item.category === FUEL_CATEGORY) {
+      void loadPrevFuelFill(item.occurrence_date || todayString())
+    }
+  }
+
+  const loadPrevFuelFill = async (beforeDate: string) => {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('amount, fuel_liters, date, created_at')
+      .eq('category', FUEL_CATEGORY)
+      .eq('is_planned', false)
+      .lte('date', beforeDate)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (error) return
+    const prev = data?.[0]
+    if (prev && prev.fuel_liters != null && Number(prev.fuel_liters) > 0) {
+      setConfirmPrevFill({ liters: Number(prev.fuel_liters), cost: Number(prev.amount) })
+    }
   }
 
   const handleConfirm = async () => {
@@ -940,17 +963,21 @@ export default function Dashboard() {
                 </div>
                 {(() => {
                   const km = parseDecimal(confirmFuelKm)
-                  const liters = parseDecimal(confirmFuelLiters)
-                  if (km <= 0 || liters <= 0) return null
+                  if (km <= 0) return null
+                  if (!confirmPrevFill) {
+                    return <p className="text-[11px] text-amber-600">Nessun rifornimento precedente con i litri: il consumo non è calcolabile.</p>
+                  }
+                  const cons = fuelConsumption(km, confirmPrevFill.liters, confirmPrevFill.cost)
+                  if (!cons) return null
                   return (
                     <p className="text-xs text-slate-600">
-                      Consumo: <span className="font-semibold text-slate-800">{(km / liters).toFixed(1)} km/l</span>
-                      {' · '}{(liters / km * 100).toFixed(1)} l/100km
-                      {confirmAmount > 0 && <> · <span className="font-semibold text-slate-800">{cur(confirmAmount / km)}/km</span></>}
+                      Consumo pieno precedente: <span className="font-semibold text-slate-800">{cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
+                      {' · '}{cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
+                      {cons.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(cons.costPerKm)}/km</span></>}
                     </p>
                   )
                 })()}
-                <p className="text-[11px] text-slate-400">Servono solo per tracciare i consumi: non modificano l'importo pagato qui sopra.</p>
+                <p className="text-[11px] text-slate-400">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong>. Servono solo per i consumi: non modificano l'importo pagato qui sopra.</p>
               </div>
             )}
             {confirmItem.kind !== 'transfer' && (

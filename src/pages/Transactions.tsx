@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { cur, TRANSACTION_CATEGORIES, todayString, FUEL_CATEGORY, parseDecimal } from '../lib/utils'
+import { fuelConsumption, previousFuelFill } from '../lib/fuelConsumption'
 import InfoBox from '../components/InfoBox'
 import type { Transaction, Fund } from '../types'
 
@@ -422,11 +423,14 @@ export default function Transactions() {
               const isSelected = selectedIds.has(tx.id)
               const isDuplicate = duplicateGroups.has(tx.id)
               const fuelParts: string[] = []
-              if (tx.fuel_km != null) fuelParts.push(`${Number(tx.fuel_km)} km`)
-              if (tx.fuel_liters != null) fuelParts.push(`${Number(tx.fuel_liters)} L`)
+              if (tx.fuel_km != null) fuelParts.push(`${Number(tx.fuel_km).toLocaleString('it-IT')} km`)
+              if (tx.fuel_liters != null) fuelParts.push(`${Number(tx.fuel_liters).toLocaleString('it-IT')} L`)
               if (tx.fuel_price_per_liter != null) fuelParts.push(`${Number(tx.fuel_price_per_liter).toLocaleString('it-IT', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} €/L`)
-              if (tx.fuel_km != null && tx.fuel_liters != null && Number(tx.fuel_liters) > 0) fuelParts.push(`${(Number(tx.fuel_km) / Number(tx.fuel_liters)).toFixed(1)} km/l`)
               const fuelLine = fuelParts.join(' · ')
+              const prevFill = tx.category === FUEL_CATEGORY && tx.fuel_km != null ? previousFuelFill(tx, items) : null
+              const cons = prevFill && prevFill.fuel_liters != null
+                ? fuelConsumption(Number(tx.fuel_km), Number(prevFill.fuel_liters), Number(prevFill.amount))
+                : null
               return (
                 <div
                   key={tx.id}
@@ -456,6 +460,12 @@ export default function Transactions() {
                         {tx.category !== 'altro' && ` · ${tx.category}`}
                       </p>
                       {fuelLine && <p className="text-[11px] text-slate-400 mt-0.5">{fuelLine}</p>}
+                      {cons && (
+                        <p className="text-[11px] text-emerald-600/90">
+                          Pieno prec.: {cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l · {cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
+                          {cons.costPerKm != null && ` · ${cur(cons.costPerKm)}/km`}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -571,17 +581,23 @@ export default function Transactions() {
               </div>
               {(() => {
                 const km = parseDecimal(form.fuel_km)
-                const liters = parseDecimal(form.fuel_liters)
-                if (km <= 0 || liters <= 0) return null
+                if (km <= 0) return null
+                const ref = editing ?? { id: '', date: form.date, created_at: new Date().toISOString() }
+                const prev = previousFuelFill(ref, items)
+                if (!prev || prev.fuel_liters == null) {
+                  return <p className="text-[11px] text-amber-600">Nessun rifornimento precedente con i litri: il consumo non è calcolabile.</p>
+                }
+                const cons = fuelConsumption(km, Number(prev.fuel_liters), Number(prev.amount))
+                if (!cons) return null
                 return (
                   <p className="text-xs text-slate-600">
-                    Consumo: <span className="font-semibold text-slate-800">{(km / liters).toFixed(1)} km/l</span>
-                    {' · '}{(liters / km * 100).toFixed(1)} l/100km
-                    {form.amount > 0 && <> · <span className="font-semibold text-slate-800">{cur(form.amount / km)}/km</span></>}
+                    Consumo pieno precedente: <span className="font-semibold text-slate-800">{cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
+                    {' · '}{cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
+                    {cons.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(cons.costPerKm)}/km</span></>}
                   </p>
                 )
               })()}
-              <p className="text-[11px] text-slate-400">Servono solo per tracciare i consumi: non modificano l'importo.</p>
+              <p className="text-[11px] text-slate-400">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong>. Servono solo per i consumi: non modificano l'importo.</p>
             </div>
           )}
           <button onClick={save} disabled={form.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
