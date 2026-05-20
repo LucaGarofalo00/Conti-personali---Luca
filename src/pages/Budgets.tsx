@@ -148,7 +148,7 @@ export default function Budgets() {
       <div className="mb-4">
         <p className="text-sm text-slate-500">Totale budget del periodo corrente (15-14): <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
       </div>
-      <InfoBox title="Come funzionano i budget settimanali" tone="indigo">
+      <InfoBox title="Come funzionano i budget settimanali" tone="blue">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
         <p><strong>Reset settimanale</strong>: ogni <strong>lunedì 00:00</strong> il contatore della settimana riparte da zero.</p>
         <p><strong>Rollover positivo</strong>: se hai speso meno del budget in settimane passate, l'avanzo si <strong>accumula</strong> nella settimana corrente. Es. budget 50€/sett, settimana scorsa hai speso 30€ → questa settimana hai 50 + 20 = <strong>70€ disponibili</strong>. L'avanzo viene mostrato con un badge verde sopra la barra.</p>
@@ -160,10 +160,10 @@ export default function Budgets() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-indigo-600" />
+            <ShoppingBag className="w-5 h-5 text-blue-600" />
             <h3 className="text-lg font-semibold text-slate-700">Budget Settimanali</h3>
           </div>
-          <button onClick={() => { setEditingBudget(null); setBudgetForm({ name: '', amount: 0, fund_id: '' }); setShowBudgetModal(true) }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
+          <button onClick={() => { setEditingBudget(null); setBudgetForm({ name: '', amount: 0, fund_id: '' }); setShowBudgetModal(true) }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
             <Plus className="w-4 h-4" /> Nuovo Budget
           </button>
         </div>
@@ -186,10 +186,10 @@ export default function Budgets() {
               const fundName = funds.find(f => f.id === b.fund_id)?.name
 
               return (
-                <div key={b.id} className={`bg-white rounded-xl border ${overBudget ? 'border-red-300 ring-1 ring-red-200' : 'border-slate-200'} p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
+                <div key={b.id} className={`bg-white rounded-xl border shadow-sm ${overBudget ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200/60'} p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <button onClick={() => toggleBudget(b)}>{b.is_active ? <ToggleRight className="w-6 h-6 text-indigo-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
+                      <button onClick={() => toggleBudget(b)}>{b.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
                       <div>
                         <p className="font-semibold text-slate-800">{b.name}</p>
                         <p className="text-xs text-slate-400">{cur(limit)}/settimana{fundName ? ` · ${fundName}` : ''}</p>
@@ -251,7 +251,7 @@ export default function Budgets() {
                   {b.is_active && (
                     <button
                       onClick={() => { setExpBudgetId({ id: b.id, name: b.name }); setExpForm({ description: '', amount: 0, fund_id: b.fund_id || '', date: todayString() }) }}
-                      className="mt-3 w-full py-2 border-2 border-dashed border-slate-200 rounded-lg text-sm font-medium text-slate-500 transition flex items-center justify-center gap-2 hover:border-indigo-300 hover:text-indigo-600"
+                      className="mt-3 w-full py-2 border-2 border-dashed border-slate-200 rounded-lg text-sm font-medium text-slate-500 transition flex items-center justify-center gap-2 hover:border-blue-300 hover:text-blue-600"
                     >
                       <Plus className="w-4 h-4" /> Aggiungi spesa
                     </button>
@@ -267,20 +267,20 @@ export default function Budgets() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input type="text" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="es. Sfizi, Mangiare fuori..." />
+            <input type="text" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Sfizi, Mangiare fuori..." />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Budget settimanale (€)</label>
-            <input type="number" step="0.01" value={budgetForm.amount || ''} onChange={e => setBudgetForm({ ...budgetForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+            <input type="number" step="0.01" value={budgetForm.amount || ''} onChange={e => setBudgetForm({ ...budgetForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
-            <select value={budgetForm.fund_id} onChange={e => setBudgetForm({ ...budgetForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+            <select value={budgetForm.fund_id} onChange={e => setBudgetForm({ ...budgetForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Scegli al momento della spesa</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <button onClick={saveBudget} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button onClick={saveBudget} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {saving ? 'Salvataggio...' : editingBudget ? 'Salva' : 'Aggiungi'}
           </button>
         </div>
@@ -290,26 +290,26 @@ export default function Budgets() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input type="text" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="es. Pizza, Gelato..." />
+            <input type="text" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Pizza, Gelato..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <input type="number" step="0.01" value={expForm.amount || ''} onChange={e => setExpForm({ ...expForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+              <input type="number" step="0.01" value={expForm.amount || ''} onChange={e => setExpForm({ ...expForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-              <input type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+              <input type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Paga con</label>
-            <select value={expForm.fund_id} onChange={e => setExpForm({ ...expForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+            <select value={expForm.fund_id} onChange={e => setExpForm({ ...expForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Nessun fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
-          <button onClick={saveExpense} disabled={saving || expForm.amount <= 0 || !expForm.description.trim()} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button onClick={saveExpense} disabled={saving || expForm.amount <= 0 || !expForm.description.trim()} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {saving ? 'Registrazione...' : 'Registra Spesa'}
           </button>
         </div>

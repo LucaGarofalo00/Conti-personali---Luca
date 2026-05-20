@@ -47,9 +47,9 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
   if (!active || !payload?.length) return null
   const d = payload[0].payload
   return (
-    <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-200 text-sm">
+    <div className="bg-white p-3 rounded-lg shadow-xl border border-slate-100 text-[13px]">
       <p className="font-medium text-slate-700 mb-1">{d.label}</p>
-      <p className="text-indigo-600">Saldo: {cur(d.balance)}</p>
+      <p className="text-slate-800">Saldo: {cur(d.balance)}</p>
       <p className="text-emerald-600">Entrate: {cur(d.income)}</p>
       <p className="text-red-500">Uscite: {cur(d.expenses)}</p>
     </div>
@@ -410,7 +410,7 @@ export default function Dashboard() {
     load()
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Caricamento...</div>
 
   const includedFunds = funds.filter(f => !excludedFundIds.includes(f.id))
   const totalBalance = includedFunds.reduce((s, f) => s + Number(f.balance), 0)
@@ -454,10 +454,10 @@ export default function Dashboard() {
   if (funds.length === 0) {
     return (
       <div className="text-center py-16">
-        <Wallet className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-slate-700 mb-2">Benvenuto in FinanzApp!</h2>
-        <p className="text-slate-400 mb-6">Inizia configurando i tuoi fondi per gestire le tue finanze</p>
-        <Link to="/fondi" className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium">
+        <Wallet className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+        <h2 className="text-lg font-semibold text-slate-700 mb-1">Benvenuto in FinanzApp!</h2>
+        <p className="text-sm text-slate-400 mb-6">Inizia configurando i tuoi fondi per gestire le tue finanze</p>
+        <Link to="/fondi" className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-sm font-medium">
           Configura Fondi <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
@@ -477,7 +477,7 @@ export default function Dashboard() {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => setPlannedModal(true)} className="flex items-center gap-2 px-3 py-1.5 border border-purple-300 text-purple-700 bg-purple-50 rounded-lg text-sm font-medium hover:bg-purple-100 transition">
+          <button onClick={() => setPlannedModal(true)} className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-[13px] font-medium hover:bg-white hover:border-slate-300 transition-all">
             <CalendarClock className="w-3.5 h-3.5" /> Pianifica
           </button>
           <FundExcluder
@@ -498,7 +498,7 @@ export default function Dashboard() {
         return (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <Card icon={Wallet} color="bg-indigo-100 text-indigo-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
+              <Card icon={Wallet} color="bg-blue-100 text-blue-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
               <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate del Periodo (15-14)" value={cur(est.income)} sub={plannedIncomeInPeriod > 0 ? `incl. ${cur(plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
               <Card
                 icon={Target}
@@ -523,7 +523,7 @@ export default function Dashboard() {
                 <Card icon={TrendingDown} color="bg-slate-100 text-slate-400" label="Saldo prossimo stipendio" value="—" sub="Configura un'entrata mensile" />
               )}
             </div>
-            <InfoBox title="Come vengono calcolate queste cifre" tone="indigo">
+            <InfoBox title="Come vengono calcolate queste cifre" tone="blue">
               <p><strong>Saldo Totale</strong>: somma di tutti i fondi (escluso quelli filtrati col selettore in alto).</p>
               <p><strong>Entrate del Periodo (15-14)</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
               <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo (15-14). Click per vedere il dettaglio.</p>
@@ -550,7 +550,7 @@ export default function Dashboard() {
           </InfoBox>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+              <CheckCircle2 className="w-5 h-5 text-blue-600" />
               <h3 className="text-lg font-semibold text-slate-700">Da Confermare</h3>
             </div>
             {pendingRecurring.length > 0 && (
@@ -697,34 +697,34 @@ export default function Dashboard() {
 
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-700">I tuoi Fondi</h3>
-          <Link to="/fondi" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1">
+          <h3 className="text-[15px] font-semibold text-slate-700">I tuoi Fondi</h3>
+          <Link to="/fondi" className="text-[13px] text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1 transition-colors">
             Gestisci <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {mainFunds.map(fund => {
             const Icon = iconMap[fund.icon] || Wallet
             const subs = subFunds.filter(s => s.parent_id === fund.id)
             const totalWithSubs = Number(fund.balance) + subs.reduce((s, sf) => s + Number(sf.balance), 0)
             return (
-              <div key={fund.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-shadow">
+              <div key={fund.id} className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-all duration-200">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: fund.color + '20' }}>
-                    <Icon className="w-5 h-5" style={{ color: fund.color }} />
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: fund.color + '12' }}>
+                    <Icon className="w-[18px] h-[18px]" style={{ color: fund.color }} />
                   </div>
                   <div>
-                    <p className="font-medium text-slate-800">{fund.name}</p>
-                    <p className="text-xs text-slate-400">{subs.length > 0 ? `Totale: ${cur(totalWithSubs)}` : ''}</p>
+                    <p className="font-medium text-slate-800 text-sm">{fund.name}</p>
+                    <p className="text-[11px] text-slate-400">{subs.length > 0 ? `Totale: ${cur(totalWithSubs)}` : ''}</p>
                   </div>
                 </div>
-                <p className="text-2xl font-bold text-slate-800">{cur(Number(fund.balance))}</p>
+                <p className="text-xl font-semibold tracking-tight text-slate-800">{cur(Number(fund.balance))}</p>
                 {subs.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
                     {subs.map(sub => (
-                      <div key={sub.id} className="flex items-center justify-between text-sm">
+                      <div key={sub.id} className="flex items-center justify-between text-[13px]">
                         <span className="text-slate-500 flex items-center gap-1.5">
-                          <PiggyBank className="w-3.5 h-3.5" /> {sub.name}
+                          <PiggyBank className="w-3 h-3" /> {sub.name}
                         </span>
                         <span className="font-medium text-slate-700">{cur(Number(sub.balance))}</span>
                       </div>
@@ -737,11 +737,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-700">Previsione 3 Mesi</h3>
-            <Link to="/previsione" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1">
+            <h3 className="text-[15px] font-semibold text-slate-700">Previsione 3 Mesi</h3>
+            <Link to="/previsione" className="text-[13px] text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1 transition-colors">
               Vedi tutto <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -766,56 +766,56 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-700">Prossime Scadenze</h3>
-              <Calendar className="w-4 h-4 text-slate-400" />
+          <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[15px] font-semibold text-slate-700">Prossime Scadenze</h3>
+              <Calendar className="w-4 h-4 text-slate-300" />
             </div>
             {upcoming.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-0">
                 {upcoming.map(exp => {
                   const diff = Math.ceil((exp.dueDate.getTime() - nowDate.getTime()) / 86400000)
                   return (
-                    <div key={exp.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                    <div key={exp.id} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
                       <div>
-                        <p className="text-sm font-medium text-slate-700">{exp.name}</p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-[13px] font-medium text-slate-700">{exp.name}</p>
+                        <p className="text-[11px] text-slate-400">
                           {diff === 0 ? 'Oggi' : diff === 1 ? 'Domani' : `Tra ${diff} giorni`} &middot; {format(exp.dueDate, 'd MMM', { locale: it })}
                         </p>
                       </div>
-                      <span className="text-sm font-semibold text-red-500">-{cur(Number(exp.amount))}</span>
+                      <span className="text-[13px] font-semibold text-red-500">-{cur(Number(exp.amount))}</span>
                     </div>
                   )
                 })}
               </div>
             ) : (
-              <p className="text-sm text-slate-400 py-4 text-center">Nessuna scadenza in arrivo</p>
+              <p className="text-[13px] text-slate-400 py-4 text-center">Nessuna scadenza in arrivo</p>
             )}
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-700">Ultime Transazioni</h3>
-              <Clock className="w-4 h-4 text-slate-400" />
+          <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[15px] font-semibold text-slate-700">Ultime Transazioni</h3>
+              <Clock className="w-4 h-4 text-slate-300" />
             </div>
             {recentTx.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-0">
                 {recentTx.map(tx => (
-                  <div key={tx.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                  <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
                     <div>
-                      <p className="text-sm font-medium text-slate-700">{tx.description}</p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-[13px] font-medium text-slate-700">{tx.description}</p>
+                      <p className="text-[11px] text-slate-400">
                         {format(new Date(tx.date), 'd MMM', { locale: it })} &middot; {tx.category}
                       </p>
                     </div>
-                    <span className={`text-sm font-semibold ${tx.type === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
+                    <span className={`text-[13px] font-semibold ${tx.type === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
                       {tx.type === 'income' ? '+' : '-'}{cur(Number(tx.amount))}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-slate-400 py-4 text-center">Nessuna transazione nel periodo</p>
+              <p className="text-[13px] text-slate-400 py-4 text-center">Nessuna transazione nel periodo</p>
             )}
           </div>
         </div>
@@ -842,13 +842,13 @@ export default function Dashboard() {
                   step="0.01"
                   value={confirmAmount || ''}
                   onChange={e => setConfirmAmount(parseFloat(e.target.value) || 0)}
-                  className={`w-full px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg font-semibold ${confirmAmount !== confirmItem.amount ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
+                  className={`w-full px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-lg font-semibold ${confirmAmount !== confirmItem.amount ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
                 />
                 {confirmAmount !== confirmItem.amount && (
                   <button
                     type="button"
                     onClick={() => setConfirmAmount(confirmItem.amount)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-indigo-600 hover:text-indigo-700 bg-white px-2 py-1 rounded border border-slate-200"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:text-blue-700 bg-white px-2 py-1 rounded border border-slate-200"
                   >
                     Ripristina {cur(confirmItem.amount)}
                   </button>
@@ -865,14 +865,14 @@ export default function Dashboard() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   {confirmItem.kind === 'income' ? 'Accredita su' : 'Paga con'}
                 </label>
-                <select value={confirmFundId} onChange={e => setConfirmFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                <select value={confirmFundId} onChange={e => setConfirmFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                   <option value="">Nessun fondo</option>
                   {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
                 </select>
               </div>
             )}
             <div className="flex gap-2">
-              <button onClick={handleConfirm} disabled={confirmSaving || confirmAmount <= 0} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition text-sm">
+              <button onClick={handleConfirm} disabled={confirmSaving || confirmAmount <= 0} className="flex-1 py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors text-sm">
                 {confirmSaving ? 'Registrazione...' : 'Conferma e registra'}
               </button>
               <button onClick={handleMarkOnly} disabled={confirmSaving} className="py-2.5 px-4 bg-slate-100 text-slate-600 rounded-lg font-medium hover:bg-slate-200 disabled:opacity-50 transition text-sm" title="Crea un memo che marca come pagato/ricevuto senza muovere i fondi">
@@ -929,13 +929,13 @@ export default function Dashboard() {
                   step="0.01"
                   value={completeAmount || ''}
                   onChange={e => setCompleteAmount(parseFloat(e.target.value) || 0)}
-                  className={`w-full px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-lg font-semibold ${completeAmount !== Number(completePlannedItem.amount) ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
+                  className={`w-full px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-lg font-semibold ${completeAmount !== Number(completePlannedItem.amount) ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
                 />
                 {completeAmount !== Number(completePlannedItem.amount) && (
                   <button
                     type="button"
                     onClick={() => setCompleteAmount(Number(completePlannedItem.amount))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-indigo-600 hover:text-indigo-700 bg-white px-2 py-1 rounded border border-slate-200"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:text-blue-700 bg-white px-2 py-1 rounded border border-slate-200"
                   >
                     Ripristina {cur(Number(completePlannedItem.amount))}
                   </button>
@@ -946,12 +946,12 @@ export default function Dashboard() {
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 {completePlannedItem.type === 'income' ? 'Accredita su' : 'Paga con'}
               </label>
-              <select value={completeFundId} onChange={e => setCompleteFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              <select value={completeFundId} onChange={e => setCompleteFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                 <option value="">Nessun fondo</option>
                 {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
               </select>
             </div>
-            <button onClick={confirmCompletePlanned} disabled={completeSaving || completeAmount <= 0} className="w-full py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 transition">
+            <button onClick={confirmCompletePlanned} disabled={completeSaving || completeAmount <= 0} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
               {completeSaving ? 'Completamento...' : 'Conferma e registra'}
             </button>
           </div>
@@ -1013,32 +1013,32 @@ export default function Dashboard() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input type="text" value={plannedForm.description} onChange={e => setPlannedForm({ ...plannedForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="es. Vacanza estate, Rimborso..." />
+            <input type="text" value={plannedForm.description} onChange={e => setPlannedForm({ ...plannedForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Vacanza estate, Rimborso..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <input type="number" step="0.01" value={plannedForm.amount || ''} onChange={e => setPlannedForm({ ...plannedForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+              <input type="number" step="0.01" value={plannedForm.amount || ''} onChange={e => setPlannedForm({ ...plannedForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Data prevista</label>
-              <input type="date" value={plannedForm.date} onChange={e => setPlannedForm({ ...plannedForm, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+              <input type="date" value={plannedForm.date} onChange={e => setPlannedForm({ ...plannedForm, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Fondo (opzionale)</label>
-            <select value={plannedForm.fund_id} onChange={e => setPlannedForm({ ...plannedForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+            <select value={plannedForm.fund_id} onChange={e => setPlannedForm({ ...plannedForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Scegli al completamento</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
-            <select value={plannedForm.category} onChange={e => setPlannedForm({ ...plannedForm, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none capitalize">
+            <select value={plannedForm.category} onChange={e => setPlannedForm({ ...plannedForm, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
               {TRANSACTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <button onClick={savePlanned} disabled={plannedSaving || plannedForm.amount <= 0 || !plannedForm.description.trim()} className="w-full py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 transition">
+          <button onClick={savePlanned} disabled={plannedSaving || plannedForm.amount <= 0 || !plannedForm.description.trim()} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {plannedSaving ? 'Salvataggio...' : 'Aggiungi pianificazione'}
           </button>
         </div>
@@ -1052,17 +1052,16 @@ function Card({ icon: Icon, color, label, value, valueColor, sub, onClick }: { i
   return (
     <Wrapper
       onClick={onClick}
-      className={`bg-white rounded-xl border border-slate-200 p-4 text-left w-full ${onClick ? 'hover:border-indigo-300 hover:shadow-sm transition cursor-pointer' : ''}`}
+      className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 text-left w-full ${onClick ? 'hover:shadow-md hover:border-slate-300 transition-all duration-200 cursor-pointer' : ''}`}
     >
-      <div className="flex items-center gap-3 mb-2">
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}>
-          <Icon className="w-4.5 h-4.5" />
+      <div className="flex items-center gap-2.5 mb-2">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
+          <Icon className="w-4 h-4" />
         </div>
-        <span className="text-sm text-slate-500 flex-1">{label}</span>
-        {onClick && <span className="text-[10px] text-indigo-500 font-medium">vedi →</span>}
+        <span className="text-[13px] text-slate-500 flex-1 leading-tight">{label}</span>
       </div>
-      <p className={`text-xl font-bold ${valueColor || 'text-slate-800'}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      <p className={`text-xl font-semibold tracking-tight ${valueColor || 'text-slate-800'}`}>{value}</p>
+      {sub && <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{sub}</p>}
     </Wrapper>
   )
 }

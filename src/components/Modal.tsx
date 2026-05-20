@@ -34,15 +34,15 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-            <X className="w-5 h-5" />
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.15s_ease-out]" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-[scaleIn_0.15s_ease-out]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h3 className="text-[15px] font-semibold text-slate-800">{title}</h3>
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+            <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-4 overflow-x-hidden">{children}</div>
+        <div className="p-5 overflow-x-hidden">{children}</div>
       </div>
     </div>
   )

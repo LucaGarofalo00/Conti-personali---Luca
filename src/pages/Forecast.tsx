@@ -21,7 +21,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
   return (
     <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-200 text-sm">
       <p className="font-medium text-slate-700 mb-1">{d.label}</p>
-      <p className="text-indigo-600">Saldo: {cur(d.balance)}</p>
+      <p className="text-blue-600">Saldo: {cur(d.balance)}</p>
       <p className="text-emerald-600">Entrate sett.: {cur(d.income)}</p>
       <p className="text-red-500">Uscite sett.: {cur(d.expenses)}</p>
     </div>
@@ -168,7 +168,7 @@ export default function Forecast() {
 
   return (
     <div>
-      <InfoBox title="Come funziona la previsione" tone="indigo">
+      <InfoBox title="Come funziona la previsione" tone="blue">
         <p><strong>Partenza</strong>: la previsione parte dal <strong>saldo attuale</strong> dei tuoi fondi (escluso quelli filtrati col selettore).</p>
         <p><strong>Filtro data "Fino al"</strong>: limita la proiezione a una data specifica. La previsione conta solo gli eventi che cadono <strong>tra oggi e quella data</strong>. Se imposti 1 giorno, vedi solo eventi di domani.</p>
         <p><strong>Cosa aggiunge giorno per giorno</strong>:</p>
@@ -205,7 +205,7 @@ export default function Forecast() {
               value={targetDate}
               min={toDateString(new Date())}
               onChange={e => setTargetDate(e.target.value)}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
             />
             <span className="text-xs text-slate-400 whitespace-nowrap">({daysToTarget} giorni)</span>
           </div>
@@ -213,28 +213,28 @@ export default function Forecast() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard icon={Target} color="bg-indigo-100 text-indigo-600" label="Saldo Attuale" value={cur(startBalance)} />
+        <MetricCard icon={Target} color="bg-blue-100 text-blue-600" label="Saldo Attuale" value={cur(startBalance)} />
         <MetricCard icon={trend >= 0 ? TrendingUp : TrendingDown} color={trend >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} label={`Saldo al ${format(targetDateObj, 'd MMM yyyy', { locale: it })}`} value={cur(endBalance)} />
         <MetricCard icon={AlertTriangle} color={minPoint.balance < 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'} label="Minimo Previsto" value={cur(minPoint.balance)} sub={minPoint.label} />
         <MetricCard icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Netto Mensile" value={cur(est.monthlyNet)} sub={est.monthlyNet >= 0 ? 'Positivo' : 'Negativo'} />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-8">
+      <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-6 mb-8">
         <h3 className="text-lg font-semibold text-slate-700 mb-4">Proiezione Saldo</h3>
         {forecast.length > 1 ? (
           <ResponsiveContainer width="100%" height={350}>
             <AreaChart data={forecast}>
               <defs>
                 <linearGradient id="forecastGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#4F46E5" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={Math.floor(forecast.length / 8)} />
               <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `€${v}`} />
               <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="balance" stroke="#4F46E5" fill="url(#forecastGrad)" strokeWidth={2} dot={false} />
+              <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#forecastGrad)" strokeWidth={2} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
@@ -242,7 +242,7 @@ export default function Forecast() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-200">
           <h3 className="text-lg font-semibold text-slate-700">Riepilogo per Periodo Billing (15-14)</h3>
           <p className="text-xs text-slate-500 mt-1">Clicca su una riga per vedere quali entrate e uscite la compongono.</p>
@@ -329,7 +329,7 @@ export default function Forecast() {
 
 function MetricCard({ icon: Icon, color, label, value, sub }: { icon: React.ElementType; color: string; label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4">
+    <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
       <div className="flex items-center gap-2 mb-2">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
           <Icon className="w-4 h-4" />

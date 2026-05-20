@@ -107,7 +107,7 @@ export default function Income() {
         <div>
           <p className="text-sm text-slate-500">Totale entrate del periodo corrente (15-14): <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
+        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
         </button>
       </div>
@@ -120,18 +120,18 @@ export default function Income() {
       </InfoBox>
 
       {items.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+        <div className="text-center py-12 bg-white rounded-xl border border-slate-200/60 shadow-sm">
           <p className="text-slate-400 mb-4">Nessuna entrata configurata</p>
-          <button onClick={openAdd} className="text-indigo-600 font-medium hover:text-indigo-700">Aggiungi la prima entrata</button>
+          <button onClick={openAdd} className="text-blue-600 font-medium hover:text-blue-700">Aggiungi la prima entrata</button>
         </div>
       ) : (
         <div className="space-y-3">
           {items.map(item => {
             const fundName = funds.find(f => f.id === item.fund_id)?.name
             return (
-              <div key={item.id} className={`bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between transition ${!item.is_active ? 'opacity-50' : ''}`}>
+              <div key={item.id} className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between transition ${!item.is_active ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-4">
-                  <button onClick={() => toggle(item)} className="text-slate-400 hover:text-indigo-600 transition">
+                  <button onClick={() => toggle(item)} className="text-slate-400 hover:text-blue-600 transition">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-emerald-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <div>
@@ -165,16 +165,16 @@ export default function Income() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="es. Stipendio, Lavoro sabato..." />
+            <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Stipendio, Lavoro sabato..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <input type="number" step="0.01" value={form.amount || ''} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+              <input type="number" step="0.01" value={form.amount || ''} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
-              <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+              <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                 <option value="monthly">Mensile</option>
                 <option value="weekly">Settimanale</option>
               </select>
@@ -183,34 +183,34 @@ export default function Income() {
           {form.frequency === 'monthly' ? (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Giorno del mese</label>
-              <input type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+              <input type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Giorno della settimana</label>
-                <select value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                <select value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                   {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Ritardo pagamento (gg)</label>
-                <input type="number" min={0} value={form.delay_days} onChange={e => setForm({ ...form, delay_days: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                <input type="number" min={0} value={form.delay_days} onChange={e => setForm({ ...form, delay_days: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               </div>
             </div>
           )}
           <div className="flex items-center gap-3">
-            <input type="checkbox" id="variable" checked={form.is_variable} onChange={e => setForm({ ...form, is_variable: e.target.checked })} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+            <input type="checkbox" id="variable" checked={form.is_variable} onChange={e => setForm({ ...form, is_variable: e.target.checked })} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
             <label htmlFor="variable" className="text-sm text-slate-700">Importo variabile (la cifra indicata è una stima)</label>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Fondo destinazione (opzionale)</label>
-            <select value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+            <select value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Nessuno</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <button onClick={save} disabled={saving} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button onClick={save} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Aggiungi Entrata'}
           </button>
         </div>
