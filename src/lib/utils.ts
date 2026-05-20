@@ -80,4 +80,10 @@ export const TRANSACTION_CATEGORIES = [
 
 export const FUEL_CATEGORY = 'benzina'
 
+// Converte l'input utente in numero accettando sia la virgola (separatore decimale italiano) sia il punto.
+export function parseDecimal(s: string): number {
+  const n = parseFloat(s.replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
+}
+
 export const VARIABLE_CATEGORIES = ['trasporti', 'cibo', 'svago', 'salute', 'altro']

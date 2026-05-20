@@ -16,7 +16,7 @@ import { getPeriodBreakdown } from '../lib/periodBreakdown'
 import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
-import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES, FUEL_CATEGORY } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal } from '../lib/utils'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
@@ -81,9 +81,9 @@ export default function Dashboard() {
   const [confirmAmount, setConfirmAmount] = useState(0)
   const [confirmFundId, setConfirmFundId] = useState('')
   const [confirmSaving, setConfirmSaving] = useState(false)
-  const [confirmFuelKm, setConfirmFuelKm] = useState(0)
-  const [confirmFuelLiters, setConfirmFuelLiters] = useState(0)
-  const [confirmFuelPrice, setConfirmFuelPrice] = useState(0)
+  const [confirmFuelKm, setConfirmFuelKm] = useState('')
+  const [confirmFuelLiters, setConfirmFuelLiters] = useState('')
+  const [confirmFuelPrice, setConfirmFuelPrice] = useState('')
 
   const [plannedModal, setPlannedModal] = useState(false)
   const [plannedListOpen, setPlannedListOpen] = useState(false)
@@ -291,9 +291,9 @@ export default function Dashboard() {
     setConfirmItem(item)
     setConfirmAmount(item.amount)
     setConfirmFundId(item.fund_id || '')
-    setConfirmFuelKm(0)
-    setConfirmFuelLiters(0)
-    setConfirmFuelPrice(0)
+    setConfirmFuelKm('')
+    setConfirmFuelLiters('')
+    setConfirmFuelPrice('')
   }
 
   const handleConfirm = async () => {
@@ -306,9 +306,9 @@ export default function Dashboard() {
     const txDate = confirmItem.occurrence_date || todayString()
     const isFuel = confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY
     const fuelFields = isFuel ? {
-      fuel_km: confirmFuelKm || null,
-      fuel_liters: confirmFuelLiters || null,
-      fuel_price_per_liter: confirmFuelPrice || null,
+      fuel_km: parseDecimal(confirmFuelKm) || null,
+      fuel_liters: parseDecimal(confirmFuelLiters) || null,
+      fuel_price_per_liter: parseDecimal(confirmFuelPrice) || null,
     } : {}
 
     const { error: insertError } = await supabase.from('transactions').insert({
@@ -432,9 +432,9 @@ export default function Dashboard() {
 
     const isFuel = confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY
     const fuelFields = isFuel ? {
-      fuel_km: confirmFuelKm || null,
-      fuel_liters: confirmFuelLiters || null,
-      fuel_price_per_liter: confirmFuelPrice || null,
+      fuel_km: parseDecimal(confirmFuelKm) || null,
+      fuel_liters: parseDecimal(confirmFuelLiters) || null,
+      fuel_price_per_liter: parseDecimal(confirmFuelPrice) || null,
     } : {}
 
     const { error: insertError } = await supabase.from('transactions').insert({
@@ -910,9 +910,9 @@ export default function Dashboard() {
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Km percorsi</label>
                     <input
-                      type="number" step="0.1" min="0" inputMode="decimal"
-                      value={confirmFuelKm || ''}
-                      onChange={e => setConfirmFuelKm(parseFloat(e.target.value) || 0)}
+                      type="text" inputMode="decimal"
+                      value={confirmFuelKm}
+                      onChange={e => setConfirmFuelKm(e.target.value)}
                       placeholder="es. 450"
                       className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
                     />
@@ -920,9 +920,9 @@ export default function Dashboard() {
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
                     <input
-                      type="number" step="0.01" min="0" inputMode="decimal"
-                      value={confirmFuelLiters || ''}
-                      onChange={e => setConfirmFuelLiters(parseFloat(e.target.value) || 0)}
+                      type="text" inputMode="decimal"
+                      value={confirmFuelLiters}
+                      onChange={e => setConfirmFuelLiters(e.target.value)}
                       placeholder="es. 30"
                       className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
                     />
@@ -930,21 +930,26 @@ export default function Dashboard() {
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
                     <input
-                      type="number" step="0.001" min="0" inputMode="decimal"
-                      value={confirmFuelPrice || ''}
-                      onChange={e => setConfirmFuelPrice(parseFloat(e.target.value) || 0)}
+                      type="text" inputMode="decimal"
+                      value={confirmFuelPrice}
+                      onChange={e => setConfirmFuelPrice(e.target.value)}
                       placeholder="es. 1,80"
                       className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
                     />
                   </div>
                 </div>
-                {confirmFuelKm > 0 && confirmFuelLiters > 0 && (
-                  <p className="text-xs text-slate-600">
-                    Consumo: <span className="font-semibold text-slate-800">{(confirmFuelKm / confirmFuelLiters).toFixed(1)} km/l</span>
-                    {' · '}{(confirmFuelLiters / confirmFuelKm * 100).toFixed(1)} l/100km
-                    {confirmAmount > 0 && <> · <span className="font-semibold text-slate-800">{cur(confirmAmount / confirmFuelKm)}/km</span></>}
-                  </p>
-                )}
+                {(() => {
+                  const km = parseDecimal(confirmFuelKm)
+                  const liters = parseDecimal(confirmFuelLiters)
+                  if (km <= 0 || liters <= 0) return null
+                  return (
+                    <p className="text-xs text-slate-600">
+                      Consumo: <span className="font-semibold text-slate-800">{(km / liters).toFixed(1)} km/l</span>
+                      {' · '}{(liters / km * 100).toFixed(1)} l/100km
+                      {confirmAmount > 0 && <> · <span className="font-semibold text-slate-800">{cur(confirmAmount / km)}/km</span></>}
+                    </p>
+                  )
+                })()}
                 <p className="text-[11px] text-slate-400">Servono solo per tracciare i consumi: non modificano l'importo pagato qui sopra.</p>
               </div>
             )}
