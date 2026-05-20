@@ -376,7 +376,7 @@ export default function RecurringExpenses() {
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Data ultimo accredito (opzionale)</label>
-            <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+            <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
             {form.end_date && (
               <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-indigo-600 mt-1 hover:text-indigo-700">Rimuovi data</button>
             )}
