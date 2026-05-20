@@ -15,12 +15,16 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
 
   useEffect(() => {
     if (isOpen) {
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+      document.body.style.paddingRight = `${scrollbarWidth}px`
       document.body.style.overflow = 'hidden'
       document.addEventListener('keydown', handleEsc)
     } else {
+      document.body.style.paddingRight = ''
       document.body.style.overflow = ''
     }
     return () => {
+      document.body.style.paddingRight = ''
       document.body.style.overflow = ''
       document.removeEventListener('keydown', handleEsc)
     }
@@ -38,7 +42,7 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-4 overflow-x-hidden">{children}</div>
       </div>
     </div>
   )
