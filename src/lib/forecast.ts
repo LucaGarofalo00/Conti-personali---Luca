@@ -58,6 +58,7 @@ export function generateForecast(
 
         for (const exp of recurringExpenses) {
           if (!exp.is_active) continue
+          if (exp.start_date && curStr < exp.start_date) continue
           if (exp.end_date && isAfter(cursor, new Date(exp.end_date))) continue
           if ((exp.type || 'expense') === 'transfer') continue
           if (isExcluded(exp.fund_id, excluded)) continue
@@ -225,6 +226,7 @@ export function getMonthlyEstimates(
   for (const exp of recurringExpenses) {
     if (!exp.is_active) continue
     if (exp.end_date && new Date(exp.end_date) < new Date()) continue
+    if (exp.start_date && new Date(exp.start_date) > new Date()) continue
     if ((exp.type || 'expense') === 'transfer') continue
     if (isExcluded(exp.fund_id, excluded)) continue
     const freq = exp.frequency || 'monthly'

@@ -209,7 +209,9 @@ export default function Dashboard() {
         }
       }
 
-      return occurrences.map(o => {
+      return occurrences
+        .filter(o => (!exp.start_date || o.dateStr >= exp.start_date) && (!exp.end_date || o.dateStr <= exp.end_date))
+        .map(o => {
         const matchingTx = periodTx.find(tx =>
           tx.recurring_expense_id === exp.id &&
           tx.date === o.dateStr
@@ -543,13 +545,13 @@ export default function Dashboard() {
             <p><strong>Entrate da confermare</strong>: ogni sabato lavorato (con la data di pagamento attesa) e lo stipendio mensile. "Non lavorato" su un sabato → memo che lo segna come gestito senza generare entrata.</p>
             <p><strong>Spese automatiche</strong>: vengono scalate da sole dal fondo nel giorno previsto. Qui le vedi solo come promemoria — non c'è nulla da confermare.</p>
           </InfoBox>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold text-slate-700">Prossime Scadenze</h3>
+              <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0" />
+              <h3 className="text-lg font-semibold text-slate-700 whitespace-nowrap">Prossime Scadenze</h3>
             </div>
             {pendingRecurringManual.length > 0 && (
-              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full whitespace-nowrap">
                 {confirmedRecurringCount}/{pendingRecurringManual.length} spese fisse confermate
               </span>
             )}
@@ -564,19 +566,19 @@ export default function Dashboard() {
                   const btnClass = item.kind === 'transfer' ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-red-50 text-red-600 hover:bg-red-100'
                   const btnLabel = item.kind === 'transfer' ? 'Trasferisci' : 'Paga'
                   return (
-                    <div key={item.id} className={`bg-white rounded-xl border-l-4 border border-slate-200 p-4 flex items-center justify-between ${borderColor}`}>
-                      <div>
-                        <p className={`font-medium text-slate-800 ${item.confirmed ? 'line-through' : ''}`}>{item.name}</p>
+                    <div key={item.id} className={`bg-white rounded-xl border-l-4 border border-slate-200 p-4 flex items-center justify-between gap-3 ${borderColor}`}>
+                      <div className="min-w-0">
+                        <p className={`font-medium text-slate-800 truncate ${item.confirmed ? 'line-through' : ''}`}>{item.name}</p>
                         <p className="text-xs text-slate-400">{item.label} · {cur(item.amount)}</p>
                       </div>
                       {item.confirmed ? (
-                        <span className="flex items-center gap-1 text-sm text-emerald-600 font-medium">
+                        <span className="flex items-center gap-1 text-sm text-emerald-600 font-medium shrink-0">
                           <Check className="w-4 h-4" /> Fatto
                         </span>
                       ) : (
                         <button
                           onClick={() => openConfirm(item)}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${btnClass}`}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition shrink-0 ${btnClass}`}
                         >
                           {btnLabel}
                         </button>
@@ -631,7 +633,7 @@ export default function Dashboard() {
                 {pendingAutoUpcoming.map(item => {
                   const due = new Date((item.occurrence_date as string) + 'T00:00:00')
                   return (
-                    <div key={item.id} className="bg-white rounded-xl border-l-4 border-l-emerald-400 border border-slate-200 p-4 flex items-center justify-between">
+                    <div key={item.id} className="bg-white rounded-xl border-l-4 border-l-emerald-400 border border-slate-200 p-4 flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="font-medium text-slate-800 truncate">{item.name}</p>
@@ -639,7 +641,7 @@ export default function Dashboard() {
                         </div>
                         <p className="text-xs text-slate-400">{format(due, 'EEE d MMM', { locale: it })} · si scalerà da sola</p>
                       </div>
-                      <span className="text-sm font-semibold text-slate-500">-{cur(item.amount)}</span>
+                      <span className="text-sm font-semibold text-slate-500 shrink-0">-{cur(item.amount)}</span>
                     </div>
                   )
                 })}

@@ -78,6 +78,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
 
     for (const exp of recurringExpenses) {
       if (!exp.is_active) continue
+      if (exp.start_date && dateStr < exp.start_date) continue
       if (exp.end_date && isAfter(cursor, new Date(exp.end_date))) continue
       if ((exp.type || 'expense') === 'transfer') continue
       if (exp.fund_id && excluded.has(exp.fund_id)) continue

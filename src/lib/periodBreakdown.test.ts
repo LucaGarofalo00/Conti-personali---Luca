@@ -15,7 +15,7 @@ function mkExp(id: string, day: number, amount: number): RecurringExpense {
     id, user_id: 'u', name: 'Exp-' + id, amount,
     frequency: 'monthly', day_of_month: day, day_of_week: null, month_of_year: null,
     fund_id: null, fund_to_id: null, category: 'altro',
-    type: 'expense', is_active: true, auto_deduct: false, end_date: null, created_at: '',
+    type: 'expense', is_active: true, auto_deduct: false, start_date: null, end_date: null, created_at: '',
   }
 }
 function mkBudget(id: string, amount: number): WeeklyBudget {
@@ -95,6 +95,34 @@ describe('getPeriodBreakdown - includes all source types', () => {
       weeklyBudgets: [], planned: [], excludedFundIds: [],
     })
     expect(out).toHaveLength(0)
+  })
+})
+
+describe('getPeriodBreakdown - expense start_date / end_date window', () => {
+  const period = { startDate: new Date(2026, 4, 15), endDate: new Date(2026, 5, 14) }
+  const base = { recurringIncome: [], weeklyBudgets: [], planned: [], excludedFundIds: [] }
+
+  it('skips a recurring expense before its start_date', () => {
+    const exp = mkExp('aff', 20, 400) // cade il 20 maggio
+    exp.start_date = '2026-06-01'
+    const out = getPeriodBreakdown({ ...period, ...base, recurringExpenses: [exp] })
+    expect(out.filter(i => i.source === 'recurring_expense')).toHaveLength(0)
+  })
+
+  it('keeps a recurring expense on/after its start_date', () => {
+    const exp = mkExp('aff', 20, 400)
+    exp.start_date = '2026-05-01'
+    const out = getPeriodBreakdown({ ...period, ...base, recurringExpenses: [exp] })
+    const items = out.filter(i => i.source === 'recurring_expense')
+    expect(items).toHaveLength(1)
+    expect(items[0].date).toBe('2026-05-20')
+  })
+
+  it('skips a recurring expense after its end_date', () => {
+    const exp = mkExp('aff', 20, 400)
+    exp.end_date = '2026-05-01'
+    const out = getPeriodBreakdown({ ...period, ...base, recurringExpenses: [exp] })
+    expect(out.filter(i => i.source === 'recurring_expense')).toHaveLength(0)
   })
 })
 

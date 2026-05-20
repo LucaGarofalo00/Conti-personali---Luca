@@ -56,6 +56,7 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
     for (const dueDate of computeOccurrencesInCurrentPeriod(exp)) {
       if (dueDate > today) continue
       const dueDateStr = toDateString(dueDate)
+      if (exp.start_date && dueDateStr < exp.start_date) continue
 
       const alreadyProcessed = periodTx.some(tx =>
         (tx.recurring_expense_id === exp.id && tx.date === dueDateStr) ||

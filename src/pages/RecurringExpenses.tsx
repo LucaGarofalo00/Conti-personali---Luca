@@ -23,7 +23,39 @@ const emptyForm = {
   category: 'altro',
   type: 'expense' as 'expense' | 'transfer',
   auto_deduct: false,
+  start_date: '',
   end_date: '',
+}
+
+function daysInMonthOf(year: number, monthIdx: number): number {
+  return new Date(year, monthIdx + 1, 0).getDate()
+}
+
+// Prossima scadenza (>= oggi, rispettando inizio/fine), usata per ordinare la lista.
+function nextDueDate(exp: RecurringExpense, from: Date): Date {
+  const FAR = new Date(8640000000000000)
+  const freq = exp.frequency || 'monthly'
+  let lb = new Date(from.getFullYear(), from.getMonth(), from.getDate())
+  if (exp.start_date) {
+    const sd = new Date(exp.start_date + 'T00:00:00')
+    if (sd > lb) lb = sd
+  }
+  let due = FAR
+  if (freq === 'weekly' && exp.day_of_week !== null) {
+    const d = new Date(lb)
+    d.setDate(d.getDate() + ((exp.day_of_week - d.getDay() + 7) % 7))
+    due = d
+  } else if (freq === 'yearly' && exp.day_of_month !== null && exp.month_of_year !== null) {
+    const mk = (y: number) => new Date(y, exp.month_of_year! - 1, Math.min(exp.day_of_month!, daysInMonthOf(y, exp.month_of_year! - 1)))
+    due = mk(lb.getFullYear())
+    if (due < lb) due = mk(lb.getFullYear() + 1)
+  } else if (exp.day_of_month !== null) {
+    const mk = (y: number, m: number) => new Date(y, m, Math.min(exp.day_of_month!, daysInMonthOf(y, m)))
+    due = mk(lb.getFullYear(), lb.getMonth())
+    if (due < lb) due = mk(lb.getFullYear(), lb.getMonth() + 1)
+  }
+  if (exp.end_date && due.getTime() !== FAR.getTime() && due > new Date(exp.end_date + 'T23:59:59')) return FAR
+  return due
 }
 
 export default function RecurringExpenses() {
@@ -75,6 +107,7 @@ export default function RecurringExpenses() {
       category: item.category,
       type: item.type || 'expense',
       auto_deduct: item.auto_deduct || false,
+      start_date: item.start_date || '',
       end_date: item.end_date || '',
     })
     setShowModal(true)
@@ -89,6 +122,9 @@ export default function RecurringExpenses() {
     if (form.type === 'transfer' && form.fund_id === form.fund_to_id) {
       toast.error('I fondi di origine e destinazione devono essere diversi'); return
     }
+    if (form.start_date && form.end_date && form.start_date > form.end_date) {
+      toast.error('La data di inizio non può essere successiva alla fine'); return
+    }
     setSaving(true)
     const data = {
       name: form.name,
@@ -102,6 +138,7 @@ export default function RecurringExpenses() {
       category: form.type === 'transfer' ? 'trasferimento' : form.category,
       type: form.type,
       auto_deduct: form.auto_deduct && !!form.fund_id,
+      start_date: form.start_date || null,
       end_date: form.end_date || null,
     }
     const { error } = editing
@@ -131,8 +168,12 @@ export default function RecurringExpenses() {
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
   const today = todayString()
+  const now = new Date()
   const activeItems = items.filter(i => i.is_active && (!i.end_date || i.end_date >= today))
   const expiredItems = items.filter(i => i.end_date && i.end_date < today)
+  const visibleItems = items
+    .filter(i => !i.end_date || i.end_date >= today)
+    .sort((a, b) => nextDueDate(a, now).getTime() - nextDueDate(b, now).getTime())
   const { start: pStart, end: pEnd } = getBillingPeriod()
   const periodBreakdown = getPeriodBreakdown({
     startDate: new Date(pStart),
@@ -175,7 +216,7 @@ export default function RecurringExpenses() {
         </div>
       ) : (
         <div className="space-y-3">
-          {items.filter(i => !i.end_date || i.end_date >= today).map(item => {
+          {visibleItems.map(item => {
             const isTransfer = (item.type || 'expense') === 'transfer'
             const fromFund = funds.find(f => f.id === item.fund_id)?.name
             const toFund = funds.find(f => f.id === item.fund_to_id)?.name
@@ -205,6 +246,7 @@ export default function RecurringExpenses() {
                         ? `${fromFund || '?'} → ${toFund || '?'}`
                         : item.category}
                       {!isTransfer && fromFund && ` · ${fromFund}`}
+                      {item.start_date && ` · Dal ${new Date(item.start_date).toLocaleDateString('it-IT')}`}
                       {item.end_date && ` · Ultimo accredito: ${new Date(item.end_date).toLocaleDateString('it-IT')}`}
                     </p>
                   </div>
@@ -374,13 +416,23 @@ export default function RecurringExpenses() {
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Data ultimo accredito (opzionale)</label>
-            <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
-            {form.end_date && (
-              <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi data</button>
-            )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
+              <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              {form.start_date && (
+                <button onClick={() => setForm({ ...form, start_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi</button>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data ultimo accredito (opzionale)</label>
+              <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              {form.end_date && (
+                <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi</button>
+              )}
+            </div>
           </div>
+          <p className="text-xs text-slate-400">La data di inizio può essere anche passata (spesa già in corso). Lascia vuoto per "da sempre".</p>
           <button onClick={save} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Aggiungi'}
           </button>

@@ -11,7 +11,7 @@ function mkExp(id: string, name: string, amount: number, day: number, fund_id: s
     id, user_id: 'u1', name, amount,
     frequency: 'monthly', day_of_month: day, day_of_week: null, month_of_year: null,
     fund_id, fund_to_id: null,
-    category: 'altro', type: 'expense', is_active: true, auto_deduct: false, end_date: null, created_at: '',
+    category: 'altro', type: 'expense', is_active: true, auto_deduct: false, start_date: null, end_date: null, created_at: '',
     ...opts,
   }
 }
