@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import Logo from '../components/Logo'
 
 type Mode = 'login' | 'register' | 'reset'
 
@@ -46,14 +47,15 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#f7f8fa' }}>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-indigo-50 via-slate-50 to-violet-100">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
+        <div className="flex flex-col items-center text-center mb-8">
+          <Logo className="w-16 h-16 drop-shadow-md mb-3" />
           <h1 className="text-2xl font-semibold tracking-tight text-slate-800 mb-1">FinanzApp</h1>
           <p className="text-sm text-slate-400">Gestisci le tue finanze personali</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 p-6">
+        <div className="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200/60 p-6">
           {mode !== 'reset' && (
             <div className="flex mb-6 bg-slate-100 rounded-lg p-0.5">
               <button onClick={() => switchMode('login')} className={`flex-1 py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${mode === 'login' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}>
@@ -87,7 +89,7 @@ export default function Auth() {
             {error && <p className="text-red-600 text-[13px] bg-red-50 p-2.5 rounded-lg">{error}</p>}
             {success && <p className="text-emerald-600 text-[13px] bg-emerald-50 p-2.5 rounded-lg">{success}</p>}
 
-            <button type="submit" disabled={loading} className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
+            <button type="submit" disabled={loading} className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-lg text-[13px] font-medium hover:from-indigo-700 hover:to-violet-700 shadow-sm shadow-indigo-600/25 disabled:opacity-50 transition-all">
               {loading ? 'Caricamento...' : mode === 'login' ? 'Accedi' : mode === 'register' ? 'Registrati' : 'Invia Link'}
             </button>
           </form>
