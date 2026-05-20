@@ -4,5 +4,5 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
-  base: mode === 'production' ? '/Conti-personali---Luca/' : '/',
+  base: mode === 'production' ? '/conti/' : '/',
 }))
