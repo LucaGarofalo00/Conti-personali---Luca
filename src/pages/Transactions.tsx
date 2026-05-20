@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
-import { cur, TRANSACTION_CATEGORIES, todayString } from '../lib/utils'
+import { cur, TRANSACTION_CATEGORIES, todayString, FUEL_CATEGORY } from '../lib/utils'
 import InfoBox from '../components/InfoBox'
 import type { Transaction, Fund } from '../types'
 
@@ -16,6 +16,12 @@ const emptyForm = {
   type: 'expense' as 'income' | 'expense' | 'transfer',
   amount: 0, description: '', fund_id: '', fund_to_id: '',
   category: 'altro', date: todayString(),
+  fuel_km: 0, fuel_liters: 0, fuel_price_per_liter: 0,
+}
+
+function isFuelColumnError(msg?: string | null): boolean {
+  if (!msg) return false
+  return /fuel_(km|liters|price_per_liter)/.test(msg) && /column|schema|find/i.test(msg)
 }
 
 function txBalanceDelta(tx: Transaction): { fundId: string; delta: number }[] {
@@ -108,6 +114,9 @@ export default function Transactions() {
       type: tx.type, amount: Number(tx.amount), description: tx.description,
       fund_id: tx.fund_id || '', fund_to_id: tx.fund_to_id || '',
       category: tx.category, date: tx.date,
+      fuel_km: tx.fuel_km != null ? Number(tx.fuel_km) : 0,
+      fuel_liters: tx.fuel_liters != null ? Number(tx.fuel_liters) : 0,
+      fuel_price_per_liter: tx.fuel_price_per_liter != null ? Number(tx.fuel_price_per_liter) : 0,
     })
     setShowModal(true)
   }
@@ -141,10 +150,19 @@ export default function Transactions() {
       deltas.set(fundId, (deltas.get(fundId) || 0) + delta)
     }
 
+    const isFuel = form.type === 'expense' && form.category === FUEL_CATEGORY
+    const hadFuel = !!editing && (editing.fuel_km != null || editing.fuel_liters != null || editing.fuel_price_per_liter != null)
+    const fuelFields = isFuel
+      ? { fuel_km: form.fuel_km || null, fuel_liters: form.fuel_liters || null, fuel_price_per_liter: form.fuel_price_per_liter || null }
+      : hadFuel
+        ? { fuel_km: null, fuel_liters: null, fuel_price_per_liter: null }
+        : {}
+
     const payload = {
       type: form.type, amount: form.amount, description: form.description,
       fund_id: form.fund_id || null, fund_to_id: form.type === 'transfer' ? (form.fund_to_id || null) : null,
       category: form.category, date: form.date,
+      ...fuelFields,
     }
 
     const { error } = editing
@@ -153,7 +171,11 @@ export default function Transactions() {
 
     if (error) {
       setSaving(false)
-      toast.error('Errore nel salvataggio')
+      if (isFuelColumnError(error.message)) {
+        toast.error('Colonne benzina mancanti nel database: esegui la SQL indicata nel banner della Dashboard')
+      } else {
+        toast.error('Errore nel salvataggio')
+      }
       return
     }
 
@@ -507,6 +529,51 @@ export default function Transactions() {
               {TRANSACTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
+          {form.type === 'expense' && form.category === FUEL_CATEGORY && (
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dati rifornimento (facoltativi)</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Km percorsi</label>
+                  <input
+                    type="number" step="0.1" min="0" inputMode="decimal"
+                    value={form.fuel_km || ''}
+                    onChange={e => setForm({ ...form, fuel_km: parseFloat(e.target.value) || 0 })}
+                    placeholder="es. 450"
+                    className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
+                  <input
+                    type="number" step="0.01" min="0" inputMode="decimal"
+                    value={form.fuel_liters || ''}
+                    onChange={e => setForm({ ...form, fuel_liters: parseFloat(e.target.value) || 0 })}
+                    placeholder="es. 30"
+                    className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
+                  <input
+                    type="number" step="0.001" min="0" inputMode="decimal"
+                    value={form.fuel_price_per_liter || ''}
+                    onChange={e => setForm({ ...form, fuel_price_per_liter: parseFloat(e.target.value) || 0 })}
+                    placeholder="es. 1,80"
+                    className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                  />
+                </div>
+              </div>
+              {form.fuel_km > 0 && form.fuel_liters > 0 && (
+                <p className="text-xs text-slate-600">
+                  Consumo: <span className="font-semibold text-slate-800">{(form.fuel_km / form.fuel_liters).toFixed(1)} km/l</span>
+                  {' · '}{(form.fuel_liters / form.fuel_km * 100).toFixed(1)} l/100km
+                  {form.amount > 0 && <> · <span className="font-semibold text-slate-800">{cur(form.amount / form.fuel_km)}/km</span></>}
+                </p>
+              )}
+              <p className="text-[11px] text-slate-400">Servono solo per tracciare i consumi: non modificano l'importo.</p>
+            </div>
+          )}
           <button onClick={save} disabled={form.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Registra Transazione'}
           </button>
