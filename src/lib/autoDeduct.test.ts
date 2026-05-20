@@ -99,6 +99,7 @@ describe('processAutoDeducts - idempotency (the critical bug)', () => {
       description: 'Different name', fund_id: 'fund-1', fund_to_id: null,
       category: 'altro', budget_id: null, recurring_expense_id: 'e1',
       recurring_income_id: null, is_memo: false, is_planned: false,
+      fuel_km: null, fuel_liters: null, fuel_price_per_liter: null,
       date: '2026-05-15', created_at: '',
     }
     const processed = await processAutoDeducts({ userId: 'u1', expenses, periodTx: [existing] })
@@ -113,6 +114,7 @@ describe('processAutoDeducts - idempotency (the critical bug)', () => {
       description: 'Exp-e1', fund_id: 'fund-1', fund_to_id: null,
       category: 'altro', budget_id: null, recurring_expense_id: null,
       recurring_income_id: null, is_memo: false, is_planned: false,
+      fuel_km: null, fuel_liters: null, fuel_price_per_liter: null,
       date: '2026-05-15', created_at: '',
     }
     const processed = await processAutoDeducts({ userId: 'u1', expenses, periodTx: [existing] })

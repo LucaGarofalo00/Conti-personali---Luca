@@ -69,13 +69,15 @@ export const ICONS = [
 export const COLORS = ['#3B82F6', '#F59E0B', '#8B5CF6', '#10B981', '#F97316', '#EC4899', '#EF4444', '#06B6D4']
 
 export const EXPENSE_CATEGORIES = [
-  'casa', 'bollette', 'trasporti', 'cibo', 'salute',
+  'casa', 'bollette', 'trasporti', 'benzina', 'cibo', 'salute',
   'abbonamenti', 'svago', 'vestiti', 'istruzione', 'risparmio', 'altro',
 ]
 
 export const TRANSACTION_CATEGORIES = [
-  'casa', 'bollette', 'trasporti', 'cibo', 'salute',
+  'casa', 'bollette', 'trasporti', 'benzina', 'cibo', 'salute',
   'abbonamenti', 'svago', 'vestiti', 'stipendio', 'lavoro', 'trasferimento', 'altro',
 ]
+
+export const FUEL_CATEGORY = 'benzina'
 
 export const VARIABLE_CATEGORIES = ['trasporti', 'cibo', 'svago', 'salute', 'altro']

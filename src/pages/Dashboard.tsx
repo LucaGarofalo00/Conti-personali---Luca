@@ -16,7 +16,7 @@ import { getPeriodBreakdown } from '../lib/periodBreakdown'
 import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
-import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES, FUEL_CATEGORY } from '../lib/utils'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
@@ -38,6 +38,13 @@ interface PendingItem {
   recurring_income_id?: string
   recurring_expense_id?: string
   occurrence_date?: string
+}
+
+const FUEL_COLUMNS = ['transactions.fuel_km', 'transactions.fuel_liters', 'transactions.fuel_price_per_liter']
+
+function isFuelColumnError(msg?: string | null): boolean {
+  if (!msg) return false
+  return /fuel_(km|liters|price_per_liter)/.test(msg) && /column|schema|find/i.test(msg)
 }
 
 function formatItalianDayMonth(d: Date): string {
@@ -74,6 +81,9 @@ export default function Dashboard() {
   const [confirmAmount, setConfirmAmount] = useState(0)
   const [confirmFundId, setConfirmFundId] = useState('')
   const [confirmSaving, setConfirmSaving] = useState(false)
+  const [confirmFuelKm, setConfirmFuelKm] = useState(0)
+  const [confirmFuelLiters, setConfirmFuelLiters] = useState(0)
+  const [confirmFuelPrice, setConfirmFuelPrice] = useState(0)
 
   const [plannedModal, setPlannedModal] = useState(false)
   const [plannedListOpen, setPlannedListOpen] = useState(false)
@@ -281,6 +291,9 @@ export default function Dashboard() {
     setConfirmItem(item)
     setConfirmAmount(item.amount)
     setConfirmFundId(item.fund_id || '')
+    setConfirmFuelKm(0)
+    setConfirmFuelLiters(0)
+    setConfirmFuelPrice(0)
   }
 
   const handleConfirm = async () => {
@@ -291,8 +304,14 @@ export default function Dashboard() {
     const fundToId = confirmItem.kind === 'transfer' ? (confirmItem.fund_to_id || null) : null
     const txType = confirmItem.kind === 'transfer' ? 'transfer' : confirmItem.kind === 'income' ? 'income' : 'expense'
     const txDate = confirmItem.occurrence_date || todayString()
+    const isFuel = confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY
+    const fuelFields = isFuel ? {
+      fuel_km: confirmFuelKm || null,
+      fuel_liters: confirmFuelLiters || null,
+      fuel_price_per_liter: confirmFuelPrice || null,
+    } : {}
 
-    await supabase.from('transactions').insert({
+    const { error: insertError } = await supabase.from('transactions').insert({
       user_id: user!.id,
       type: txType,
       amount: confirmAmount,
@@ -303,7 +322,19 @@ export default function Dashboard() {
       recurring_income_id: confirmItem.recurring_income_id || null,
       recurring_expense_id: confirmItem.recurring_expense_id || null,
       date: txDate,
+      ...fuelFields,
     })
+
+    if (insertError) {
+      setConfirmSaving(false)
+      if (isFuelColumnError(insertError.message)) {
+        setMissingColumns(prev => Array.from(new Set([...prev, ...FUEL_COLUMNS])))
+        toast.error('Colonne benzina mancanti: esegui la SQL indicata nel banner in alto')
+      } else {
+        toast.error('Errore nel salvataggio: ' + (insertError.message || ''))
+      }
+      return
+    }
 
     if (confirmItem.kind === 'transfer' && fundId && fundToId) {
       const [{ data: from }, { data: to }] = await Promise.all([
@@ -399,17 +430,36 @@ export default function Dashboard() {
     if (!confirmItem) return
     setConfirmSaving(true)
 
-    await supabase.from('transactions').insert({
+    const isFuel = confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY
+    const fuelFields = isFuel ? {
+      fuel_km: confirmFuelKm || null,
+      fuel_liters: confirmFuelLiters || null,
+      fuel_price_per_liter: confirmFuelPrice || null,
+    } : {}
+
+    const { error: insertError } = await supabase.from('transactions').insert({
       user_id: user!.id,
       type: confirmItem.kind === 'income' ? 'income' : 'expense',
-      amount: confirmItem.amount,
+      amount: confirmAmount,
       description: confirmItem.name,
       fund_id: null,
       fund_to_id: null,
       category: confirmItem.category,
       is_memo: true,
       date: todayString(),
+      ...fuelFields,
     })
+
+    if (insertError) {
+      setConfirmSaving(false)
+      if (isFuelColumnError(insertError.message)) {
+        setMissingColumns(prev => Array.from(new Set([...prev, ...FUEL_COLUMNS])))
+        toast.error('Colonne benzina mancanti: esegui la SQL indicata nel banner in alto')
+      } else {
+        toast.error('Errore nel salvataggio: ' + (insertError.message || ''))
+      }
+      return
+    }
 
     setConfirmSaving(false)
     setConfirmItem(null)
@@ -853,6 +903,51 @@ export default function Dashboard() {
                 </p>
               )}
             </div>
+            {confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY && (
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dati rifornimento (facoltativi)</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Km percorsi</label>
+                    <input
+                      type="number" step="0.1" min="0" inputMode="decimal"
+                      value={confirmFuelKm || ''}
+                      onChange={e => setConfirmFuelKm(parseFloat(e.target.value) || 0)}
+                      placeholder="es. 450"
+                      className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
+                    <input
+                      type="number" step="0.01" min="0" inputMode="decimal"
+                      value={confirmFuelLiters || ''}
+                      onChange={e => setConfirmFuelLiters(parseFloat(e.target.value) || 0)}
+                      placeholder="es. 30"
+                      className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
+                    <input
+                      type="number" step="0.001" min="0" inputMode="decimal"
+                      value={confirmFuelPrice || ''}
+                      onChange={e => setConfirmFuelPrice(parseFloat(e.target.value) || 0)}
+                      placeholder="es. 1,80"
+                      className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                    />
+                  </div>
+                </div>
+                {confirmFuelKm > 0 && confirmFuelLiters > 0 && (
+                  <p className="text-xs text-slate-600">
+                    Consumo: <span className="font-semibold text-slate-800">{(confirmFuelKm / confirmFuelLiters).toFixed(1)} km/l</span>
+                    {' · '}{(confirmFuelLiters / confirmFuelKm * 100).toFixed(1)} l/100km
+                    {confirmAmount > 0 && <> · <span className="font-semibold text-slate-800">{cur(confirmAmount / confirmFuelKm)}/km</span></>}
+                  </p>
+                )}
+                <p className="text-[11px] text-slate-400">Servono solo per tracciare i consumi: non modificano l'importo pagato qui sopra.</p>
+              </div>
+            )}
             {confirmItem.kind !== 'transfer' && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">

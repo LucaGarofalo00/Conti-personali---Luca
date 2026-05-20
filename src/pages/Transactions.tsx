@@ -128,7 +128,7 @@ export default function Transactions() {
     }
 
     const newTx: Transaction = {
-      ...(editing || { id: '', user_id: '', created_at: '', is_memo: false, is_planned: false, budget_id: null, recurring_expense_id: null, recurring_income_id: null }),
+      ...(editing || { id: '', user_id: '', created_at: '', is_memo: false, is_planned: false, budget_id: null, recurring_expense_id: null, recurring_income_id: null, fuel_km: null, fuel_liters: null, fuel_price_per_liter: null }),
       type: form.type,
       amount: form.amount,
       description: form.description,
@@ -394,6 +394,12 @@ export default function Transactions() {
               const fundToName = funds.find(f => f.id === tx.fund_to_id)?.name
               const isSelected = selectedIds.has(tx.id)
               const isDuplicate = duplicateGroups.has(tx.id)
+              const fuelParts: string[] = []
+              if (tx.fuel_km != null) fuelParts.push(`${Number(tx.fuel_km)} km`)
+              if (tx.fuel_liters != null) fuelParts.push(`${Number(tx.fuel_liters)} L`)
+              if (tx.fuel_price_per_liter != null) fuelParts.push(`${Number(tx.fuel_price_per_liter).toLocaleString('it-IT', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} €/L`)
+              if (tx.fuel_km != null && tx.fuel_liters != null && Number(tx.fuel_liters) > 0) fuelParts.push(`${(Number(tx.fuel_km) / Number(tx.fuel_liters)).toFixed(1)} km/l`)
+              const fuelLine = fuelParts.join(' · ')
               return (
                 <div
                   key={tx.id}
@@ -422,6 +428,7 @@ export default function Transactions() {
                         {fundToName && ` → ${fundToName}`}
                         {tx.category !== 'altro' && ` · ${tx.category}`}
                       </p>
+                      {fuelLine && <p className="text-[11px] text-slate-400 mt-0.5">{fuelLine}</p>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3 shrink-0">

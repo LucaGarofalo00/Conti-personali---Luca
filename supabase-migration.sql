@@ -30,6 +30,11 @@ alter table transactions add column if not exists recurring_income_id uuid refer
 alter table transactions add column if not exists is_memo boolean not null default false;
 alter table transactions add column if not exists is_planned boolean not null default false;
 
+-- Transazioni benzina: km percorsi, litri e prezzo al litro (per tracciare i consumi)
+alter table transactions add column if not exists fuel_km numeric(10,2);
+alter table transactions add column if not exists fuel_liters numeric(10,2);
+alter table transactions add column if not exists fuel_price_per_liter numeric(10,3);
+
 -- Indici opzionali per performance
 create index if not exists idx_transactions_planned on transactions(user_id, is_planned);
 create index if not exists idx_transactions_recurring_expense on transactions(recurring_expense_id);
@@ -46,7 +51,8 @@ create index if not exists idx_transactions_recurring_expense on transactions(re
 -- Attese in transactions:
 --   id, user_id, type, amount, description, fund_id, fund_to_id,
 --   category, budget_id, recurring_expense_id, recurring_income_id,
---   is_memo, is_planned, date, created_at
+--   is_memo, is_planned, fuel_km, fuel_liters, fuel_price_per_liter,
+--   date, created_at
 --
 -- select column_name from information_schema.columns
 -- where table_name = 'recurring_expenses' and table_schema = 'public'

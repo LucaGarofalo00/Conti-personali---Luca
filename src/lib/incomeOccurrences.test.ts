@@ -19,6 +19,7 @@ function mkTx(opts: Partial<Transaction> = {}): Transaction {
     category: 'lavoro', budget_id: null,
     recurring_expense_id: null, recurring_income_id: null,
     is_memo: false, is_planned: false,
+    fuel_km: null, fuel_liters: null, fuel_price_per_liter: null,
     date: '2026-05-16', created_at: '',
     ...opts,
   }

@@ -72,6 +72,9 @@ export interface Transaction {
   recurring_income_id: string | null
   is_memo: boolean
   is_planned: boolean
+  fuel_km: number | null
+  fuel_liters: number | null
+  fuel_price_per_liter: number | null
   date: string
   created_at: string
 }

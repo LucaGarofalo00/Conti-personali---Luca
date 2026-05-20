@@ -26,7 +26,9 @@ function mkPlanned(amount: number, type: 'income' | 'expense', date: string): Tr
     id: 'p-' + Math.random(), user_id: 'u', type, amount, description: 'plan ' + type,
     fund_id: null, fund_to_id: null, category: 'altro', budget_id: null,
     recurring_expense_id: null, recurring_income_id: null,
-    is_memo: false, is_planned: true, date, created_at: '',
+    is_memo: false, is_planned: true,
+    fuel_km: null, fuel_liters: null, fuel_price_per_liter: null,
+    date, created_at: '',
   }
 }
 

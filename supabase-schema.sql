@@ -88,6 +88,9 @@ create table if not exists transactions (
   recurring_income_id uuid references recurring_income(id) on delete set null,
   is_memo boolean not null default false,
   is_planned boolean not null default false,
+  fuel_km numeric(10,2),
+  fuel_liters numeric(10,2),
+  fuel_price_per_liter numeric(10,3),
   date date not null default current_date,
   created_at timestamptz default now()
 );
@@ -115,6 +118,9 @@ alter table transactions add column if not exists recurring_expense_id uuid refe
 alter table transactions add column if not exists recurring_income_id uuid references recurring_income(id) on delete set null;
 alter table transactions add column if not exists is_memo boolean not null default false;
 alter table transactions add column if not exists is_planned boolean not null default false;
+alter table transactions add column if not exists fuel_km numeric(10,2);
+alter table transactions add column if not exists fuel_liters numeric(10,2);
+alter table transactions add column if not exists fuel_price_per_liter numeric(10,3);
 
 -- Assicura che il check constraint su recurring_expenses.type esista
 do $$
