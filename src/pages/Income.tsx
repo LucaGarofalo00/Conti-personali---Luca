@@ -14,6 +14,7 @@ const DAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Vene
 const emptyForm = {
   name: '', amount: 0, is_variable: false, frequency: 'monthly' as 'monthly' | 'weekly',
   day_of_month: 15, day_of_week: 6, delay_days: 0, fund_id: '' as string,
+  start_date: '', end_date: '',
 }
 
 export default function Income() {
@@ -57,6 +58,7 @@ export default function Income() {
       name: item.name, amount: Number(item.amount), is_variable: item.is_variable,
       frequency: item.frequency, day_of_month: item.day_of_month || 15,
       day_of_week: item.day_of_week ?? 6, delay_days: item.delay_days, fund_id: item.fund_id || '',
+      start_date: item.start_date || '', end_date: item.end_date || '',
     })
     setShowModal(true)
   }
@@ -65,11 +67,16 @@ export default function Income() {
     if (!form.name.trim()) { toast.error('Inserisci un nome'); return }
     if (form.amount <= 0) { toast.error('Inserisci un importo valido'); return }
     setSaving(true)
+    if (form.start_date && form.end_date && form.start_date > form.end_date) {
+      toast.error('La data di inizio non può essere successiva alla fine'); setSaving(false); return
+    }
     const data = {
       ...form,
       fund_id: form.fund_id || null,
       day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
       day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
+      start_date: form.start_date || null,
+      end_date: form.end_date || null,
     }
     const { error } = editing
       ? await supabase.from('recurring_income').update(data).eq('id', editing.id)
@@ -144,6 +151,8 @@ export default function Income() {
                       )}
                       {item.delay_days > 0 && <span>· Ritardo {item.delay_days}gg</span>}
                       {fundName && <span>· {fundName}</span>}
+                      {item.start_date && <span>· Dal {new Date(item.start_date).toLocaleDateString('it-IT')}</span>}
+                      {item.end_date && <span>· Fino al {new Date(item.end_date).toLocaleDateString('it-IT')}</span>}
                     </p>
                   </div>
                 </div>
@@ -210,6 +219,23 @@ export default function Income() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
+              <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              {form.start_date && (
+                <button onClick={() => setForm({ ...form, start_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi</button>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data fine (opzionale)</label>
+              <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              {form.end_date && (
+                <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi</button>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-slate-400">La data di inizio può essere anche passata (entrata già in corso). Lascia vuoto per "sempre attiva".</p>
           <button onClick={save} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Aggiungi Entrata'}
           </button>

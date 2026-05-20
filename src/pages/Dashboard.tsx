@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, Calendar, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2 } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
@@ -33,6 +33,7 @@ interface PendingItem {
   category: string
   label: string
   confirmed: boolean
+  auto?: boolean
   occurrence?: IncomeOccurrence
   recurring_income_id?: string
   recurring_expense_id?: string
@@ -177,7 +178,7 @@ export default function Dashboard() {
   const { startDate: periodStartObj, endDate: periodEndObj } = getBillingPeriodFor(new Date())
 
   const pendingRecurring: PendingItem[] = expenses
-    .filter(exp => exp.is_active && !exp.auto_deduct && (!exp.end_date || exp.end_date >= today))
+    .filter(exp => exp.is_active && (!exp.end_date || exp.end_date >= today))
     .flatMap(exp => {
       const isTransfer = (exp.type || 'expense') === 'transfer'
       const fromName = funds.find(f => f.id === exp.fund_id)?.name
@@ -230,12 +231,16 @@ export default function Dashboard() {
           category: exp.category,
           label: `${dateLabel} · ${baseLabel}`,
           confirmed: !!matchingTx,
+          auto: !!exp.auto_deduct,
           recurring_expense_id: exp.id,
           occurrence_date: o.dateStr,
         }
       })
     })
     .sort((a, b) => (a.occurrence_date || '').localeCompare(b.occurrence_date || ''))
+
+  const pendingRecurringManual = pendingRecurring.filter(p => !p.auto)
+  const pendingAutoUpcoming = pendingRecurring.filter(p => p.auto && !p.confirmed && !!p.occurrence_date && p.occurrence_date >= today)
 
   const { start: pStartStr, end: pEndStr } = getBillingPeriod()
   const incomeOccurrences = generateIncomeOccurrences(income, pStartStr, pEndStr, periodTx)
@@ -268,7 +273,7 @@ export default function Dashboard() {
 
   const pendingVarExp: PendingItem[] = []
 
-  const confirmedRecurringCount = pendingRecurring.filter(p => p.confirmed).length
+  const confirmedRecurringCount = pendingRecurringManual.filter(p => p.confirmed).length
 
   const openConfirm = (item: PendingItem) => {
     setConfirmItem(item)
@@ -435,21 +440,11 @@ export default function Dashboard() {
   const forecast = generateForecast(funds, expenses, income, budgets, 3, excludedFundIds, planned)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
-  const { end: pEnd } = getBillingPeriod()
-  const periodEndDate = new Date(pEnd)
   const nowDate = new Date()
-
-  const upcoming = expenses
-    .filter(e => e.is_active && (!e.end_date || e.end_date >= today) && (e.frequency || 'monthly') === 'monthly' && e.day_of_month !== null)
-    .map(e => ({ ...e, dueDate: getDateInCurrentPeriod(e.day_of_month as number) }))
-    .filter(e => e.dueDate > nowDate && e.dueDate <= periodEndDate)
-    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
-    .slice(0, 5)
 
   const recentTx = [...periodTx]
     .filter(tx => !tx.is_memo)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 8)
 
   if (funds.length === 0) {
     return (
@@ -540,31 +535,31 @@ export default function Dashboard() {
         )
       })()}
 
-      {(pendingRecurring.length > 0 || pendingIncome.length > 0 || pendingVarExp.length > 0) && (
+      {(pendingRecurringManual.length > 0 || pendingIncome.length > 0 || pendingAutoUpcoming.length > 0 || pendingVarExp.length > 0) && (
         <div className="mb-8">
-          <InfoBox title="Come funziona 'Da Confermare'" tone="emerald">
-            <p>Mostra tutte le voci del periodo corrente (15-14) che <strong>non hanno ancora una transazione</strong>.</p>
-            <p><strong>Spese fisse del mese</strong>: spese ricorrenti manuali (non auto). Le auto-deduct non compaiono qui — sono già state scalate dal fondo automaticamente.</p>
-            <p><strong>Entrate da confermare</strong>: ogni sabato lavorato (con la data di pagamento attesa) e lo stipendio mensile. Se non li confermi, si accumulano.</p>
-            <p>Conferma → crea una transazione e aggiorna il saldo del fondo. "Non lavorato" su un sabato → memo che lo segna come gestito senza generare entrata.</p>
+          <InfoBox title="Come funzionano le Prossime Scadenze" tone="emerald">
+            <p>Tutte le voci del periodo corrente (15-14): cosa devi <strong>confermare</strong> e cosa verrà scalato in <strong>automatico</strong>.</p>
+            <p><strong>Spese fisse del mese</strong>: spese ricorrenti manuali. Clicca "Paga" → puoi modificare l'importo prima di registrare, poi viene creata la transazione e aggiornato il saldo del fondo.</p>
+            <p><strong>Entrate da confermare</strong>: ogni sabato lavorato (con la data di pagamento attesa) e lo stipendio mensile. "Non lavorato" su un sabato → memo che lo segna come gestito senza generare entrata.</p>
+            <p><strong>Spese automatiche</strong>: vengono scalate da sole dal fondo nel giorno previsto. Qui le vedi solo come promemoria — non c'è nulla da confermare.</p>
           </InfoBox>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold text-slate-700">Da Confermare</h3>
+              <h3 className="text-lg font-semibold text-slate-700">Prossime Scadenze</h3>
             </div>
-            {pendingRecurring.length > 0 && (
+            {pendingRecurringManual.length > 0 && (
               <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
-                {confirmedRecurringCount}/{pendingRecurring.length} spese fisse confermate
+                {confirmedRecurringCount}/{pendingRecurringManual.length} spese fisse confermate
               </span>
             )}
           </div>
 
-          {pendingRecurring.length > 0 && (
+          {pendingRecurringManual.length > 0 && (
             <div className="mb-3">
               <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Spese Fisse del Mese</p>
               <div className="space-y-2">
-                {pendingRecurring.map(item => {
+                {pendingRecurringManual.map(item => {
                   const borderColor = item.confirmed ? 'border-l-emerald-400 opacity-60' : item.kind === 'transfer' ? 'border-l-blue-400' : 'border-l-red-400'
                   const btnClass = item.kind === 'transfer' ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-red-50 text-red-600 hover:bg-red-100'
                   const btnLabel = item.kind === 'transfer' ? 'Trasferisci' : 'Paga'
@@ -622,6 +617,29 @@ export default function Dashboard() {
                           Ricevuto
                         </button>
                       </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {pendingAutoUpcoming.length > 0 && (
+            <div className="mb-3">
+              <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Spese Automatiche in arrivo ({pendingAutoUpcoming.length})</p>
+              <div className="space-y-2">
+                {pendingAutoUpcoming.map(item => {
+                  const due = new Date((item.occurrence_date as string) + 'T00:00:00')
+                  return (
+                    <div key={item.id} className="bg-white rounded-xl border-l-4 border-l-emerald-400 border border-slate-200 p-4 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-medium text-slate-800 truncate">{item.name}</p>
+                          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Automatica</span>
+                        </div>
+                        <p className="text-xs text-slate-400">{format(due, 'EEE d MMM', { locale: it })} · si scalerà da sola</p>
+                      </div>
+                      <span className="text-sm font-semibold text-slate-500">-{cur(item.amount)}</span>
                     </div>
                   )
                 })}
@@ -768,38 +786,11 @@ export default function Dashboard() {
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[15px] font-semibold text-slate-700">Prossime Scadenze</h3>
-              <Calendar className="w-4 h-4 text-slate-300" />
-            </div>
-            {upcoming.length > 0 ? (
-              <div className="space-y-0">
-                {upcoming.map(exp => {
-                  const diff = Math.ceil((exp.dueDate.getTime() - nowDate.getTime()) / 86400000)
-                  return (
-                    <div key={exp.id} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-                      <div>
-                        <p className="text-[13px] font-medium text-slate-700">{exp.name}</p>
-                        <p className="text-[11px] text-slate-400">
-                          {diff === 0 ? 'Oggi' : diff === 1 ? 'Domani' : `Tra ${diff} giorni`} &middot; {format(exp.dueDate, 'd MMM', { locale: it })}
-                        </p>
-                      </div>
-                      <span className="text-[13px] font-semibold text-red-500">-{cur(Number(exp.amount))}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-[13px] text-slate-400 py-4 text-center">Nessuna scadenza in arrivo</p>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-3">
               <h3 className="text-[15px] font-semibold text-slate-700">Ultime Transazioni</h3>
               <Clock className="w-4 h-4 text-slate-300" />
             </div>
             {recentTx.length > 0 ? (
-              <div className="space-y-0">
+              <div className="space-y-0 max-h-80 overflow-y-auto">
                 {recentTx.map(tx => (
                   <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
                     <div>

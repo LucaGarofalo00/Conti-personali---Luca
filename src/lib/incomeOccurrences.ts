@@ -42,6 +42,8 @@ export function generateIncomeOccurrences(
       for (const workDate of candidates) {
         if (workDate < periodStart || workDate > periodEnd) continue
         const workStr = toDateString(workDate)
+        if (inc.start_date && workStr < inc.start_date) continue
+        if (inc.end_date && workStr > inc.end_date) continue
         const matching = findMatch(periodTx, inc.id, workStr)
         out.push({
           income: inc,
@@ -61,16 +63,19 @@ export function generateIncomeOccurrences(
           const workDate = new Date(cursor)
           const paymentDate = addDays(workDate, delay)
           const workStr = toDateString(workDate)
-          const matching = findMatch(periodTx, inc.id, workStr)
-          out.push({
-            income: inc,
-            workDate,
-            workDateStr: workStr,
-            paymentDate,
-            paymentDateStr: toDateString(paymentDate),
-            status: classify(matching),
-            matchingTx: matching,
-          })
+          const inRange = (!inc.start_date || workStr >= inc.start_date) && (!inc.end_date || workStr <= inc.end_date)
+          if (inRange) {
+            const matching = findMatch(periodTx, inc.id, workStr)
+            out.push({
+              income: inc,
+              workDate,
+              workDateStr: workStr,
+              paymentDate,
+              paymentDateStr: toDateString(paymentDate),
+              status: classify(matching),
+              matchingTx: matching,
+            })
+          }
           cursor.setDate(cursor.getDate() + 7)
         } else {
           cursor.setDate(cursor.getDate() + 1)

@@ -39,10 +39,13 @@ export function generateForecast(
       if (!isBefore(cursor, today)) {
         const dom = getDate(cursor)
         const dim = getDaysInMonth(cursor)
+        const curStr = format(cursor, 'yyyy-MM-dd')
 
         for (const inc of recurringIncome) {
           if (!inc.is_active) continue
           if (isExcluded(inc.fund_id, excluded)) continue
+          if (inc.start_date && curStr < inc.start_date) continue
+          if (inc.end_date && curStr > inc.end_date) continue
           if (inc.frequency === 'monthly' && inc.day_of_month !== null) {
             const adjusted = Math.min(inc.day_of_month, dim)
             if (dom === adjusted) income += Number(inc.amount)
@@ -182,6 +185,7 @@ export function findNextMonthlyIncomeDate(income: RecurringIncome[]): { date: Da
   let best: { date: Date; income: RecurringIncome } | null = null
   for (const inc of income) {
     if (!inc.is_active || inc.frequency !== 'monthly' || inc.day_of_month === null) continue
+    if (inc.end_date && new Date(inc.end_date) < today) continue
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), Math.min(inc.day_of_month, new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()))
     let candidate = thisMonth
     if (isBefore(candidate, today)) {
@@ -189,6 +193,7 @@ export function findNextMonthlyIncomeDate(income: RecurringIncome[]): { date: Da
       const lastDayNext = new Date(today.getFullYear(), nextMonth + 1, 0).getDate()
       candidate = new Date(today.getFullYear(), nextMonth, Math.min(inc.day_of_month, lastDayNext))
     }
+    if (inc.start_date && format(candidate, 'yyyy-MM-dd') < inc.start_date) continue
     if (!best || isBefore(candidate, best.date)) {
       best = { date: candidate, income: inc }
     }
@@ -209,6 +214,8 @@ export function getMonthlyEstimates(
 
   for (const inc of recurringIncome) {
     if (!inc.is_active) continue
+    if (inc.end_date && new Date(inc.end_date) < new Date()) continue
+    if (inc.start_date && new Date(inc.start_date) > new Date()) continue
     if (isExcluded(inc.fund_id, excluded)) continue
     monthlyIncome += inc.frequency === 'monthly'
       ? Number(inc.amount)

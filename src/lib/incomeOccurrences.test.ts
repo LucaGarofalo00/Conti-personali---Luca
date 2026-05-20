@@ -7,7 +7,7 @@ function mkInc(id: string, opts: Partial<RecurringIncome> = {}): RecurringIncome
     id, user_id: 'u1', name: 'Income-' + id, amount: 50,
     is_variable: false, frequency: 'weekly',
     day_of_month: null, day_of_week: 6, delay_days: 2,
-    fund_id: null, is_active: true, created_at: '',
+    fund_id: null, is_active: true, start_date: null, end_date: null, created_at: '',
     ...opts,
   }
 }
@@ -105,6 +105,43 @@ describe('generateIncomeOccurrences - multiple incomes', () => {
     for (let i = 1; i < out.length; i++) {
       expect(out[i].workDate.getTime()).toBeGreaterThanOrEqual(out[i - 1].workDate.getTime())
     }
+  })
+})
+
+describe('generateIncomeOccurrences - start_date / end_date window', () => {
+  const start = new Date(2026, 4, 15)
+  const end = new Date(2026, 5, 14)
+
+  it('start_date excludes weekly occurrences before it', () => {
+    const inc = mkInc('sab', { day_of_week: 6, delay_days: 2, start_date: '2026-05-25' })
+    const out = generateIncomeOccurrences([inc], start, end, [])
+    expect(out.map(o => o.workDateStr)).toEqual(['2026-05-30', '2026-06-06', '2026-06-13'])
+  })
+
+  it('end_date excludes weekly occurrences after it', () => {
+    const inc = mkInc('sab', { day_of_week: 6, delay_days: 2, end_date: '2026-05-30' })
+    const out = generateIncomeOccurrences([inc], start, end, [])
+    expect(out.map(o => o.workDateStr)).toEqual(['2026-05-16', '2026-05-23', '2026-05-30'])
+  })
+
+  it('start_date in the future excludes a monthly salary entirely', () => {
+    const inc = mkInc('stip', { frequency: 'monthly', day_of_month: 27, day_of_week: null, start_date: '2026-06-01' })
+    const out = generateIncomeOccurrences([inc], start, end, [])
+    expect(out).toHaveLength(0)
+  })
+
+  it('past end_date excludes a monthly salary entirely', () => {
+    const inc = mkInc('stip', { frequency: 'monthly', day_of_month: 27, day_of_week: null, end_date: '2026-05-01' })
+    const out = generateIncomeOccurrences([inc], start, end, [])
+    expect(out).toHaveLength(0)
+  })
+
+  it('boundary dates are inclusive (occurrence exactly on start/end is kept)', () => {
+    const inc = mkInc('sab', { day_of_week: 6, delay_days: 2, start_date: '2026-05-16', end_date: '2026-06-13' })
+    const out = generateIncomeOccurrences([inc], start, end, [])
+    expect(out.map(o => o.workDateStr)).toEqual([
+      '2026-05-16', '2026-05-23', '2026-05-30', '2026-06-06', '2026-06-13',
+    ])
   })
 })
 

@@ -42,6 +42,8 @@ export interface RecurringIncome {
   delay_days: number
   fund_id: string | null
   is_active: boolean
+  start_date: string | null
+  end_date: string | null
   created_at: string
 }
 

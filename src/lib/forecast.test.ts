@@ -19,7 +19,8 @@ function mkExp(id: string, name: string, amount: number, day: number, fund_id: s
 function mkInc(id: string, name: string, amount: number, opts: Partial<RecurringIncome> = {}): RecurringIncome {
   return {
     id, user_id: 'u1', name, amount, is_variable: false, frequency: 'monthly',
-    day_of_month: 27, day_of_week: null, delay_days: 0, fund_id: null, is_active: true, created_at: '',
+    day_of_month: 27, day_of_week: null, delay_days: 0, fund_id: null, is_active: true,
+    start_date: null, end_date: null, created_at: '',
     ...opts,
   }
 }

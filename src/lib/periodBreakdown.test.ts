@@ -6,7 +6,7 @@ function mkInc(id: string, opts: Partial<RecurringIncome> = {}): RecurringIncome
   return {
     id, user_id: 'u', name: 'Inc-' + id, amount: 1500,
     is_variable: false, frequency: 'monthly', day_of_month: 27, day_of_week: null,
-    delay_days: 0, fund_id: null, is_active: true, created_at: '',
+    delay_days: 0, fund_id: null, is_active: true, start_date: null, end_date: null, created_at: '',
     ...opts,
   }
 }

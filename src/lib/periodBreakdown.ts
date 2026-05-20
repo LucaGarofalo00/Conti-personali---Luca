@@ -54,6 +54,8 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
     for (const inc of recurringIncome) {
       if (!inc.is_active) continue
       if (inc.fund_id && excluded.has(inc.fund_id)) continue
+      if (inc.start_date && dateStr < inc.start_date) continue
+      if (inc.end_date && dateStr > inc.end_date) continue
       if (inc.frequency === 'monthly' && inc.day_of_month !== null) {
         const adjusted = Math.min(inc.day_of_month, dim)
         if (dom === adjusted) {
