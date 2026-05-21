@@ -4,6 +4,10 @@
       <stop offset="0" stop-color="#4F46E5"/>
       <stop offset="1" stop-color="#7C3AED"/>
     </linearGradient>
+    <linearGradient id="coin" x1="190" y1="104" x2="322" y2="252" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FCD34D"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
     <radialGradient id="sheen" cx="0.28" cy="0.18" r="0.95">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
       <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
@@ -11,8 +15,18 @@
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
   <rect width="512" height="512" fill="url(#sheen)"/>
-  <g fill="none" stroke="#ffffff" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M96 336 L200 232 L280 312 L416 176"/>
-    <path d="M320 176 H416 V272"/>
+
+  <!-- euro coin peeking above the wallet -->
+  <circle cx="256" cy="174" r="76" fill="url(#coin)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="17" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M290 140 A 50 50 0 1 0 290 208"/>
+    <path d="M226 158 H286"/>
+    <path d="M226 190 H286"/>
   </g>
+
+  <!-- wallet body -->
+  <rect x="110" y="232" width="292" height="148" rx="38" fill="#ffffff"/>
+  <!-- card slot with clasp -->
+  <rect x="300" y="286" width="102" height="54" rx="27" fill="url(#bg)"/>
+  <circle cx="330" cy="313" r="12" fill="url(#coin)"/>
 </svg>
