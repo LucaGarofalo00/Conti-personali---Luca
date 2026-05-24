@@ -7,7 +7,7 @@ import Modal from '../components/Modal'
 import { cur, EXPENSE_CATEGORIES, todayString, getBillingPeriod } from '../lib/utils'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import InfoBox from '../components/InfoBox'
-import type { RecurringExpense, Fund } from '../types'
+import type { RecurringExpense, Fund, Transaction } from '../types'
 
 const DAYS_OF_WEEK = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
 const MONTHS = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
@@ -63,6 +63,7 @@ export default function RecurringExpenses() {
   const toast = useToast()
   const [items, setItems] = useState<RecurringExpense[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
+  const [periodTx, setPeriodTx] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -71,9 +72,11 @@ export default function RecurringExpenses() {
 
   const load = async () => {
     try {
-      const [{ data: exp, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
+      const { start: pStart, end: pEnd } = getBillingPeriod()
+      const [{ data: exp, error: e1 }, { data: fnd, error: e2 }, txRes] = await Promise.all([
         supabase.from('recurring_expenses').select('*').order('day_of_month'),
         supabase.from('funds').select('*').order('sort_order'),
+        supabase.from('transactions').select('*').gte('date', pStart).lte('date', pEnd),
       ])
       const firstError = e1 || e2
       if (firstError) {
@@ -82,6 +85,7 @@ export default function RecurringExpenses() {
       }
       setItems(exp || [])
       setFunds(fnd || [])
+      if (!txRes.error) setPeriodTx((txRes.data || []).filter(t => !t.is_planned))
     } catch (err) {
       console.error('Errore fatale:', err)
       toast.error('Errore imprevisto (F12 per dettagli)')
@@ -184,6 +188,7 @@ export default function RecurringExpenses() {
     planned: [],
     excludedFundIds: [],
     fromToday: false,
+    actualTx: periodTx,
   })
   const totalExpenses = totalsFromBreakdown(periodBreakdown).expenses
 

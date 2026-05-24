@@ -7,7 +7,7 @@ import Modal from '../components/Modal'
 import { cur, getBillingPeriod } from '../lib/utils'
 import { generateIncomeOccurrences } from '../lib/incomeOccurrences'
 import InfoBox from '../components/InfoBox'
-import type { RecurringIncome, Fund } from '../types'
+import type { RecurringIncome, Fund, Transaction } from '../types'
 
 const DAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
 
@@ -22,6 +22,7 @@ export default function Income() {
   const toast = useToast()
   const [items, setItems] = useState<RecurringIncome[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
+  const [periodTx, setPeriodTx] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -30,9 +31,11 @@ export default function Income() {
 
   const load = async () => {
     try {
-      const [{ data: inc, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
+      const { start: pStart, end: pEnd } = getBillingPeriod()
+      const [{ data: inc, error: e1 }, { data: fnd, error: e2 }, txRes] = await Promise.all([
         supabase.from('recurring_income').select('*').order('created_at'),
         supabase.from('funds').select('*').order('sort_order'),
+        supabase.from('transactions').select('*').gte('date', pStart).lte('date', pEnd),
       ])
       const firstError = e1 || e2
       if (firstError) {
@@ -41,6 +44,7 @@ export default function Income() {
       }
       setItems(inc || [])
       setFunds(fnd || [])
+      if (!txRes.error) setPeriodTx((txRes.data || []).filter(t => !t.is_planned))
     } catch (err) {
       console.error('Errore fatale:', err)
       toast.error('Errore imprevisto (F12 per dettagli)')
@@ -105,8 +109,12 @@ export default function Income() {
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
   const { start: pStart, end: pEnd } = getBillingPeriod()
-  const occurrencesInPeriod = generateIncomeOccurrences(items.filter(i => i.is_active), pStart, pEnd, [])
-  const totalMonthly = occurrencesInPeriod.reduce((s, o) => s + Number(o.income.amount), 0)
+  const occurrencesInPeriod = generateIncomeOccurrences(items.filter(i => i.is_active), pStart, pEnd, periodTx)
+  const totalMonthly = occurrencesInPeriod.reduce((s, o) => {
+    if (o.status === 'skipped') return s
+    if (o.status === 'paid' && o.matchingTx) return s + Number(o.matchingTx.amount)
+    return s + Number(o.income.amount)
+  }, 0)
 
   return (
     <div>

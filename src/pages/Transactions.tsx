@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { cur, TRANSACTION_CATEGORIES, todayString, FUEL_CATEGORY, parseDecimal } from '../lib/utils'
-import { fuelConsumption, previousFuelFill } from '../lib/fuelConsumption'
+import { fuelConsumption, previousFuelFill, averageFuelConsumption, normalizeFuelType, FUEL_TYPE_LABEL, type FuelType } from '../lib/fuelConsumption'
 import InfoBox from '../components/InfoBox'
 import type { Transaction, Fund } from '../types'
 
@@ -17,12 +17,12 @@ const emptyForm = {
   type: 'expense' as 'income' | 'expense' | 'transfer',
   amount: 0, description: '', fund_id: '', fund_to_id: '',
   category: 'altro', date: todayString(),
-  fuel_km: '', fuel_liters: '', fuel_price_per_liter: '',
+  fuel_km: '', fuel_liters: '', fuel_price_per_liter: '', fuel_type: 'gpl' as FuelType,
 }
 
 function isFuelColumnError(msg?: string | null): boolean {
   if (!msg) return false
-  return /fuel_(km|liters|price_per_liter)/.test(msg) && /column|schema|find/i.test(msg)
+  return /fuel_(km|liters|price_per_liter|type)/.test(msg) && /column|schema|find/i.test(msg)
 }
 
 function numToInput(n: number | string | null): string {
@@ -58,6 +58,7 @@ export default function Transactions() {
   const toast = useToast()
   const [items, setItems] = useState<Transaction[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
+  const [fuelFills, setFuelFills] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -86,9 +87,10 @@ export default function Transactions() {
       if (dateFrom) query = query.gte('date', dateFrom)
       if (dateTo) query = query.lte('date', dateTo)
 
-      const [{ data: tx, error: e1 }, { data: fnd, error: e2 }] = await Promise.all([
+      const [{ data: tx, error: e1 }, { data: fnd, error: e2 }, fuelRes] = await Promise.all([
         query,
         reset ? supabase.from('funds').select('*').order('sort_order') : Promise.resolve({ data: funds, error: null }),
+        reset ? supabase.from('transactions').select('*').eq('category', FUEL_CATEGORY) : Promise.resolve({ data: null, error: null }),
       ])
       const firstError = e1 || e2
       if (firstError) {
@@ -98,6 +100,7 @@ export default function Transactions() {
       if (reset) {
         setItems(tx || [])
         setFunds(fnd || [])
+        if (!fuelRes.error) setFuelFills((fuelRes.data || []).filter(t => !t.is_planned))
         setSelectedIds(new Set())
       } else {
         setItems(prev => [...prev, ...(tx || [])])
@@ -123,6 +126,7 @@ export default function Transactions() {
       fuel_km: numToInput(tx.fuel_km),
       fuel_liters: numToInput(tx.fuel_liters),
       fuel_price_per_liter: numToInput(tx.fuel_price_per_liter),
+      fuel_type: normalizeFuelType(tx.fuel_type),
     })
     setShowModal(true)
   }
@@ -143,7 +147,7 @@ export default function Transactions() {
     }
 
     const newTx: Transaction = {
-      ...(editing || { id: '', user_id: '', created_at: '', is_memo: false, is_planned: false, budget_id: null, recurring_expense_id: null, recurring_income_id: null, fuel_km: null, fuel_liters: null, fuel_price_per_liter: null }),
+      ...(editing || { id: '', user_id: '', created_at: '', is_memo: false, is_planned: false, budget_id: null, recurring_expense_id: null, recurring_income_id: null, fuel_km: null, fuel_liters: null, fuel_price_per_liter: null, fuel_type: null }),
       type: form.type,
       amount: form.amount,
       description: form.description,
@@ -159,9 +163,9 @@ export default function Transactions() {
     const isFuel = form.type === 'expense' && form.category === FUEL_CATEGORY
     const hadFuel = !!editing && (editing.fuel_km != null || editing.fuel_liters != null || editing.fuel_price_per_liter != null)
     const fuelFields = isFuel
-      ? { fuel_km: parseDecimal(form.fuel_km) || null, fuel_liters: parseDecimal(form.fuel_liters) || null, fuel_price_per_liter: parseDecimal(form.fuel_price_per_liter) || null }
+      ? { fuel_km: parseDecimal(form.fuel_km) || null, fuel_liters: parseDecimal(form.fuel_liters) || null, fuel_price_per_liter: parseDecimal(form.fuel_price_per_liter) || null, fuel_type: form.fuel_type }
       : hadFuel
-        ? { fuel_km: null, fuel_liters: null, fuel_price_per_liter: null }
+        ? { fuel_km: null, fuel_liters: null, fuel_price_per_liter: null, fuel_type: null }
         : {}
 
     const payload = {
@@ -263,6 +267,11 @@ export default function Transactions() {
     }
     return dups
   }, [items])
+
+  const avgByType = useMemo(() => ({
+    benzina: averageFuelConsumption(fuelFills, 'benzina'),
+    gpl: averageFuelConsumption(fuelFills, 'gpl'),
+  }), [fuelFills])
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
@@ -422,15 +431,19 @@ export default function Transactions() {
               const fundToName = funds.find(f => f.id === tx.fund_to_id)?.name
               const isSelected = selectedIds.has(tx.id)
               const isDuplicate = duplicateGroups.has(tx.id)
+              const isFuelTx = tx.category === FUEL_CATEGORY
+              const txFuelType = normalizeFuelType(tx.fuel_type)
               const fuelParts: string[] = []
+              if (isFuelTx && (tx.fuel_km != null || tx.fuel_liters != null)) fuelParts.push(FUEL_TYPE_LABEL[txFuelType])
               if (tx.fuel_km != null) fuelParts.push(`${Number(tx.fuel_km).toLocaleString('it-IT')} km`)
               if (tx.fuel_liters != null) fuelParts.push(`${Number(tx.fuel_liters).toLocaleString('it-IT')} L`)
               if (tx.fuel_price_per_liter != null) fuelParts.push(`${Number(tx.fuel_price_per_liter).toLocaleString('it-IT', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} €/L`)
               const fuelLine = fuelParts.join(' · ')
-              const prevFill = tx.category === FUEL_CATEGORY && tx.fuel_km != null ? previousFuelFill(tx, items) : null
+              const prevFill = isFuelTx && tx.fuel_km != null ? previousFuelFill(tx, fuelFills) : null
               const cons = prevFill && prevFill.fuel_liters != null
                 ? fuelConsumption(Number(tx.fuel_km), Number(prevFill.fuel_liters), Number(prevFill.amount))
                 : null
+              const avg = isFuelTx && tx.fuel_km != null ? avgByType[txFuelType] : null
               return (
                 <div
                   key={tx.id}
@@ -464,6 +477,12 @@ export default function Transactions() {
                         <p className="text-[11px] text-emerald-600/90">
                           Pieno prec.: {cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l · {cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
                           {cons.costPerKm != null && ` · ${cur(cons.costPerKm)}/km`}
+                        </p>
+                      )}
+                      {avg && (
+                        <p className="text-[11px] text-slate-400">
+                          Media {FUEL_TYPE_LABEL[txFuelType]}: {avg.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l · {avg.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
+                          {avg.costPerKm != null && ` · ${cur(avg.costPerKm)}/km`}
                         </p>
                       )}
                     </div>
@@ -547,6 +566,21 @@ export default function Transactions() {
           {form.type === 'expense' && form.category === FUEL_CATEGORY && (
             <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dati rifornimento (facoltativi)</p>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Tipo carburante</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['gpl', 'benzina'] as const).map(ft => (
+                    <button
+                      key={ft}
+                      type="button"
+                      onClick={() => setForm({ ...form, fuel_type: ft })}
+                      className={`py-2 rounded-lg text-sm font-medium border transition ${form.fuel_type === ft ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {FUEL_TYPE_LABEL[ft]}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Km percorsi</label>
@@ -580,24 +614,33 @@ export default function Transactions() {
                 </div>
               </div>
               {(() => {
+                const avg = avgByType[form.fuel_type]
                 const km = parseDecimal(form.fuel_km)
-                if (km <= 0) return null
-                const ref = editing ?? { id: '', date: form.date, created_at: new Date().toISOString() }
-                const prev = previousFuelFill(ref, items)
-                if (!prev || prev.fuel_liters == null) {
-                  return <p className="text-[11px] text-amber-600">Nessun rifornimento precedente con i litri: il consumo non è calcolabile.</p>
-                }
-                const cons = fuelConsumption(km, Number(prev.fuel_liters), Number(prev.amount))
-                if (!cons) return null
+                const ref = { id: editing?.id ?? '', date: form.date, created_at: editing?.created_at ?? new Date().toISOString(), fuel_type: form.fuel_type }
+                const prev = km > 0 ? previousFuelFill(ref, fuelFills) : null
+                const cons = prev && prev.fuel_liters != null ? fuelConsumption(km, Number(prev.fuel_liters), Number(prev.amount)) : null
                 return (
-                  <p className="text-xs text-slate-600">
-                    Consumo pieno precedente: <span className="font-semibold text-slate-800">{cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
-                    {' · '}{cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
-                    {cons.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(cons.costPerKm)}/km</span></>}
-                  </p>
+                  <div className="space-y-1">
+                    {km > 0 && (cons ? (
+                      <p className="text-xs text-slate-600">
+                        Consumo pieno precedente ({FUEL_TYPE_LABEL[form.fuel_type]}): <span className="font-semibold text-slate-800">{cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
+                        {' · '}{cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
+                        {cons.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(cons.costPerKm)}/km</span></>}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-amber-600">Nessun rifornimento {FUEL_TYPE_LABEL[form.fuel_type]} precedente con i litri: il consumo del pieno non è calcolabile.</p>
+                    ))}
+                    {avg && (
+                      <p className="text-xs text-slate-600">
+                        Media totale {FUEL_TYPE_LABEL[form.fuel_type]}: <span className="font-semibold text-slate-800">{avg.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
+                        {' · '}{avg.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
+                        {avg.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(avg.costPerKm)}/km</span></>}
+                      </p>
+                    )}
+                  </div>
                 )
               })()}
-              <p className="text-[11px] text-slate-400">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong>. Servono solo per i consumi: non modificano l'importo.</p>
+              <p className="text-[11px] text-slate-400">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong> dello stesso tipo. Servono solo per i consumi: non modificano l'importo.</p>
             </div>
           )}
           <button onClick={save} disabled={form.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">

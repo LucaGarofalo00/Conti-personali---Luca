@@ -28,6 +28,11 @@ interface Args {
   planned: Transaction[]
   excludedFundIds: string[]
   fromToday?: boolean
+  // Transazioni reali (non pianificate) del periodo, per riconciliare le occorrenze ricorrenti
+  // con ciò che è davvero successo: se un'occorrenza è stata confermata si usa l'importo
+  // effettivo, se è stata segnata come memo (es. "non lavorato") non viene contata.
+  // Se omesso, il breakdown resta una pura proiezione (comportamento storico).
+  actualTx?: Transaction[]
 }
 
 const SOURCE_LABELS: Record<BreakdownSource, string> = {
@@ -38,12 +43,36 @@ const SOURCE_LABELS: Record<BreakdownSource, string> = {
   transfer: 'Trasferimento',
 }
 
+type Reconciled = { amount: number } | 'skip' | null
+
 export function getPeriodBreakdown(args: Args): BreakdownItem[] {
-  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false } = args
+  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false, actualTx } = args
   const excluded = new Set(excludedFundIds)
   const items: BreakdownItem[] = []
   const today = startOfDay(new Date())
   const lowerBound = fromToday && isAfter(today, startDate) ? today : startDate
+
+  // Mappe per riconciliare le occorrenze con le transazioni reali collegate.
+  const incomeActual = new Map<string, Transaction>()
+  const expenseActual = new Map<string, Transaction>()
+  if (actualTx) {
+    for (const tx of actualTx) {
+      if (tx.is_planned) continue
+      if (tx.recurring_income_id) incomeActual.set(`${tx.recurring_income_id}|${tx.date}`, tx)
+      if (tx.recurring_expense_id) expenseActual.set(`${tx.recurring_expense_id}|${tx.date}`, tx)
+    }
+  }
+
+  // null  → nessuna riconciliazione (usa l'importo previsto)
+  // 'skip' → occorrenza gestita ma senza movimento reale (memo / "non lavorato"): non contare
+  // {amount} → occorrenza confermata: usa l'importo effettivo
+  const reconcile = (map: Map<string, Transaction>, key: string): Reconciled => {
+    if (!actualTx) return null
+    const tx = map.get(key)
+    if (!tx) return null
+    if (tx.is_memo) return 'skip'
+    return { amount: Number(tx.amount) }
+  }
 
   const cursor = new Date(lowerBound)
   while (!isAfter(cursor, endDate)) {
@@ -59,19 +88,25 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       if (inc.frequency === 'monthly' && inc.day_of_month !== null) {
         const adjusted = Math.min(inc.day_of_month, dim)
         if (dom === adjusted) {
-          items.push({
-            date: dateStr, description: inc.name, amount: Number(inc.amount),
-            kind: 'income', source: 'recurring_income', sourceLabel: SOURCE_LABELS.recurring_income,
-          })
+          const r = reconcile(incomeActual, `${inc.id}|${dateStr}`)
+          if (r !== 'skip') {
+            items.push({
+              date: dateStr, description: inc.name, amount: r ? r.amount : Number(inc.amount),
+              kind: 'income', source: 'recurring_income', sourceLabel: SOURCE_LABELS.recurring_income,
+            })
+          }
         }
       } else if (inc.frequency === 'weekly' && inc.day_of_week !== null) {
         const delayDays = inc.delay_days || 0
         const baseDay = addDays(cursor, -delayDays)
         if (getDay(baseDay) === inc.day_of_week) {
-          items.push({
-            date: dateStr, description: inc.name, amount: Number(inc.amount),
-            kind: 'income', source: 'recurring_income', sourceLabel: SOURCE_LABELS.recurring_income,
-          })
+          const r = reconcile(incomeActual, `${inc.id}|${toDateString(baseDay)}`)
+          if (r !== 'skip') {
+            items.push({
+              date: dateStr, description: inc.name, amount: r ? r.amount : Number(inc.amount),
+              kind: 'income', source: 'recurring_income', sourceLabel: SOURCE_LABELS.recurring_income,
+            })
+          }
         }
       }
     }
@@ -94,15 +129,18 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         if (dom === adjusted && cursor.getMonth() + 1 === exp.month_of_year) occurs = true
       }
       if (occurs) {
-        items.push({
-          date: dateStr,
-          description: exp.name + (freq === 'yearly' ? ' (annuale)' : ''),
-          amount: Number(exp.amount),
-          kind: 'expense',
-          source: 'recurring_expense',
-          sourceLabel: SOURCE_LABELS.recurring_expense,
-          category: exp.category,
-        })
+        const r = reconcile(expenseActual, `${exp.id}|${dateStr}`)
+        if (r !== 'skip') {
+          items.push({
+            date: dateStr,
+            description: exp.name + (freq === 'yearly' ? ' (annuale)' : ''),
+            amount: r ? r.amount : Number(exp.amount),
+            kind: 'expense',
+            source: 'recurring_expense',
+            sourceLabel: SOURCE_LABELS.recurring_expense,
+            category: exp.category,
+          })
+        }
       }
     }
 

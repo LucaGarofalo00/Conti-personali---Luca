@@ -15,7 +15,7 @@ function mkTx(date: string, amount: number): Transaction {
     description: 'spesa', fund_id: null, fund_to_id: null, category: 'budget',
     budget_id: 'b1', recurring_expense_id: null, recurring_income_id: null,
     is_memo: false, is_planned: false,
-    fuel_km: null, fuel_liters: null, fuel_price_per_liter: null,
+    fuel_km: null, fuel_liters: null, fuel_price_per_liter: null, fuel_type: null,
     date, created_at: date,
   }
 }

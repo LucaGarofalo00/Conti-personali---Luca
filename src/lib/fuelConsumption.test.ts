@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fuelConsumption, previousFuelFill } from './fuelConsumption'
+import { fuelConsumption, previousFuelFill, averageFuelConsumption } from './fuelConsumption'
 import type { Transaction } from '../types'
 
 function mkFuelTx(opts: {
@@ -11,6 +11,7 @@ function mkFuelTx(opts: {
   amount?: number
   category?: string
   is_planned?: boolean
+  fuel_type?: 'benzina' | 'gpl' | null
 }): Transaction {
   return {
     id: opts.id, user_id: 'u', type: 'expense', amount: opts.amount ?? 0,
@@ -19,6 +20,7 @@ function mkFuelTx(opts: {
     budget_id: null, recurring_expense_id: null, recurring_income_id: null,
     is_memo: false, is_planned: opts.is_planned ?? false,
     fuel_km: opts.km ?? null, fuel_liters: opts.liters ?? null, fuel_price_per_liter: null,
+    fuel_type: opts.fuel_type ?? null,
     date: opts.date, created_at: opts.created_at ?? opts.date,
   }
 }
@@ -84,5 +86,54 @@ describe('previousFuelFill', () => {
   it('restituisce il precedente anche senza litri (sarà il chiamante a verificarli)', () => {
     const noLiters = mkFuelTx({ id: 'nl', date: '2026-01-20', liters: null, km: 100 })
     expect(previousFuelFill(t3, [t1, t2, t3, noLiters])?.id).toBe('nl')
+  })
+
+  it('considera solo i rifornimenti dello stesso tipo', () => {
+    const gpl1 = mkFuelTx({ id: 'g1', date: '2026-01-05', liters: 40, fuel_type: 'gpl' })
+    const ben1 = mkFuelTx({ id: 'b1', date: '2026-01-10', liters: 30, fuel_type: 'benzina' })
+    const gpl2 = mkFuelTx({ id: 'g2', date: '2026-01-20', km: 500, fuel_type: 'gpl' })
+    // Per il pieno GPL il precedente è l'altro GPL, non la benzina più recente.
+    expect(previousFuelFill(gpl2, [gpl1, ben1, gpl2])?.id).toBe('g1')
+  })
+
+  it('i rifornimenti senza tipo sono trattati come benzina', () => {
+    const old = mkFuelTx({ id: 'o', date: '2026-01-05', liters: 30, fuel_type: null })
+    const ben = mkFuelTx({ id: 'b', date: '2026-01-20', km: 400, fuel_type: 'benzina' })
+    expect(previousFuelFill(ben, [old, ben])?.id).toBe('o')
+  })
+})
+
+describe('averageFuelConsumption', () => {
+  it('media = somma km / somma litri sui pieni consecutivi dello stesso tipo', () => {
+    // benzina: f1(30L) -> f2(km300,32L) -> f3(km420)
+    // coppie: 300/30 e 420/32 => kmSum=720, litriSum=62
+    const f1 = mkFuelTx({ id: 'f1', date: '2026-01-01', liters: 30, amount: 45, fuel_type: 'benzina' })
+    const f2 = mkFuelTx({ id: 'f2', date: '2026-01-15', liters: 32, km: 300, amount: 48, fuel_type: 'benzina' })
+    const f3 = mkFuelTx({ id: 'f3', date: '2026-02-01', km: 420, fuel_type: 'benzina' })
+    const avg = averageFuelConsumption([f1, f2, f3], 'benzina')
+    expect(avg).not.toBeNull()
+    expect(avg!.kmPerLiter).toBeCloseTo(720 / 62, 4)
+    expect(avg!.litersPer100Km).toBeCloseTo((62 / 720) * 100, 4)
+    expect(avg!.costPerKm).toBeCloseTo((45 + 48) / 720, 4)
+  })
+
+  it('separa i tipi: la media GPL ignora i pieni di benzina', () => {
+    const ben = mkFuelTx({ id: 'b1', date: '2026-01-01', liters: 30, km: 999, fuel_type: 'benzina' })
+    const gpl1 = mkFuelTx({ id: 'g1', date: '2026-01-05', liters: 40, amount: 30, fuel_type: 'gpl' })
+    const gpl2 = mkFuelTx({ id: 'g2', date: '2026-01-20', km: 360, fuel_type: 'gpl' })
+    const avg = averageFuelConsumption([ben, gpl1, gpl2], 'gpl')
+    expect(avg!.kmPerLiter).toBeCloseTo(360 / 40, 4)
+  })
+
+  it('senza almeno due pieni utilizzabili restituisce null', () => {
+    const f1 = mkFuelTx({ id: 'f1', date: '2026-01-01', liters: 30, fuel_type: 'gpl' })
+    expect(averageFuelConsumption([f1], 'gpl')).toBeNull()
+  })
+
+  it('costPerKm null se manca il costo di un pieno precedente', () => {
+    const f1 = mkFuelTx({ id: 'f1', date: '2026-01-01', liters: 30, amount: 0, fuel_type: 'benzina' })
+    const f2 = mkFuelTx({ id: 'f2', date: '2026-01-15', km: 300, fuel_type: 'benzina' })
+    const avg = averageFuelConsumption([f1, f2], 'benzina')
+    expect(avg!.costPerKm).toBeNull()
   })
 })

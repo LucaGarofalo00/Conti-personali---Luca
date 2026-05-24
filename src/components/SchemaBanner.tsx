@@ -34,6 +34,7 @@ alter table transactions add column if not exists fund_to_id uuid references fun
 alter table transactions add column if not exists fuel_km numeric(10,2);
 alter table transactions add column if not exists fuel_liters numeric(10,2);
 alter table transactions add column if not exists fuel_price_per_liter numeric(10,3);
+alter table transactions add column if not exists fuel_type text;
 alter table recurring_expenses add column if not exists auto_deduct boolean not null default false;
 alter table recurring_expenses add column if not exists fund_to_id uuid references funds(id) on delete set null;
 alter table recurring_expenses add column if not exists type text not null default 'expense';

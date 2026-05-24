@@ -21,7 +21,7 @@ import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
 import { generateIncomeOccurrences, type IncomeOccurrence } from '../lib/incomeOccurrences'
-import { fuelConsumption } from '../lib/fuelConsumption'
+import { fuelConsumption, previousFuelFill, averageFuelConsumption, FUEL_TYPE_LABEL, type FuelType } from '../lib/fuelConsumption'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
 interface PendingItem {
@@ -41,11 +41,11 @@ interface PendingItem {
   occurrence_date?: string
 }
 
-const FUEL_COLUMNS = ['transactions.fuel_km', 'transactions.fuel_liters', 'transactions.fuel_price_per_liter']
+const FUEL_COLUMNS = ['transactions.fuel_km', 'transactions.fuel_liters', 'transactions.fuel_price_per_liter', 'transactions.fuel_type']
 
 function isFuelColumnError(msg?: string | null): boolean {
   if (!msg) return false
-  return /fuel_(km|liters|price_per_liter)/.test(msg) && /column|schema|find/i.test(msg)
+  return /fuel_(km|liters|price_per_liter|type)/.test(msg) && /column|schema|find/i.test(msg)
 }
 
 function formatItalianDayMonth(d: Date): string {
@@ -85,7 +85,8 @@ export default function Dashboard() {
   const [confirmFuelKm, setConfirmFuelKm] = useState('')
   const [confirmFuelLiters, setConfirmFuelLiters] = useState('')
   const [confirmFuelPrice, setConfirmFuelPrice] = useState('')
-  const [confirmPrevFill, setConfirmPrevFill] = useState<{ liters: number; cost: number } | null>(null)
+  const [confirmFuelType, setConfirmFuelType] = useState<FuelType>('gpl')
+  const [confirmFuelFills, setConfirmFuelFills] = useState<Transaction[]>([])
 
   const [plannedModal, setPlannedModal] = useState(false)
   const [plannedListOpen, setPlannedListOpen] = useState(false)
@@ -296,27 +297,20 @@ export default function Dashboard() {
     setConfirmFuelKm('')
     setConfirmFuelLiters('')
     setConfirmFuelPrice('')
-    setConfirmPrevFill(null)
+    setConfirmFuelType('gpl')
+    setConfirmFuelFills([])
     if (item.kind === 'expense' && item.category === FUEL_CATEGORY) {
-      void loadPrevFuelFill(item.occurrence_date || todayString())
+      void loadFuelFills()
     }
   }
 
-  const loadPrevFuelFill = async (beforeDate: string) => {
+  const loadFuelFills = async () => {
     const { data, error } = await supabase
       .from('transactions')
-      .select('amount, fuel_liters, date, created_at')
+      .select('*')
       .eq('category', FUEL_CATEGORY)
-      .eq('is_planned', false)
-      .lte('date', beforeDate)
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
     if (error) return
-    const prev = data?.[0]
-    if (prev && prev.fuel_liters != null && Number(prev.fuel_liters) > 0) {
-      setConfirmPrevFill({ liters: Number(prev.fuel_liters), cost: Number(prev.amount) })
-    }
+    setConfirmFuelFills((data || []).filter(t => !t.is_planned))
   }
 
   const handleConfirm = async () => {
@@ -332,6 +326,7 @@ export default function Dashboard() {
       fuel_km: parseDecimal(confirmFuelKm) || null,
       fuel_liters: parseDecimal(confirmFuelLiters) || null,
       fuel_price_per_liter: parseDecimal(confirmFuelPrice) || null,
+      fuel_type: confirmFuelType,
     } : {}
 
     const { error: insertError } = await supabase.from('transactions').insert({
@@ -458,6 +453,7 @@ export default function Dashboard() {
       fuel_km: parseDecimal(confirmFuelKm) || null,
       fuel_liters: parseDecimal(confirmFuelLiters) || null,
       fuel_price_per_liter: parseDecimal(confirmFuelPrice) || null,
+      fuel_type: confirmFuelType,
     } : {}
 
     const { error: insertError } = await supabase.from('transactions').insert({
@@ -507,6 +503,7 @@ export default function Dashboard() {
     planned: plannedInPeriod,
     excludedFundIds,
     fromToday: false,
+    actualTx: periodTx,
   })
   const est = totalsFromBreakdown(periodBreakdown)
   const periodNet = Math.round((est.income - est.expenses) * 100) / 100
@@ -929,6 +926,21 @@ export default function Dashboard() {
             {confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY && (
               <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dati rifornimento (facoltativi)</p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Tipo carburante</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['gpl', 'benzina'] as const).map(ft => (
+                      <button
+                        key={ft}
+                        type="button"
+                        onClick={() => setConfirmFuelType(ft)}
+                        className={`py-2 rounded-lg text-sm font-medium border transition ${confirmFuelType === ft ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        {FUEL_TYPE_LABEL[ft]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Km percorsi</label>
@@ -962,22 +974,34 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {(() => {
+                  const avg = averageFuelConsumption(confirmFuelFills, confirmFuelType)
                   const km = parseDecimal(confirmFuelKm)
-                  if (km <= 0) return null
-                  if (!confirmPrevFill) {
-                    return <p className="text-[11px] text-amber-600">Nessun rifornimento precedente con i litri: il consumo non è calcolabile.</p>
-                  }
-                  const cons = fuelConsumption(km, confirmPrevFill.liters, confirmPrevFill.cost)
-                  if (!cons) return null
+                  const beforeDate = confirmItem.occurrence_date || todayString()
+                  const ref = { id: '', date: beforeDate, created_at: new Date().toISOString(), fuel_type: confirmFuelType }
+                  const prev = km > 0 ? previousFuelFill(ref, confirmFuelFills) : null
+                  const cons = prev && prev.fuel_liters != null ? fuelConsumption(km, Number(prev.fuel_liters), Number(prev.amount)) : null
                   return (
-                    <p className="text-xs text-slate-600">
-                      Consumo pieno precedente: <span className="font-semibold text-slate-800">{cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
-                      {' · '}{cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
-                      {cons.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(cons.costPerKm)}/km</span></>}
-                    </p>
+                    <div className="space-y-1">
+                      {km > 0 && (cons ? (
+                        <p className="text-xs text-slate-600">
+                          Consumo pieno precedente ({FUEL_TYPE_LABEL[confirmFuelType]}): <span className="font-semibold text-slate-800">{cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
+                          {' · '}{cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
+                          {cons.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(cons.costPerKm)}/km</span></>}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-amber-600">Nessun rifornimento {FUEL_TYPE_LABEL[confirmFuelType]} precedente con i litri: il consumo del pieno non è calcolabile.</p>
+                      ))}
+                      {avg && (
+                        <p className="text-xs text-slate-600">
+                          Media totale {FUEL_TYPE_LABEL[confirmFuelType]}: <span className="font-semibold text-slate-800">{avg.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
+                          {' · '}{avg.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
+                          {avg.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(avg.costPerKm)}/km</span></>}
+                        </p>
+                      )}
+                    </div>
                   )
                 })()}
-                <p className="text-[11px] text-slate-400">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong>. Servono solo per i consumi: non modificano l'importo pagato qui sopra.</p>
+                <p className="text-[11px] text-slate-400">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong> dello stesso tipo. Servono solo per i consumi: non modificano l'importo pagato qui sopra.</p>
               </div>
             )}
             {confirmItem.kind !== 'transfer' && (
@@ -1015,6 +1039,7 @@ export default function Dashboard() {
             recurringExpenses: expenses, recurringIncome: income,
             weeklyBudgets: budgets, planned,
             excludedFundIds, fromToday: false,
+            actualTx: periodTx,
           })
           return (
             <div className="space-y-3">

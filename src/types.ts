@@ -75,6 +75,7 @@ export interface Transaction {
   fuel_km: number | null
   fuel_liters: number | null
   fuel_price_per_liter: number | null
+  fuel_type: 'benzina' | 'gpl' | null
   date: string
   created_at: string
 }

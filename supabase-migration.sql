@@ -34,6 +34,8 @@ alter table transactions add column if not exists is_planned boolean not null de
 alter table transactions add column if not exists fuel_km numeric(10,2);
 alter table transactions add column if not exists fuel_liters numeric(10,2);
 alter table transactions add column if not exists fuel_price_per_liter numeric(10,3);
+-- Tipo di carburante del rifornimento ('benzina' o 'gpl'), per consumi separati su auto bifuel
+alter table transactions add column if not exists fuel_type text;
 
 -- Indici opzionali per performance
 create index if not exists idx_transactions_planned on transactions(user_id, is_planned);

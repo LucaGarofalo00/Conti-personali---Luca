@@ -35,7 +35,7 @@ function mkPlanned(id: string, amount: number, type: 'income' | 'expense', date:
     fund_id, fund_to_id: null, category: 'altro', budget_id: null,
     recurring_expense_id: null, recurring_income_id: null,
     is_memo: false, is_planned: true,
-    fuel_km: null, fuel_liters: null, fuel_price_per_liter: null,
+    fuel_km: null, fuel_liters: null, fuel_price_per_liter: null, fuel_type: null,
     date, created_at: '',
   }
 }
