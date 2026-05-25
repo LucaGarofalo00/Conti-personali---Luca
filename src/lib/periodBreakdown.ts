@@ -8,6 +8,7 @@ export type BreakdownSource =
   | 'weekly_budget'
   | 'planned'
   | 'transfer'
+  | 'actual'
 
 export interface BreakdownItem {
   date: string
@@ -41,6 +42,7 @@ const SOURCE_LABELS: Record<BreakdownSource, string> = {
   weekly_budget: 'Budget settimanale',
   planned: 'Pianificata',
   transfer: 'Trasferimento',
+  actual: 'Già avvenuta',
 }
 
 type Reconciled = { amount: number } | 'skip' | null

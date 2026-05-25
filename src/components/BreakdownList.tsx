@@ -12,6 +12,7 @@ const SOURCE_COLORS: Record<string, string> = {
   variable_monthly: 'bg-amber-100 text-amber-700',
   planned: 'bg-purple-100 text-purple-700',
   transfer: 'bg-blue-100 text-blue-700',
+  actual: 'bg-slate-200 text-slate-600',
 }
 
 interface Props {
@@ -28,29 +29,35 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
     return <p className="text-xs text-slate-400 italic py-2 text-center">{emptyText}</p>
   }
 
-  const total = filtered.reduce((s, i) => s + i.amount, 0)
-  const incomeTotal = filtered.filter(i => i.kind === 'income').reduce((s, i) => s + i.amount, 0)
-  const expenseTotal = filtered.filter(i => i.kind === 'expense').reduce((s, i) => s + i.amount, 0)
+  // Le voci "già avvenute" (transazioni reali del periodo) sono solo informative:
+  // sono già riflesse nel saldo di partenza, quindi non entrano nei totali proiettati.
+  const projected = filtered.filter(i => i.source !== 'actual')
+  const total = projected.reduce((s, i) => s + i.amount, 0)
+  const incomeTotal = projected.filter(i => i.kind === 'income').reduce((s, i) => s + i.amount, 0)
+  const expenseTotal = projected.filter(i => i.kind === 'expense').reduce((s, i) => s + i.amount, 0)
 
   return (
     <div className={`space-y-1 ${compact ? 'text-xs' : 'text-sm'}`}>
-      {filtered.map((item, idx) => (
-        <div key={idx} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded hover:bg-slate-50">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            {item.kind === 'income'
-              ? <ArrowDownRight className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              : <ArrowUpRight className="w-3.5 h-3.5 text-red-500 shrink-0" />}
-            <span className="text-slate-500 shrink-0 tabular-nums">{format(new Date(item.date), 'd MMM', { locale: it })}</span>
-            <span className="text-slate-700 truncate">{item.description}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase shrink-0 ${SOURCE_COLORS[item.source] || 'bg-slate-100 text-slate-600'}`}>
-              {item.sourceLabel}
+      {filtered.map((item, idx) => {
+        const isActual = item.source === 'actual'
+        return (
+          <div key={idx} className={`flex items-center justify-between gap-2 py-1.5 px-2 rounded hover:bg-slate-50 ${isActual ? 'opacity-60' : ''}`}>
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {item.kind === 'income'
+                ? <ArrowDownRight className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                : <ArrowUpRight className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+              <span className="text-slate-500 shrink-0 tabular-nums">{format(new Date(item.date), 'd MMM', { locale: it })}</span>
+              <span className="text-slate-700 truncate">{item.description}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase shrink-0 ${SOURCE_COLORS[item.source] || 'bg-slate-100 text-slate-600'}`}>
+                {item.sourceLabel}
+              </span>
+            </div>
+            <span className={`font-medium tabular-nums shrink-0 ${item.kind === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
+              {item.kind === 'income' ? '+' : '-'}{cur(item.amount)}
             </span>
           </div>
-          <span className={`font-medium tabular-nums shrink-0 ${item.kind === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
-            {item.kind === 'income' ? '+' : '-'}{cur(item.amount)}
-          </span>
-        </div>
-      ))}
+        )
+      })}
       <div className="border-t border-slate-200 pt-2 mt-2 flex items-center justify-between text-xs text-slate-600">
         {kind === 'both' ? (
           <>

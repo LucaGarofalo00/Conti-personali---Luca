@@ -10,7 +10,7 @@ import FundExcluder from '../components/FundExcluder'
 import InfoBox from '../components/InfoBox'
 import BreakdownList from '../components/BreakdownList'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
-import { getPeriodBreakdown } from '../lib/periodBreakdown'
+import { getPeriodBreakdown, type BreakdownItem } from '../lib/periodBreakdown'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { cur, getBillingPeriodFor, toDateString } from '../lib/utils'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction, ForecastPoint } from '../types'
@@ -28,6 +28,30 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
   )
 }
 
+// Transazioni reali (già avvenute) del periodo, da mostrare nel breakdown come voci
+// informative. Escluse: memo, trasferimenti (non contati in previsione) e quelle
+// generate da ricorrenti (già rappresentate dalle regole proiettate). Sono già nel
+// saldo di partenza, quindi non entrano nei totali (vedi BreakdownList).
+function buildActualItems(actualTx: Transaction[], excludedFundIds: string[], startDate: Date, endDate: Date): BreakdownItem[] {
+  const s = toDateString(startDate)
+  const e = toDateString(endDate)
+  const excluded = new Set(excludedFundIds)
+  return actualTx
+    .filter(t => !t.is_memo && t.type !== 'transfer')
+    .filter(t => !t.recurring_expense_id && !t.recurring_income_id)
+    .filter(t => !(t.fund_id && excluded.has(t.fund_id)))
+    .filter(t => t.date >= s && t.date <= e)
+    .map(t => ({
+      date: t.date,
+      description: t.description || (t.type === 'income' ? 'Entrata' : 'Uscita'),
+      amount: Number(t.amount),
+      kind: (t.type === 'income' ? 'income' : 'expense') as 'income' | 'expense',
+      source: 'actual' as const,
+      sourceLabel: 'Già avvenuta',
+      category: t.category,
+    }))
+}
+
 export default function Forecast() {
   const { user } = useAuth()
   const toast = useToast()
@@ -36,6 +60,7 @@ export default function Forecast() {
   const [income, setIncome] = useState<RecurringIncome[]>([])
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
   const [planned, setPlanned] = useState<Transaction[]>([])
+  const [actualTx, setActualTx] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [targetDate, setTargetDate] = useState(() => toDateString(addMonths(new Date(), 6)))
   const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
@@ -52,14 +77,16 @@ export default function Forecast() {
 
   useEffect(() => {
     if (!user) return
+    const curPeriodStart = getBillingPeriodFor(new Date()).start
     Promise.all([
       supabase.from('funds').select('*').order('sort_order'),
       supabase.from('recurring_expenses').select('*'),
       supabase.from('recurring_income').select('*'),
       supabase.from('weekly_budgets').select('*'),
       supabase.from('transactions').select('*').eq('is_planned', true),
-    ]).then(([f, e, i, b, p]) => {
-      const firstError = [f, e, i, b, p].find(r => r.error)?.error
+      supabase.from('transactions').select('*').eq('is_planned', false).gte('date', curPeriodStart),
+    ]).then(([f, e, i, b, p, a]) => {
+      const firstError = [f, e, i, b, p, a].find(r => r.error)?.error
       if (firstError) {
         console.error('Errore Supabase:', firstError)
         toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
@@ -69,6 +96,7 @@ export default function Forecast() {
       setIncome(i.data || [])
       setBudgets(b.data || [])
       setPlanned(p.data || [])
+      setActualTx(a.data || [])
     }).catch(err => {
       console.error('Errore fatale:', err)
       toast.error('Errore imprevisto (F12 per dettagli)')
@@ -264,16 +292,19 @@ export default function Forecast() {
               {monthlyData.map(row => {
                 const isOpen = expandedPeriods.has(row.month)
                 const effectiveEnd = targetDateObj < row.endDate ? targetDateObj : row.endDate
-                const breakdown = isOpen ? getPeriodBreakdown({
-                  startDate: row.startDate,
-                  endDate: effectiveEnd,
-                  recurringExpenses: expenses,
-                  recurringIncome: income,
-                  weeklyBudgets: budgets,
-                  planned,
-                  excludedFundIds,
-                  fromToday: true,
-                }) : []
+                const breakdown = isOpen ? [
+                  ...getPeriodBreakdown({
+                    startDate: row.startDate,
+                    endDate: effectiveEnd,
+                    recurringExpenses: expenses,
+                    recurringIncome: income,
+                    weeklyBudgets: budgets,
+                    planned,
+                    excludedFundIds,
+                    fromToday: true,
+                  }),
+                  ...buildActualItems(actualTx, excludedFundIds, row.startDate, effectiveEnd),
+                ].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0) : []
                 return (
                   <Fragment key={row.month}>
                     <tr
