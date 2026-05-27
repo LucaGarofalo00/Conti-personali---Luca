@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ArrowRightLeft, Zap, Han
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import { cur, EXPENSE_CATEGORIES, todayString, getBillingPeriod } from '../lib/utils'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
@@ -61,6 +62,7 @@ function nextDueDate(exp: RecurringExpense, from: Date): Date {
 export default function RecurringExpenses() {
   const { user } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [items, setItems] = useState<RecurringExpense[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
   const [periodTx, setPeriodTx] = useState<Transaction[]>([])
@@ -156,7 +158,7 @@ export default function RecurringExpenses() {
   }
 
   const remove = async (id: string) => {
-    if (!confirm('Eliminare questa voce?')) return
+    if (!(await confirm({ message: 'Eliminare questa voce?', confirmText: 'Elimina', danger: true }))) return
     const { error } = await supabase.from('recurring_expenses').delete().eq('id', id)
     if (error) { toast.error('Errore nell\'eliminazione'); return }
     toast.success('Eliminata')
@@ -228,7 +230,7 @@ export default function RecurringExpenses() {
             return (
               <div key={item.id} className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between transition ${!item.is_active ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-4">
-                  <button onClick={() => toggle(item)} className="text-slate-400 hover:text-blue-600 transition">
+                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva voce' : 'Attiva voce'} className="text-slate-400 hover:text-blue-600 transition">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <div>
@@ -258,8 +260,8 @@ export default function RecurringExpenses() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`text-lg font-semibold ${isTransfer ? 'text-blue-500' : 'text-red-500'}`}>{cur(Number(item.amount))}</span>
-                  <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => remove(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => openEdit(item)} aria-label="Modifica voce" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
             )
@@ -279,7 +281,7 @@ export default function RecurringExpenses() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-semibold text-slate-400">{cur(Number(item.amount))}</span>
-                    <button onClick={() => remove(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               ))}

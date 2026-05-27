@@ -5,8 +5,10 @@ import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import { cur, TRANSACTION_CATEGORIES, todayString, FUEL_CATEGORY, parseDecimal } from '../lib/utils'
+import { incrementFundBalance } from '../lib/fundBalances'
 import { fuelConsumption, previousFuelFill, averageFuelConsumption, normalizeFuelType, FUEL_TYPE_LABEL, type FuelType } from '../lib/fuelConsumption'
 import InfoBox from '../components/InfoBox'
 import type { Transaction, Fund } from '../types'
@@ -45,17 +47,14 @@ function txBalanceDelta(tx: Transaction): { fundId: string; delta: number }[] {
 
 async function applyFundDeltas(deltas: Map<string, number>) {
   for (const [fundId, delta] of deltas) {
-    if (delta === 0) continue
-    const { data: fund } = await supabase.from('funds').select('balance').eq('id', fundId).single()
-    if (fund) {
-      await supabase.from('funds').update({ balance: Number(fund.balance) + delta }).eq('id', fundId)
-    }
+    await incrementFundBalance(fundId, delta)
   }
 }
 
 export default function Transactions() {
   const { user } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [items, setItems] = useState<Transaction[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
   const [fuelFills, setFuelFills] = useState<Transaction[]>([])
@@ -200,7 +199,7 @@ export default function Transactions() {
   }
 
   const remove = async (tx: Transaction) => {
-    if (!confirm('Eliminare questa transazione? Il saldo del fondo sarà ripristinato.')) return
+    if (!(await confirm({ message: 'Eliminare questa transazione? Il saldo del fondo sarà ripristinato.', confirmText: 'Elimina', danger: true }))) return
 
     const deltas = new Map<string, number>()
     for (const { fundId, delta } of txBalanceDelta(tx)) {
@@ -220,7 +219,7 @@ export default function Transactions() {
     if (selected.length === 0) return
     const total = selected.reduce((s, tx) => s + (tx.is_memo ? 0 : Number(tx.amount)), 0)
     const msg = `Eliminare ${selected.length} transazion${selected.length === 1 ? 'e' : 'i'}? I saldi verranno ripristinati per un totale di ${cur(total)}.`
-    if (!confirm(msg)) return
+    if (!(await confirm({ message: msg, confirmText: 'Elimina', danger: true }))) return
 
     setBulkDeleting(true)
     const deltas = new Map<string, number>()
@@ -450,7 +449,7 @@ export default function Transactions() {
                   className={`bg-white rounded-xl border p-4 flex items-center justify-between transition ${isSelected ? 'border-blue-500 bg-blue-50/30' : isDuplicate ? 'border-amber-300' : 'border-slate-200'}`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <button onClick={() => toggleSelect(tx.id)} className="shrink-0">
+                    <button onClick={() => toggleSelect(tx.id)} aria-label={isSelected ? 'Deseleziona transazione' : 'Seleziona transazione'} aria-pressed={isSelected} className="shrink-0">
                       {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-slate-300 hover:text-slate-500" />}
                     </button>
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${tx.type === 'income' ? 'bg-emerald-50' : tx.type === 'expense' ? 'bg-red-50' : 'bg-blue-50'}`}>
@@ -491,10 +490,10 @@ export default function Transactions() {
                     <span className={`text-base sm:text-lg font-semibold ${tx.type === 'income' ? 'text-emerald-600' : tx.type === 'expense' ? 'text-red-500' : 'text-blue-600'}`}>
                       {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}{cur(Number(tx.amount))}
                     </span>
-                    <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                    <button onClick={() => openEdit(tx)} aria-label="Modifica transazione" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => remove(tx)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
+                    <button onClick={() => remove(tx)} aria-label="Elimina transazione" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>

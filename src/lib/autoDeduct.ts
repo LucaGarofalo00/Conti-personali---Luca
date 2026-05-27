@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { getDateInCurrentPeriod, toDateString, todayString, getBillingPeriodFor } from './utils'
+import { incrementFundBalance } from './fundBalances'
 import type { RecurringExpense, Transaction } from '../types'
 
 interface ProcessArgs {
@@ -86,15 +87,10 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
       if (txError || !inserted) continue
 
       if (isTransfer && exp.fund_to_id) {
-        const [{ data: from }, { data: to }] = await Promise.all([
-          supabase.from('funds').select('balance').eq('id', exp.fund_id).single(),
-          supabase.from('funds').select('balance').eq('id', exp.fund_to_id).single(),
-        ])
-        if (from) await supabase.from('funds').update({ balance: Number(from.balance) - amount }).eq('id', exp.fund_id)
-        if (to) await supabase.from('funds').update({ balance: Number(to.balance) + amount }).eq('id', exp.fund_to_id)
+        await incrementFundBalance(exp.fund_id, -amount)
+        await incrementFundBalance(exp.fund_to_id, amount)
       } else {
-        const { data: fund } = await supabase.from('funds').select('balance').eq('id', exp.fund_id).single()
-        if (fund) await supabase.from('funds').update({ balance: Number(fund.balance) - amount }).eq('id', exp.fund_id)
+        await incrementFundBalance(exp.fund_id, -amount)
       }
 
       periodTx.push(inserted as Transaction)

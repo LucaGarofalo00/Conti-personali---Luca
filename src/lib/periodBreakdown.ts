@@ -1,4 +1,5 @@
-import { addDays, getDate, getDay, getDaysInMonth, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns'
+import { addDays, getDate, getDay, getDaysInMonth, startOfDay, isBefore, isAfter, isSameDay, format } from 'date-fns'
+import { it } from 'date-fns/locale'
 import { toDateString } from './utils'
 import type { RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
@@ -9,6 +10,9 @@ export type BreakdownSource =
   | 'planned'
   | 'transfer'
   | 'actual'
+  | 'actual_oneoff'
+  | 'budget_extra'
+  | 'budget_residual'
 
 export interface BreakdownItem {
   date: string
@@ -34,6 +38,13 @@ interface Args {
   // effettivo, se è stata segnata come memo (es. "non lavorato") non viene contata.
   // Se omesso, il breakdown resta una pura proiezione (comportamento storico).
   actualTx?: Transaction[]
+  // Se true, conta anche le transazioni "una tantum" davvero registrate nel periodo
+  // (spese/entrate manuali non legate a ricorrenti, budget o pianificate). Serve alle
+  // card della home perché riflettano SEMPRE ogni movimento reale. Richiede actualTx.
+  includeActualOneOffs?: boolean
+  // "Oggi" iniettabile per i test deterministici (default: data reale). Determina quali
+  // settimane di budget sono "già finite" ai fini del residuo.
+  now?: Date
 }
 
 const SOURCE_LABELS: Record<BreakdownSource, string> = {
@@ -43,15 +54,18 @@ const SOURCE_LABELS: Record<BreakdownSource, string> = {
   planned: 'Pianificata',
   transfer: 'Trasferimento',
   actual: 'Già avvenuta',
+  actual_oneoff: 'Effettiva',
+  budget_extra: 'Sforamento budget',
+  budget_residual: 'Residuo budget',
 }
 
 type Reconciled = { amount: number } | 'skip' | null
 
 export function getPeriodBreakdown(args: Args): BreakdownItem[] {
-  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false, actualTx } = args
+  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false, actualTx, includeActualOneOffs = false, now } = args
   const excluded = new Set(excludedFundIds)
   const items: BreakdownItem[] = []
-  const today = startOfDay(new Date())
+  const today = startOfDay(now ?? new Date())
   const lowerBound = fromToday && isAfter(today, startDate) ? today : startDate
 
   // Mappe per riconciliare le occorrenze con le transazioni reali collegate.
@@ -178,6 +192,71 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
     }
 
     cursor.setDate(cursor.getDate() + 1)
+  }
+
+  // Transazioni "una tantum" davvero registrate nel periodo: spese/entrate manuali che non
+  // sono già rappresentate dalle regole proiettate. Escluse: memo, trasferimenti, quelle
+  // legate a ricorrenti (già riconciliate sopra) e quelle dentro un budget (già coperte
+  // dalla quota settimanale) — così non si conta due volte.
+  if (includeActualOneOffs && actualTx) {
+    const lowerStr = toDateString(lowerBound)
+    const endStr = toDateString(endDate)
+    for (const tx of actualTx) {
+      if (tx.is_planned || tx.is_memo) continue
+      if (tx.type === 'transfer') continue
+      if (tx.recurring_income_id || tx.recurring_expense_id || tx.budget_id) continue
+      if (tx.fund_id && excluded.has(tx.fund_id)) continue
+      if (tx.date < lowerStr || tx.date > endStr) continue
+      const kind = tx.type === 'income' ? 'income' : 'expense'
+      items.push({
+        date: tx.date,
+        description: tx.description || (kind === 'income' ? 'Entrata' : 'Uscita'),
+        amount: Number(tx.amount),
+        kind,
+        source: 'actual_oneoff',
+        sourceLabel: SOURCE_LABELS.actual_oneoff,
+        category: tx.category,
+      })
+    }
+
+    // Riconciliazione budget: la quota settimanale (emessa sopra come 'weekly_budget') è una
+    // previsione. Qui la confrontiamo con la spesa reale del budget in ogni settimana:
+    //  - speso PIÙ della quota → aggiungo l'eccedenza come uscita ('Sforamento');
+    //  - settimana GIÀ FINITA e speso MENO → restituisco la differenza come entrata
+    //    ('Residuo budget <nome> <gg–gg mese>'). Settimana in corso/futura → resta la quota.
+    const budgetTx = actualTx.filter(t => !t.is_planned && !t.is_memo && t.budget_id)
+    for (const b of weeklyBudgets) {
+      if (!b.is_active) continue
+      if (b.fund_id && excluded.has(b.fund_id)) continue
+      const lump = Number(b.amount)
+      const wcur = new Date(lowerBound)
+      while (!isAfter(wcur, endDate)) {
+        if (getDay(wcur) === 1 && !isBefore(wcur, startDate)) {
+          const weekStart = new Date(wcur)
+          const weekEnd = addDays(weekStart, 7)
+          const wsStr = toDateString(weekStart)
+          const weStr = toDateString(weekEnd)
+          let spent = 0
+          for (const t of budgetTx) {
+            if (t.budget_id === b.id && t.date >= wsStr && t.date < weStr) spent += Number(t.amount)
+          }
+          const delta = Math.round((spent - lump) * 100) / 100
+          if (delta > 0) {
+            items.push({
+              date: wsStr, description: `Sforamento ${b.name}`, amount: delta,
+              kind: 'expense', source: 'budget_extra', sourceLabel: SOURCE_LABELS.budget_extra,
+            })
+          } else if (delta < 0 && !isBefore(today, weekEnd)) {
+            const range = `${format(weekStart, 'd')}–${format(addDays(weekStart, 6), 'd MMM', { locale: it })}`
+            items.push({
+              date: wsStr, description: `Residuo budget ${b.name} ${range}`, amount: -delta,
+              kind: 'income', source: 'budget_residual', sourceLabel: SOURCE_LABELS.budget_residual,
+            })
+          }
+        }
+        wcur.setDate(wcur.getDate() + 1)
+      }
+    }
   }
 
   items.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)

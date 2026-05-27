@@ -37,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={ctx}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] space-y-2 max-w-sm">
+      <div className="fixed bottom-4 right-4 z-[100] space-y-2 max-w-sm" role="status" aria-live="polite" aria-atomic="false">
         {toasts.map(t => (
           <div
             key={t.id}
@@ -49,7 +49,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           >
             {t.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" /> : <XCircle className="w-4 h-4 shrink-0" />}
             <span className="flex-1">{t.message}</span>
-            <button onClick={() => remove(t.id)} className="p-0.5 hover:opacity-75">
+            <button onClick={() => remove(t.id)} aria-label="Chiudi notifica" className="p-0.5 hover:opacity-75">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -59,6 +59,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook co-locato col provider (pattern intenzionale)
 export function useToast() {
   const ctx = useContext(ToastContext)
   if (!ctx) throw new Error('useToast must be used within ToastProvider')

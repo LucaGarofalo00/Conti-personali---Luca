@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ShoppingBag, Receipt, AlertTriangle } from 'lucide-react'
-import { startOfWeek, format } from 'date-fns'
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ShoppingBag, Receipt, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
+import { startOfWeek, addDays, format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import { cur, todayString, getBillingPeriod } from '../lib/utils'
+import { incrementFundBalance } from '../lib/fundBalances'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import { computeBudgetRollover } from '../lib/budgetRollover'
 import InfoBox from '../components/InfoBox'
@@ -15,6 +17,7 @@ import type { WeeklyBudget, Fund, Transaction } from '../types'
 export default function Budgets() {
   const { user } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
   const [budgetTx, setBudgetTx] = useState<Transaction[]>([])
@@ -27,6 +30,14 @@ export default function Budgets() {
 
   const [expBudgetId, setExpBudgetId] = useState<{ id: string; name: string } | null>(null)
   const [expForm, setExpForm] = useState({ description: '', amount: 0, fund_id: '', date: todayString() })
+  const [openWeeks, setOpenWeeks] = useState<Set<string>>(new Set())
+
+  const toggleWeek = (key: string) => setOpenWeeks(prev => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
 
 
   const load = async () => {
@@ -89,10 +100,7 @@ export default function Budgets() {
     })
 
     if (!error && fundId) {
-      const { data: fund } = await supabase.from('funds').select('balance').eq('id', fundId).single()
-      if (fund) {
-        await supabase.from('funds').update({ balance: Number(fund.balance) - expForm.amount }).eq('id', fundId)
-      }
+      await incrementFundBalance(fundId, -expForm.amount)
     }
 
     setSaving(false)
@@ -103,7 +111,7 @@ export default function Budgets() {
   }
 
   const removeBudget = async (id: string) => {
-    if (!confirm('Eliminare? Le transazioni collegate restano ma perdono il link al budget.')) return
+    if (!(await confirm({ message: 'Eliminare il budget? Le transazioni collegate restano ma perdono il link al budget.', confirmText: 'Elimina', danger: true }))) return
     const { error } = await supabase.from('weekly_budgets').delete().eq('id', id)
     if (error) { toast.error('Errore'); return }
     toast.success('Eliminato')
@@ -117,12 +125,11 @@ export default function Budgets() {
   }
 
   const removeTx = async (tx: Transaction) => {
-    if (!confirm('Eliminare questa spesa? Il saldo del fondo verrà ripristinato.')) return
+    if (!(await confirm({ message: 'Eliminare questa spesa? Il saldo del fondo verrà ripristinato.', confirmText: 'Elimina', danger: true }))) return
     const { error } = await supabase.from('transactions').delete().eq('id', tx.id)
     if (error) { toast.error('Errore: ' + error.message); return }
     if (tx.fund_id) {
-      const { data: fund } = await supabase.from('funds').select('balance').eq('id', tx.fund_id).single()
-      if (fund) await supabase.from('funds').update({ balance: Number(fund.balance) + Number(tx.amount) }).eq('id', tx.fund_id)
+      await incrementFundBalance(tx.fund_id, Number(tx.amount))
     }
     toast.success('Spesa eliminata')
     load()
@@ -189,15 +196,15 @@ export default function Budgets() {
                 <div key={b.id} className={`bg-white rounded-xl border shadow-sm ${overBudget ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200/60'} p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <button onClick={() => toggleBudget(b)}>{b.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
+                      <button onClick={() => toggleBudget(b)} aria-label={b.is_active ? 'Disattiva budget' : 'Attiva budget'}>{b.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
                       <div>
                         <p className="font-semibold text-slate-800">{b.name}</p>
                         <p className="text-xs text-slate-400">{cur(limit)}/settimana{fundName ? ` · ${fundName}` : ''}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => { setEditingBudget(b); setBudgetForm({ name: b.name, amount: limit, fund_id: b.fund_id || '' }); setShowBudgetModal(true) }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => removeBudget(b.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => { setEditingBudget(b); setBudgetForm({ name: b.name, amount: limit, fund_id: b.fund_id || '' }); setShowBudgetModal(true) }} aria-label="Modifica budget" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => removeBudget(b.id)} aria-label="Elimina budget" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
 
@@ -241,7 +248,7 @@ export default function Budgets() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="font-medium text-red-500">-{cur(Number(tx.amount))}</span>
-                            <button onClick={() => removeTx(tx)} className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => removeTx(tx)} aria-label="Elimina spesa" className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
                       ))}
@@ -255,6 +262,53 @@ export default function Budgets() {
                     >
                       <Plus className="w-4 h-4" /> Aggiungi spesa
                     </button>
+                  )}
+
+                  {rollInfo.pastWeeks.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Settimane passate</p>
+                      <div className="space-y-1.5">
+                        {[...rollInfo.pastWeeks].reverse().map(week => {
+                          const key = `${b.id}|${week.weekStart.toISOString()}`
+                          const open = openWeeks.has(key)
+                          const range = `${format(week.weekStart, 'd')}–${format(addDays(week.weekStart, 6), 'd MMM', { locale: it })}`
+                          return (
+                            <div key={key} className="rounded-lg border border-slate-100">
+                              <button onClick={() => toggleWeek(key)} aria-expanded={open} className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50 rounded-lg">
+                                <span className="flex items-center gap-2 min-w-0">
+                                  {open ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+                                  <span className="text-sm text-slate-600">{range}</span>
+                                  <span className="text-xs text-slate-400 tabular-nums">{cur(week.spent)} / {cur(limit)}</span>
+                                </span>
+                                {week.over > 0 ? (
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700 shrink-0">Sforato {cur(week.over)}</span>
+                                ) : (
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">{week.surplus > 0 ? `Avanzo ${cur(week.surplus)}` : 'In pari'}</span>
+                                )}
+                              </button>
+                              {open && (
+                                <div className="px-3 pb-2.5 pt-1.5 border-t border-slate-100 space-y-1.5">
+                                  {week.txs.length === 0 ? (
+                                    <p className="text-xs text-slate-400 italic">Nessuna spesa in questa settimana</p>
+                                  ) : (
+                                    week.txs.map(tx => (
+                                      <div key={tx.id} className="flex items-center justify-between text-sm">
+                                        <span className="flex items-center gap-2 min-w-0">
+                                          <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                          <span className="text-slate-600 truncate">{tx.description}</span>
+                                          <span className="text-xs text-slate-400 shrink-0">{format(new Date(tx.date), 'dd MMM', { locale: it })}</span>
+                                        </span>
+                                        <span className="font-medium text-red-500 shrink-0">-{cur(Number(tx.amount))}</span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               )

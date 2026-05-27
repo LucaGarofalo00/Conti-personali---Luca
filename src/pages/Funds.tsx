@@ -3,8 +3,10 @@ import { Wallet, Plus, Pencil, Trash2, ArrowLeftRight, PiggyBank } from 'lucide-
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import { cur, iconMap, ICONS, COLORS, todayString } from '../lib/utils'
+import { incrementFundBalance } from '../lib/fundBalances'
 import InfoBox from '../components/InfoBox'
 import type { Fund } from '../types'
 
@@ -14,6 +16,7 @@ const emptyTransfer = { from_id: '', to_id: '', amount: 0 }
 export default function Funds() {
   const { user } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [funds, setFunds] = useState<Fund[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -62,7 +65,7 @@ export default function Funds() {
   }
 
   const remove = async (id: string) => {
-    if (!confirm('Eliminare questo fondo?')) return
+    if (!(await confirm({ message: 'Eliminare questo fondo?', confirmText: 'Elimina', danger: true }))) return
     const { error } = await supabase.from('funds').delete().eq('id', id)
     if (error) { toast.error('Errore nell\'eliminazione'); return }
     toast.success('Fondo eliminato')
@@ -78,9 +81,8 @@ export default function Funds() {
       return
     }
     setSaving(true)
-    const { error } = await supabase.from('funds').update({ balance: Number(from.balance) - transfer.amount }).eq('id', from.id)
-    if (error) { setSaving(false); toast.error('Errore nel trasferimento'); return }
-    await supabase.from('funds').update({ balance: Number(to.balance) + transfer.amount }).eq('id', to.id)
+    await incrementFundBalance(from.id, -transfer.amount)
+    await incrementFundBalance(to.id, transfer.amount)
     await supabase.from('transactions').insert({
       user_id: user!.id, type: 'transfer', amount: transfer.amount,
       description: `Trasferimento: ${from.name} → ${to.name}`,
@@ -136,8 +138,8 @@ export default function Funds() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => openEdit(fund)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => remove(fund.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => openEdit(fund)} aria-label="Modifica fondo" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(fund.id)} aria-label="Elimina fondo" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
               <p className="text-2xl font-bold text-slate-800 mb-1">{cur(Number(fund.balance))}</p>
@@ -151,8 +153,8 @@ export default function Funds() {
                       </span>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-slate-700">{cur(Number(sub.balance))}</span>
-                        <button onClick={() => openEdit(sub)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-3 h-3" /></button>
-                        <button onClick={() => remove(sub.id)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                        <button onClick={() => openEdit(sub)} aria-label="Modifica salvadanaio" className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-3 h-3" /></button>
+                        <button onClick={() => remove(sub.id)} aria-label="Elimina salvadanaio" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
                       </div>
                     </div>
                   ))}

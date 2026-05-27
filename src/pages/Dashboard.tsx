@@ -7,6 +7,7 @@ import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import FundExcluder from '../components/FundExcluder'
 import SchemaBanner from '../components/SchemaBanner'
@@ -17,6 +18,7 @@ import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } fro
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
 import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal } from '../lib/utils'
+import { incrementFundBalance } from '../lib/fundBalances'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
@@ -68,6 +70,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
 export default function Dashboard() {
   const { user } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [funds, setFunds] = useState<Fund[]>([])
   const [expenses, setExpenses] = useState<RecurringExpense[]>([])
   const [income, setIncome] = useState<RecurringIncome[]>([])
@@ -355,18 +358,10 @@ export default function Dashboard() {
     }
 
     if (confirmItem.kind === 'transfer' && fundId && fundToId) {
-      const [{ data: from }, { data: to }] = await Promise.all([
-        supabase.from('funds').select('balance').eq('id', fundId).single(),
-        supabase.from('funds').select('balance').eq('id', fundToId).single(),
-      ])
-      if (from) await supabase.from('funds').update({ balance: Number(from.balance) - confirmAmount }).eq('id', fundId)
-      if (to) await supabase.from('funds').update({ balance: Number(to.balance) + confirmAmount }).eq('id', fundToId)
+      await incrementFundBalance(fundId, -confirmAmount)
+      await incrementFundBalance(fundToId, confirmAmount)
     } else if (fundId) {
-      const { data: fund } = await supabase.from('funds').select('balance').eq('id', fundId).single()
-      if (fund) {
-        const delta = confirmItem.kind === 'income' ? confirmAmount : -confirmAmount
-        await supabase.from('funds').update({ balance: Number(fund.balance) + delta }).eq('id', fundId)
-      }
+      await incrementFundBalance(fundId, confirmItem.kind === 'income' ? confirmAmount : -confirmAmount)
     }
 
     setConfirmSaving(false)
@@ -437,7 +432,7 @@ export default function Dashboard() {
   }
 
   const deletePlanned = async (id: string) => {
-    if (!confirm('Eliminare questa pianificazione?')) return
+    if (!(await confirm({ message: 'Eliminare questa pianificazione?', confirmText: 'Elimina', danger: true }))) return
     const { error } = await supabase.from('transactions').delete().eq('id', id)
     if (error) { toast.error('Errore'); return }
     toast.success('Pianificazione eliminata')
@@ -504,6 +499,7 @@ export default function Dashboard() {
     excludedFundIds,
     fromToday: false,
     actualTx: periodTx,
+    includeActualOneOffs: true,
   })
   const est = totalsFromBreakdown(periodBreakdown)
   const periodNet = Math.round((est.income - est.expenses) * 100) / 100
@@ -594,6 +590,8 @@ export default function Dashboard() {
               <p><strong>Saldo Totale</strong>: somma di tutti i fondi (escluso quelli filtrati col selettore in alto).</p>
               <p><strong>Entrate del Periodo (15-14)</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
               <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo (15-14). Click per vedere il dettaglio.</p>
+              <p>Queste cifre comprendono sia le voci <strong>previste</strong> (ricorrenti, budget, pianificate) sia le <strong>transazioni manuali</strong> già registrate nel periodo: ogni movimento che aggiungi, modifichi o elimini si riflette qui (badge <span className="font-medium text-cyan-700">EFFETTIVA</span>).</p>
+              <p><strong>Budget</strong>: la quota settimanale è una previsione, ma viene riconciliata con la spesa reale. Se sfori, l'eccedenza è aggiunta come uscita (<span className="font-medium text-red-700">Sforamento</span>); se una settimana finisce con budget non speso, la differenza torna come entrata (<span className="font-medium text-emerald-700">Residuo budget</span>).</p>
               {projection && projectionTarget && nextSalary && (
                 <p>
                   <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).
@@ -772,7 +770,7 @@ export default function Dashboard() {
                         <button onClick={() => openCompletePlanned(p)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-100 transition">
                           Fatto
                         </button>
-                        <button onClick={() => deletePlanned(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
+                        <button onClick={() => deletePlanned(p.id)} aria-label="Elimina pianificazione" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1040,6 +1038,7 @@ export default function Dashboard() {
             weeklyBudgets: budgets, planned,
             excludedFundIds, fromToday: false,
             actualTx: periodTx,
+            includeActualOneOffs: true,
           })
           return (
             <div className="space-y-3">
@@ -1129,7 +1128,7 @@ export default function Dashboard() {
                     <button onClick={() => openCompletePlanned(p)} className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs font-medium hover:bg-purple-100 transition">
                       Fatto
                     </button>
-                    <button onClick={() => deletePlanned(p.id)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500">
+                    <button onClick={() => deletePlanned(p.id)} aria-label="Elimina pianificazione" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>

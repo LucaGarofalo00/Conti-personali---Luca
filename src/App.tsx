@@ -1,16 +1,21 @@
+import { lazy, Suspense } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './components/Toast'
+import { ConfirmProvider } from './components/Confirm'
 import { isConfigured } from './lib/supabase'
 import Layout from './components/Layout'
 import Auth from './pages/Auth'
-import Dashboard from './pages/Dashboard'
-import Funds from './pages/Funds'
-import RecurringExpenses from './pages/RecurringExpenses'
-import Income from './pages/Income'
-import Budgets from './pages/Budgets'
-import Transactions from './pages/Transactions'
-import Forecast from './pages/Forecast'
+
+// Caricate on-demand: ogni pagina è un chunk separato, così Recharts (Dashboard/Previsione)
+// e le altre viste non pesano sul caricamento iniziale.
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Funds = lazy(() => import('./pages/Funds'))
+const RecurringExpenses = lazy(() => import('./pages/RecurringExpenses'))
+const Income = lazy(() => import('./pages/Income'))
+const Budgets = lazy(() => import('./pages/Budgets'))
+const Transactions = lazy(() => import('./pages/Transactions'))
+const Forecast = lazy(() => import('./pages/Forecast'))
 
 function SetupPage() {
   return (
@@ -52,7 +57,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm" style={{ backgroundColor: '#f7f8fa' }}>Caricamento...</div>
   if (!user) return <Navigate to="/auth" replace />
-  return <Layout>{children}</Layout>
+  return (
+    <Layout>
+      <Suspense fallback={<div className="flex items-center justify-center h-64 text-slate-400 text-sm">Caricamento...</div>}>
+        {children}
+      </Suspense>
+    </Layout>
+  )
 }
 
 function AuthRoute() {
@@ -84,7 +95,9 @@ export default function App() {
     <HashRouter>
       <AuthProvider>
         <ToastProvider>
-          <AppRoutes />
+          <ConfirmProvider>
+            <AppRoutes />
+          </ConfirmProvider>
         </ToastProvider>
       </AuthProvider>
     </HashRouter>

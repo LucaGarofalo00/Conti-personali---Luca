@@ -18,5 +18,12 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Le pagine caricano i dati con un effect `useEffect(() => { if (user) load() }, [user])`.
+      // `load` è async (i setState avvengono dopo l'await, non in modo sincrono) ed è
+      // condivisa con gli event handler, quindi non può vivere dentro l'effect. La regola
+      // segnala questo pattern legittimo come falso positivo: la disattiviamo qui.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])

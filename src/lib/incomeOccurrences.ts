@@ -1,5 +1,5 @@
-import { addDays, isSameDay } from 'date-fns'
-import { toDateString, getBillingPeriodFor } from './utils'
+import { addDays } from 'date-fns'
+import { toDateString } from './utils'
 import type { RecurringIncome, Transaction } from '../types'
 
 export type OccurrenceStatus = 'pending' | 'paid' | 'skipped'
@@ -100,13 +100,4 @@ function classify(tx: Transaction | undefined): OccurrenceStatus {
   if (!tx) return 'pending'
   if (tx.is_memo) return 'skipped'
   return 'paid'
-}
-
-export function getOccurrencesForPeriodOf(date: Date, income: RecurringIncome[], periodTx: Transaction[]): IncomeOccurrence[] {
-  const { startDate, endDate } = getBillingPeriodFor(date)
-  return generateIncomeOccurrences(income, startDate, endDate, periodTx)
-}
-
-export function _isSameDay(a: Date, b: Date): boolean {
-  return isSameDay(a, b)
 }

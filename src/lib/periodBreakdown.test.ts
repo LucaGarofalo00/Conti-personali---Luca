@@ -248,3 +248,149 @@ describe('getPeriodBreakdown - exclusions', () => {
     expect(out).toHaveLength(0)
   })
 })
+
+function mkOneOff(opts: {
+  amount: number
+  date: string
+  type?: 'income' | 'expense' | 'transfer'
+  budget_id?: string | null
+  fund_id?: string | null
+  is_memo?: boolean
+}): Transaction {
+  return {
+    id: 'o-' + Math.random(), user_id: 'u',
+    type: opts.type ?? 'expense',
+    amount: opts.amount, description: 'manuale',
+    fund_id: opts.fund_id ?? null, fund_to_id: null, category: 'cibo',
+    budget_id: opts.budget_id ?? null,
+    recurring_expense_id: null, recurring_income_id: null,
+    is_memo: opts.is_memo ?? false, is_planned: false,
+    fuel_km: null, fuel_liters: null, fuel_price_per_liter: null, fuel_type: null,
+    date: opts.date, created_at: '',
+  }
+}
+
+describe('getPeriodBreakdown - includeActualOneOffs', () => {
+  const period = { startDate: new Date(2026, 4, 15), endDate: new Date(2026, 5, 14) }
+  const empty = { recurringExpenses: [], recurringIncome: [], weeklyBudgets: [], planned: [], excludedFundIds: [] }
+
+  it('does NOT count manual one-offs by default (flag off)', () => {
+    const out = getPeriodBreakdown({
+      ...period, ...empty,
+      actualTx: [mkOneOff({ amount: 30, date: '2026-05-20' })],
+    })
+    expect(out.filter(i => i.source === 'actual_oneoff')).toHaveLength(0)
+    expect(totalsFromBreakdown(out).expenses).toBe(0)
+  })
+
+  it('counts a manual one-off expense when flag is on', () => {
+    const out = getPeriodBreakdown({
+      ...period, ...empty,
+      actualTx: [mkOneOff({ amount: 30, date: '2026-05-20' })],
+      includeActualOneOffs: true,
+    })
+    expect(out.filter(i => i.source === 'actual_oneoff')).toHaveLength(1)
+    expect(totalsFromBreakdown(out).expenses).toBe(30)
+  })
+
+  it('counts a manual one-off income when flag is on', () => {
+    const out = getPeriodBreakdown({
+      ...period, ...empty,
+      actualTx: [mkOneOff({ amount: 100, date: '2026-05-20', type: 'income' })],
+      includeActualOneOffs: true,
+    })
+    expect(totalsFromBreakdown(out).income).toBe(100)
+  })
+
+  it('excludes memo, transfer, recurring-linked and budget-linked transactions', () => {
+    const out = getPeriodBreakdown({
+      ...period, ...empty,
+      actualTx: [
+        mkOneOff({ amount: 10, date: '2026-05-20', is_memo: true }),
+        mkOneOff({ amount: 10, date: '2026-05-20', type: 'transfer' }),
+        mkActualTx({ amount: 10, date: '2026-05-20', recurring_expense_id: 'x' }),
+        mkOneOff({ amount: 10, date: '2026-05-20', budget_id: 'b' }),
+      ],
+      includeActualOneOffs: true,
+    })
+    expect(out.filter(i => i.source === 'actual_oneoff')).toHaveLength(0)
+  })
+
+  it('excludes one-offs outside the period and on excluded funds', () => {
+    const out = getPeriodBreakdown({
+      ...period, recurringExpenses: [], recurringIncome: [], weeklyBudgets: [], planned: [],
+      excludedFundIds: ['savings'],
+      actualTx: [
+        mkOneOff({ amount: 30, date: '2026-07-01' }),
+        mkOneOff({ amount: 30, date: '2026-05-20', fund_id: 'savings' }),
+      ],
+      includeActualOneOffs: true,
+    })
+    expect(out.filter(i => i.source === 'actual_oneoff')).toHaveLength(0)
+  })
+
+  it('does not double-count: reconciled recurring + manual one-off coexist', () => {
+    const out = getPeriodBreakdown({
+      ...period, recurringIncome: [], weeklyBudgets: [], planned: [], excludedFundIds: [],
+      recurringExpenses: [mkExp('aff', 20, 400)],
+      actualTx: [
+        mkActualTx({ amount: 380, date: '2026-05-20', recurring_expense_id: 'aff' }),
+        mkOneOff({ amount: 30, date: '2026-05-21' }),
+      ],
+      includeActualOneOffs: true,
+    })
+    expect(totalsFromBreakdown(out).expenses).toBe(410)
+    expect(out.filter(i => i.source === 'recurring_expense')).toHaveLength(1)
+    expect(out.filter(i => i.source === 'actual_oneoff')).toHaveLength(1)
+  })
+})
+
+describe('getPeriodBreakdown - budget reconciliation', () => {
+  // 2026-05-11 è lunedì: periodo di una sola settimana per isolare una quota di budget.
+  const period = { startDate: new Date(2026, 4, 11), endDate: new Date(2026, 4, 17) }
+  const base = { recurringExpenses: [], recurringIncome: [], planned: [], excludedFundIds: [] }
+  const budget = mkBudget('sfizi', 50)
+
+  it('adds overspend as an extra expense (Sforamento)', () => {
+    const out = getPeriodBreakdown({
+      ...period, ...base, weeklyBudgets: [budget],
+      actualTx: [mkOneOff({ amount: 70, date: '2026-05-13', budget_id: 'sfizi' })],
+      includeActualOneOffs: true, now: new Date(2026, 4, 25),
+    })
+    expect(out.find(i => i.source === 'budget_extra')?.amount).toBe(20)
+    expect(totalsFromBreakdown(out).expenses).toBe(70) // quota 50 + sforamento 20
+  })
+
+  it('gives back unspent budget as income (Residuo) once the week has ended', () => {
+    const out = getPeriodBreakdown({
+      ...period, ...base, weeklyBudgets: [budget],
+      actualTx: [mkOneOff({ amount: 30, date: '2026-05-13', budget_id: 'sfizi' })],
+      includeActualOneOffs: true, now: new Date(2026, 4, 25),
+    })
+    const residuo = out.find(i => i.source === 'budget_residual')
+    expect(residuo?.amount).toBe(20)
+    expect(residuo?.description).toContain('Residuo budget')
+    expect(totalsFromBreakdown(out).expenses).toBe(50)
+    expect(totalsFromBreakdown(out).income).toBe(20) // impatto netto budget = 30
+  })
+
+  it('does NOT give back residuo while the week is still in progress', () => {
+    const out = getPeriodBreakdown({
+      ...period, ...base, weeklyBudgets: [budget],
+      actualTx: [mkOneOff({ amount: 30, date: '2026-05-13', budget_id: 'sfizi' })],
+      includeActualOneOffs: true, now: new Date(2026, 4, 13),
+    })
+    expect(out.filter(i => i.source === 'budget_residual')).toHaveLength(0)
+    expect(totalsFromBreakdown(out).expenses).toBe(50) // resta la quota piena
+  })
+
+  it('keeps budget as a flat weekly quota when the flag is off', () => {
+    const out = getPeriodBreakdown({
+      ...period, ...base, weeklyBudgets: [budget],
+      actualTx: [mkOneOff({ amount: 70, date: '2026-05-13', budget_id: 'sfizi' })],
+      now: new Date(2026, 4, 25),
+    })
+    expect(out.filter(i => i.source === 'budget_extra')).toHaveLength(0)
+    expect(totalsFromBreakdown(out).expenses).toBe(50)
+  })
+})

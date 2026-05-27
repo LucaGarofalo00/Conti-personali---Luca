@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Clock, Calendar } from '
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import { cur, getBillingPeriod } from '../lib/utils'
 import { generateIncomeOccurrences } from '../lib/incomeOccurrences'
@@ -20,6 +21,7 @@ const emptyForm = {
 export default function Income() {
   const { user } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [items, setItems] = useState<RecurringIncome[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
   const [periodTx, setPeriodTx] = useState<Transaction[]>([])
@@ -93,7 +95,7 @@ export default function Income() {
   }
 
   const remove = async (id: string) => {
-    if (!confirm('Eliminare questa entrata?')) return
+    if (!(await confirm({ message: 'Eliminare questa entrata?', confirmText: 'Elimina', danger: true }))) return
     const { error } = await supabase.from('recurring_income').delete().eq('id', id)
     if (error) { toast.error('Errore nell\'eliminazione'); return }
     toast.success('Entrata eliminata')
@@ -146,7 +148,7 @@ export default function Income() {
             return (
               <div key={item.id} className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between transition ${!item.is_active ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-4">
-                  <button onClick={() => toggle(item)} className="text-slate-400 hover:text-blue-600 transition">
+                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva entrata' : 'Attiva entrata'} className="text-slate-400 hover:text-blue-600 transition">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-emerald-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <div>
@@ -169,8 +171,8 @@ export default function Income() {
                     <span className="text-lg font-semibold text-emerald-600">{cur(Number(item.amount))}</span>
                     <p className="text-xs text-slate-400">{item.frequency === 'monthly' ? '/mese' : '/settimana'}</p>
                   </div>
-                  <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => remove(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => openEdit(item)} aria-label="Modifica entrata" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(item.id)} aria-label="Elimina entrata" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
             )

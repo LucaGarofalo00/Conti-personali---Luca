@@ -111,4 +111,22 @@ describe('computeBudgetRollover', () => {
     const info = computeBudgetRollover(budget, [memoTx], new Date(2026, 4, 19))
     expect(info.rollover).toBe(50)
   })
+
+  it('past weeks expose overspend amount and their transactions', () => {
+    const budget = mkBudget(50, '2026-05-05')
+    const txs = [
+      mkTx('2026-05-06', 80), // settimana 4-10 mag: sforata di 30
+      mkTx('2026-05-13', 30), // settimana 11-17 mag: avanzo 20
+    ]
+    const info = computeBudgetRollover(budget, txs, new Date(2026, 4, 19))
+    expect(info.pastWeeks).toHaveLength(2)
+    const [w1, w2] = info.pastWeeks
+    expect(w1.spent).toBe(80)
+    expect(w1.over).toBe(30)
+    expect(w1.surplus).toBe(0)
+    expect(w1.txs).toHaveLength(1)
+    expect(w2.spent).toBe(30)
+    expect(w2.over).toBe(0)
+    expect(w2.surplus).toBe(20)
+  })
 })

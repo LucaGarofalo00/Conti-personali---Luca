@@ -42,7 +42,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               <Logo className="w-9 h-9 drop-shadow-sm" />
               <h1 className="text-lg font-semibold tracking-tight text-slate-800">FinanzApp</h1>
             </div>
-            <button onClick={() => setOpen(false)} className="lg:hidden p-1 rounded-md hover:bg-slate-100 text-slate-400">
+            <button onClick={() => setOpen(false)} aria-label="Chiudi menu" className="lg:hidden p-1 rounded-md hover:bg-slate-100 text-slate-400">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -80,7 +80,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="sticky top-0 bg-white/80 backdrop-blur-xl z-30 shrink-0 shadow-[0_1px_0_0_#e8eaed]">
           <div className="flex items-center gap-3 px-4 py-3 lg:px-6">
-            <button onClick={() => setOpen(true)} className="lg:hidden p-1 rounded-md hover:bg-slate-100">
+            <button onClick={() => setOpen(true)} aria-label="Apri menu" className="lg:hidden p-1 rounded-md hover:bg-slate-100">
               <Menu className="w-5 h-5 text-slate-500" />
             </button>
             <Logo className="w-7 h-7 lg:hidden" />

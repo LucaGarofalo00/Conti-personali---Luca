@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { todayString } from './utils'
+import { incrementFundBalance } from './fundBalances'
 import type { Transaction } from '../types'
 
 export async function markPlannedAsDone(
@@ -18,15 +19,10 @@ export async function markPlannedAsDone(
   if (updErr) return { error: updErr.message }
 
   if (fundId) {
-    const { data: fund } = await supabase.from('funds').select('balance').eq('id', fundId).single()
-    if (fund) {
-      const delta = planned.type === 'income' ? amount : -amount
-      await supabase.from('funds').update({ balance: Number(fund.balance) + delta }).eq('id', fundId)
-    }
+    await incrementFundBalance(fundId, planned.type === 'income' ? amount : -amount)
   }
   if (planned.type === 'transfer' && planned.fund_to_id) {
-    const { data: to } = await supabase.from('funds').select('balance').eq('id', planned.fund_to_id).single()
-    if (to) await supabase.from('funds').update({ balance: Number(to.balance) + amount }).eq('id', planned.fund_to_id)
+    await incrementFundBalance(planned.fund_to_id, amount)
   }
 
   return {}

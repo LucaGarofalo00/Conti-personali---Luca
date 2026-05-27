@@ -8,7 +8,7 @@ export interface BudgetRolloverInfo {
   spentThisWeek: number
   remaining: number
   overBudget: boolean
-  pastWeeks: { weekStart: Date; spent: number; surplus: number }[]
+  pastWeeks: { weekStart: Date; spent: number; surplus: number; over: number; txs: Transaction[] }[]
 }
 
 export function computeBudgetRollover(
@@ -25,7 +25,7 @@ export function computeBudgetRollover(
 
   let rollover = 0
   let weeksTracked = 0
-  const pastWeeks: { weekStart: Date; spent: number; surplus: number }[] = []
+  const pastWeeks: BudgetRolloverInfo['pastWeeks'] = []
   let cursorWeek = new Date(firstTrackedWeek)
 
   while (isBefore(cursorWeek, currentWeekStart)) {
@@ -34,11 +34,12 @@ export function computeBudgetRollover(
       const txDate = new Date(t.date)
       return txDate >= cursorWeek && txDate < weekEnd
     })
-    const spent = txsInWeek.reduce((s, t) => s + Number(t.amount), 0)
-    const surplus = Math.max(0, budgetBase - spent)
+    const spent = Math.round(txsInWeek.reduce((s, t) => s + Number(t.amount), 0) * 100) / 100
+    const surplus = Math.max(0, Math.round((budgetBase - spent) * 100) / 100)
+    const over = Math.max(0, Math.round((spent - budgetBase) * 100) / 100)
     rollover += surplus
     weeksTracked++
-    pastWeeks.push({ weekStart: new Date(cursorWeek), spent, surplus })
+    pastWeeks.push({ weekStart: new Date(cursorWeek), spent, surplus, over, txs: txsInWeek })
     cursorWeek = addDays(cursorWeek, 7)
   }
 
