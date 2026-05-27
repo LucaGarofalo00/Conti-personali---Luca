@@ -1,6 +1,6 @@
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, Fragment, type ReactNode } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { TrendingUp, TrendingDown, AlertTriangle, Target, ChevronDown, ChevronRight } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, Target, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react'
 import { format, addMonths, addDays, differenceInDays, startOfDay } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
@@ -9,6 +9,7 @@ import { useToast } from '../components/Toast'
 import FundExcluder from '../components/FundExcluder'
 import InfoBox from '../components/InfoBox'
 import BreakdownList from '../components/BreakdownList'
+import Modal from '../components/Modal'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
 import { getPeriodBreakdown, type BreakdownItem } from '../lib/periodBreakdown'
 import { useExcludedFunds } from '../lib/excludedFunds'
@@ -65,6 +66,7 @@ export default function Forecast() {
   const [targetDate, setTargetDate] = useState(() => toDateString(addMonths(new Date(), 6)))
   const [excludedFundIds, , toggleExcluded] = useExcludedFunds()
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set())
+  const [infoCard, setInfoCard] = useState<{ title: string; body: ReactNode } | null>(null)
 
   const toggleExpand = (key: string) => {
     setExpandedPeriods(prev => {
@@ -241,10 +243,29 @@ export default function Forecast() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard icon={Target} color="bg-blue-100 text-blue-600" label="Saldo Attuale" value={cur(startBalance)} />
-        <MetricCard icon={trend >= 0 ? TrendingUp : TrendingDown} color={trend >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} label={`Saldo al ${format(targetDateObj, 'd MMM yyyy', { locale: it })}`} value={cur(endBalance)} />
-        <MetricCard icon={AlertTriangle} color={minPoint.balance < 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'} label="Minimo Previsto" value={cur(minPoint.balance)} sub={minPoint.label} />
-        <MetricCard icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Netto Mensile" value={cur(est.monthlyNet)} sub={est.monthlyNet >= 0 ? 'Positivo' : 'Negativo'} />
+        <MetricCard icon={Target} color="bg-blue-100 text-blue-600" label="Saldo Attuale" value={cur(startBalance)}
+          onClick={() => setInfoCard({ title: 'Saldo Attuale', body: (<>
+            <p>La somma di <strong>tutti i tuoi fondi adesso</strong> (esclusi quelli tolti col filtro in alto).</p>
+            <p>È il punto di partenza della previsione: tutti gli altri numeri partono da qui.</p>
+          </>) })} />
+        <MetricCard icon={trend >= 0 ? TrendingUp : TrendingDown} color={trend >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} label={`Saldo al ${format(targetDateObj, 'd MMM yyyy', { locale: it })}`} value={cur(endBalance)}
+          onClick={() => setInfoCard({ title: `Saldo al ${format(targetDateObj, 'd MMM yyyy', { locale: it })}`, body: (<>
+            <p>Quanto la previsione stima che avrai <strong>a quella data</strong>.</p>
+            <p>Parte dal saldo attuale, poi aggiunge le entrate e toglie le spese previste fino ad allora: ricorrenti, budget settimanali e pianificate.</p>
+            <p>Cambi la data col selettore <strong>«Fino al»</strong> qui sopra.</p>
+          </>) })} />
+        <MetricCard icon={AlertTriangle} color={minPoint.balance < 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'} label="Minimo Previsto" value={cur(minPoint.balance)} sub={minPoint.label}
+          onClick={() => setInfoCard({ title: 'Minimo Previsto', body: (<>
+            <p>Il punto <strong>più basso</strong> che il saldo potrebbe toccare da oggi alla data scelta, con il giorno in cui succede.</p>
+            <p>Serve a capire se rischi di restare a corto (o andare sotto zero) prima del prossimo accredito, anche se a fine periodo il saldo torna positivo.</p>
+          </>) })} />
+        <MetricCard icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Netto mensile medio" value={cur(est.monthlyNet)} sub={est.monthlyNet >= 0 ? 'In media risparmi' : 'In media in rosso'}
+          onClick={() => setInfoCard({ title: 'Netto mensile medio', body: (<>
+            <p>La <strong>media</strong> di quanto entra meno quanto esce in un mese tipo.</p>
+            <p>Le voci settimanali contano ×4,33, quelle annuali ÷12 (es. il bollo da 600€ una volta l'anno qui pesa 50€/mese).</p>
+            <p>Se è <strong>positivo</strong> in media metti da parte; se è <strong>negativo</strong> in media spendi più di quanto guadagni.</p>
+            <p>È una media: <strong>nessun mese reale è esattamente così</strong>. Per il dettaglio giorno per giorno guarda il grafico e la tabella qui sotto.</p>
+          </>) })} />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-6 mb-8">
@@ -354,21 +375,30 @@ export default function Forecast() {
           </div>
         </div>
       )}
+
+      <Modal isOpen={!!infoCard} onClose={() => setInfoCard(null)} title={infoCard?.title || ''}>
+        {infoCard && <div className="text-sm text-slate-600 space-y-2 leading-relaxed">{infoCard.body}</div>}
+      </Modal>
     </div>
   )
 }
 
-function MetricCard({ icon: Icon, color, label, value, sub }: { icon: React.ElementType; color: string; label: string; value: string; sub?: string }) {
+function MetricCard({ icon: Icon, color, label, value, sub, onClick }: { icon: React.ElementType; color: string; label: string; value: string; sub?: string; onClick?: () => void }) {
+  const Wrapper = onClick ? 'button' : 'div'
   return (
-    <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
+    <Wrapper
+      onClick={onClick}
+      className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 text-left w-full ${onClick ? 'hover:shadow-md hover:border-slate-300 transition-all duration-200 cursor-pointer' : ''}`}
+    >
       <div className="flex items-center gap-2 mb-2">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
           <Icon className="w-4 h-4" />
         </div>
-        <span className="text-sm text-slate-500">{label}</span>
+        <span className="text-sm text-slate-500 flex-1 leading-tight">{label}</span>
+        {onClick && <HelpCircle className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
       </div>
       <p className="text-xl font-bold text-slate-800">{value}</p>
       {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
-    </div>
+    </Wrapper>
   )
 }
