@@ -1,5 +1,6 @@
 import { addDays } from 'date-fns'
 import { toDateString } from './utils'
+import { inSameRecurrenceWindow } from './recurrenceMatch'
 import type { RecurringIncome, Transaction } from '../types'
 
 export type OccurrenceStatus = 'pending' | 'paid' | 'skipped'
@@ -27,6 +28,9 @@ export function generateIncomeOccurrences(
   const periodStart = ensureDate(periodStartIn)
   const periodEnd = ensureDate(periodEndIn)
   const out: IncomeOccurrence[] = []
+  // Ogni transazione reale viene assegnata ad al più un'occorrenza (consumo greedy),
+  // così l'aggancio per finestra non marca "ricevuta" più occorrenze con lo stesso movimento.
+  const consumed = new Set<string>()
 
   for (const inc of income) {
     if (!inc.is_active) continue
@@ -44,7 +48,7 @@ export function generateIncomeOccurrences(
         const workStr = toDateString(workDate)
         if (inc.start_date && workStr < inc.start_date) continue
         if (inc.end_date && workStr > inc.end_date) continue
-        const matching = findMatch(periodTx, inc.id, workStr)
+        const matching = findMatch(periodTx, inc.id, workStr, 'monthly', consumed)
         out.push({
           income: inc,
           workDate,
@@ -65,7 +69,7 @@ export function generateIncomeOccurrences(
           const workStr = toDateString(workDate)
           const inRange = (!inc.start_date || workStr >= inc.start_date) && (!inc.end_date || workStr <= inc.end_date)
           if (inRange) {
-            const matching = findMatch(periodTx, inc.id, workStr)
+            const matching = findMatch(periodTx, inc.id, workStr, 'weekly', consumed)
             out.push({
               income: inc,
               workDate,
@@ -92,8 +96,19 @@ function daysInMonth(year: number, monthIdx: number): number {
   return new Date(year, monthIdx + 1, 0).getDate()
 }
 
-function findMatch(periodTx: Transaction[], incomeId: string, dateStr: string): Transaction | undefined {
-  return periodTx.find(tx => tx.recurring_income_id === incomeId && tx.date === dateStr)
+function findMatch(
+  periodTx: Transaction[],
+  incomeId: string,
+  dateStr: string,
+  frequency: 'monthly' | 'weekly',
+  consumed: Set<string>,
+): Transaction | undefined {
+  const tx = periodTx
+    .filter(t => t.recurring_income_id === incomeId && !consumed.has(t.id))
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+    .find(t => inSameRecurrenceWindow(t.date, dateStr, frequency))
+  if (tx) consumed.add(tx.id)
+  return tx
 }
 
 function classify(tx: Transaction | undefined): OccurrenceStatus {

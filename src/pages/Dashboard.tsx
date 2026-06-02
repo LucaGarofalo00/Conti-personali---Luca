@@ -24,6 +24,7 @@ import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
 import { generateIncomeOccurrences, type IncomeOccurrence } from '../lib/incomeOccurrences'
 import { fuelConsumption, previousFuelFill, averageFuelConsumption, FUEL_TYPE_LABEL, type FuelType } from '../lib/fuelConsumption'
+import { inSameRecurrenceWindow } from '../lib/recurrenceMatch'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
 interface PendingItem {
@@ -225,17 +226,31 @@ export default function Dashboard() {
         }
       }
 
-      return occurrences
+      const filteredOccs = occurrences
         .filter(o => (!exp.start_date || o.dateStr >= exp.start_date) && (!exp.end_date || o.dateStr <= exp.end_date))
-        .map(o => {
-        const matchingTx = periodTx.find(tx =>
-          tx.recurring_expense_id === exp.id &&
-          tx.date === o.dateStr
-        ) || (freq === 'monthly' ? periodTx.find(tx =>
-          tx.description === exp.name &&
-          (isTransfer ? tx.type === 'transfer' : tx.type === 'expense') &&
-          !tx.recurring_expense_id
-        ) : undefined)
+
+      // Un'occorrenza è "pagata" se esiste un movimento reale nella stessa finestra
+      // (settimana per le settimanali, mese per le mensili): non serve la data esatta.
+      // Priorità alle transazioni collegate; come ripiego, quelle non collegate ma con lo
+      // stesso nome (es. vecchi memo "solo pagato"). Consumo greedy: una transazione copre
+      // al più un'occorrenza.
+      const byDate = (a: Transaction, b: Transaction) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+      const linkedTx = periodTx.filter(tx => tx.recurring_expense_id === exp.id).sort(byDate)
+      const namedTx = periodTx.filter(tx =>
+        !tx.recurring_expense_id && tx.description === exp.name &&
+        (isTransfer ? tx.type === 'transfer' : tx.type === 'expense')
+      ).sort(byDate)
+      const consumed = new Set<string>()
+      const isOccurrencePaid = (dateStr: string): boolean => {
+        const pick = (arr: Transaction[]) => arr.find(t => !consumed.has(t.id) && inSameRecurrenceWindow(t.date, dateStr, freq))
+        const tx = pick(linkedTx) || pick(namedTx)
+        if (!tx) return false
+        consumed.add(tx.id)
+        return true
+      }
+
+      return filteredOccs.map(o => {
+        const confirmed = isOccurrencePaid(o.dateStr)
         const dateLabel = freq === 'weekly'
           ? format(o.date, 'EEE d MMM', { locale: it })
           : format(o.date, 'd MMM', { locale: it })
@@ -248,7 +263,7 @@ export default function Dashboard() {
           fund_to_id: exp.fund_to_id || null,
           category: exp.category,
           label: `${dateLabel} · ${baseLabel}`,
-          confirmed: !!matchingTx,
+          confirmed,
           auto: !!exp.auto_deduct,
           recurring_expense_id: exp.id,
           occurrence_date: o.dateStr,
@@ -459,8 +474,10 @@ export default function Dashboard() {
       fund_id: null,
       fund_to_id: null,
       category: confirmItem.category,
+      recurring_income_id: confirmItem.recurring_income_id || null,
+      recurring_expense_id: confirmItem.recurring_expense_id || null,
       is_memo: true,
-      date: todayString(),
+      date: confirmItem.occurrence_date || todayString(),
       ...fuelFields,
     })
 
@@ -591,7 +608,7 @@ export default function Dashboard() {
               <p><strong>Entrate del Periodo (15-14)</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
               <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo (15-14). Click per vedere il dettaglio.</p>
               <p>Queste cifre comprendono sia le voci <strong>previste</strong> (ricorrenti, budget, pianificate) sia le <strong>transazioni manuali</strong> già registrate nel periodo: ogni movimento che aggiungi, modifichi o elimini si riflette qui (badge <span className="font-medium text-cyan-700">EFFETTIVA</span>).</p>
-              <p><strong>Budget</strong>: la quota settimanale è una previsione, ma viene riconciliata con la spesa reale. Se sfori, l'eccedenza è aggiunta come uscita (<span className="font-medium text-red-700">Sforamento</span>); se una settimana finisce con budget non speso, la differenza torna come entrata (<span className="font-medium text-emerald-700">Residuo budget</span>).</p>
+              <p><strong>Budget</strong>: per le settimane <strong>già iniziate</strong> conta quanto hai <strong>speso davvero</strong> (le transazioni del budget); per le settimane <strong>future</strong> conta il valore base come stima. L'avanzo non speso <strong>non</strong> viene conteggiato come entrata.</p>
               {projection && projectionTarget && nextSalary && (
                 <p>
                   <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).

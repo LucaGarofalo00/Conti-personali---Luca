@@ -157,10 +157,10 @@ export default function Budgets() {
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="blue">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
-        <p><strong>Reset settimanale</strong>: ogni <strong>lunedì 00:00</strong> il contatore della settimana riparte da zero.</p>
-        <p><strong>Rollover positivo</strong>: se hai speso meno del budget in settimane passate, l'avanzo si <strong>accumula</strong> nella settimana corrente. Es. budget 50€/sett, settimana scorsa hai speso 30€ → questa settimana hai 50 + 20 = <strong>70€ disponibili</strong>. L'avanzo viene mostrato con un badge verde sopra la barra.</p>
-        <p><strong>Sforamento</strong>: se spendi più del disponibile, la barra diventa rossa e compare un alert, MA le spese sono comunque registrate normalmente nel fondo. Il "debito" <strong>NON si scala</strong> dalla settimana successiva (l'avanzo si accumula solo, mai negativo).</p>
-        <p><strong>Nelle previsioni</strong>: ogni budget conta una volta per ogni lunedì futuro del periodo, con il valore <strong>base</strong> (non considera il rollover, che è solo per la settimana corrente).</p>
+        <p><strong>Reset settimanale</strong>: ogni <strong>lunedì 00:00</strong> il contatore riparte da zero, sempre dal valore <strong>base</strong>. L'avanzo della settimana precedente <strong>NON si accumula</strong> e <strong>NON viene conteggiato come entrata</strong>: i soldi non spesi restano semplicemente nel saldo del fondo.</p>
+        <p><strong>Sforamento</strong>: se spendi più del budget, la barra diventa rossa e compare un alert, MA le spese sono comunque registrate normalmente nel fondo. Il "debito" <strong>NON si scala</strong> dalla settimana successiva.</p>
+        <p><strong>Nei totali e nelle previsioni</strong>: per le settimane <strong>già iniziate</strong> il budget conta per quanto hai <strong>speso davvero</strong>; per le settimane <strong>future</strong> conta il valore base come stima.</p>
+        <p>Lo storico "Settimane passate" qui sotto mostra avanzo/sforo di ogni settimana solo a titolo informativo.</p>
         <p>Per spese fisse mensili (affitto, abbonamenti, ecc.) usa la sezione <strong>Spese Ricorrenti</strong>.</p>
       </InfoBox>
 
@@ -207,13 +207,6 @@ export default function Budgets() {
                       <button onClick={() => removeBudget(b.id)} aria-label="Elimina budget" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
-
-                  {rollInfo.rollover > 0 && (
-                    <div className="mb-2 flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5">
-                      <span className="font-medium">+{cur(rollInfo.rollover)} di avanzo</span>
-                      <span className="text-emerald-600">accumulato da {rollInfo.weeksTracked} {rollInfo.weeksTracked === 1 ? 'settimana' : 'settimane'} precedenti → questa settimana disponibili <strong>{cur(effective)}</strong> ({cur(limit)} base + {cur(rollInfo.rollover)} avanzo)</span>
-                    </div>
-                  )}
 
                   <div className="mb-2">
                     <div className="flex items-center justify-between text-sm mb-1">

@@ -146,18 +146,51 @@ describe('generateIncomeOccurrences - start_date / end_date window', () => {
   })
 })
 
-describe('generateIncomeOccurrences - matching is precise (no false positives)', () => {
-  it('does not match transaction with different recurring_income_id', () => {
+describe('generateIncomeOccurrences - aggancio per finestra (settimana/mese)', () => {
+  it('non aggancia una transazione di un altro recurring_income_id', () => {
     const inc = mkInc('sab')
     const tx = mkTx({ recurring_income_id: 'OTHER', date: '2026-05-16' })
     const out = generateIncomeOccurrences([inc], new Date(2026, 4, 15), new Date(2026, 5, 14), [tx])
     expect(out[0].status).toBe('pending')
   })
 
-  it('does not match transaction with different date', () => {
+  it('aggancia una transazione nella stessa settimana anche se in un giorno diverso', () => {
+    // occorrenza sabato 16 mag, ricevuta domenica 17 mag (stessa settimana lun→dom)
     const inc = mkInc('sab')
     const tx = mkTx({ recurring_income_id: 'sab', date: '2026-05-17' })
     const out = generateIncomeOccurrences([inc], new Date(2026, 4, 15), new Date(2026, 5, 14), [tx])
+    expect(out[0].status).toBe('paid')
+    expect(out[1].status).toBe('pending')
+  })
+
+  it('non aggancia una transazione di un\'altra settimana', () => {
+    // tx del 20 mag (settimana 18-24): non tocca l'occorrenza di sabato 16 mag (settimana 11-17)
+    const inc = mkInc('sab')
+    const tx = mkTx({ recurring_income_id: 'sab', date: '2026-05-20' })
+    const out = generateIncomeOccurrences([inc], new Date(2026, 4, 15), new Date(2026, 5, 14), [tx])
     expect(out[0].status).toBe('pending')
+  })
+
+  it('mensile: aggancia un pagamento nello stesso mese anche se in un giorno diverso', () => {
+    const inc = mkInc('stip', { frequency: 'monthly', day_of_month: 27, day_of_week: null })
+    const tx = mkTx({ recurring_income_id: 'stip', date: '2026-05-30' })
+    const out = generateIncomeOccurrences([inc], new Date(2026, 4, 15), new Date(2026, 5, 14), [tx])
+    expect(out[0].status).toBe('paid')
+  })
+
+  it('mensile: non aggancia un pagamento di un altro mese', () => {
+    const inc = mkInc('stip', { frequency: 'monthly', day_of_month: 27, day_of_week: null })
+    const tx = mkTx({ recurring_income_id: 'stip', date: '2026-06-02' })
+    const out = generateIncomeOccurrences([inc], new Date(2026, 4, 15), new Date(2026, 5, 14), [tx])
+    expect(out[0].status).toBe('pending')
+  })
+
+  it('greedy: una sola transazione copre una sola occorrenza settimanale', () => {
+    const inc = mkInc('sab')
+    const tx = mkTx({ recurring_income_id: 'sab', date: '2026-05-16' })
+    const out = generateIncomeOccurrences([inc], new Date(2026, 4, 15), new Date(2026, 5, 14), [tx])
+    expect(out.filter(o => o.status === 'paid')).toHaveLength(1)
+    expect(out[0].status).toBe('paid')
+    expect(out[1].status).toBe('pending')
   })
 })

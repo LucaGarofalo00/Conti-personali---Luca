@@ -14,8 +14,6 @@ const SOURCE_COLORS: Record<string, string> = {
   transfer: 'bg-blue-100 text-blue-700',
   actual: 'bg-slate-200 text-slate-600',
   actual_oneoff: 'bg-cyan-100 text-cyan-700',
-  budget_extra: 'bg-red-100 text-red-700',
-  budget_residual: 'bg-emerald-100 text-emerald-700',
 }
 
 interface Props {

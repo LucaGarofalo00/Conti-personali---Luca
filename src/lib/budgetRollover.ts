@@ -2,8 +2,6 @@ import { startOfWeek, addDays, isBefore } from 'date-fns'
 import type { WeeklyBudget, Transaction } from '../types'
 
 export interface BudgetRolloverInfo {
-  rollover: number
-  weeksTracked: number
   effectiveBudget: number
   spentThisWeek: number
   remaining: number
@@ -23,8 +21,8 @@ export function computeBudgetRollover(
 
   const myTxs = allBudgetTxs.filter(t => t.budget_id === budget.id && !t.is_memo)
 
-  let rollover = 0
-  let weeksTracked = 0
+  // Lo storico delle settimane passate resta solo informativo (avanzo/sforo per settimana):
+  // l'avanzo NON si accumula nel budget corrente e NON viene conteggiato come entrata.
   const pastWeeks: BudgetRolloverInfo['pastWeeks'] = []
   let cursorWeek = new Date(firstTrackedWeek)
 
@@ -37,8 +35,6 @@ export function computeBudgetRollover(
     const spent = Math.round(txsInWeek.reduce((s, t) => s + Number(t.amount), 0) * 100) / 100
     const surplus = Math.max(0, Math.round((budgetBase - spent) * 100) / 100)
     const over = Math.max(0, Math.round((spent - budgetBase) * 100) / 100)
-    rollover += surplus
-    weeksTracked++
     pastWeeks.push({ weekStart: new Date(cursorWeek), spent, surplus, over, txs: txsInWeek })
     cursorWeek = addDays(cursorWeek, 7)
   }
@@ -49,13 +45,12 @@ export function computeBudgetRollover(
   })
   const spentThisWeek = txsThisWeek.reduce((s, t) => s + Number(t.amount), 0)
 
-  const effectiveBudget = budgetBase + rollover
+  // Ogni settimana riparte dal valore base: nessun rollover dell'avanzo precedente.
+  const effectiveBudget = budgetBase
   const remaining = effectiveBudget - spentThisWeek
   const overBudget = remaining < 0
 
   return {
-    rollover: Math.round(rollover * 100) / 100,
-    weeksTracked,
     effectiveBudget: Math.round(effectiveBudget * 100) / 100,
     spentThisWeek: Math.round(spentThisWeek * 100) / 100,
     remaining: Math.round(remaining * 100) / 100,

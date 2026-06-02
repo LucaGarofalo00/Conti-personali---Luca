@@ -20,99 +20,80 @@ function mkTx(date: string, amount: number): Transaction {
   }
 }
 
-describe('computeBudgetRollover', () => {
-  it('no past weeks → no rollover', () => {
-    // today Monday 19 mag 2026 (Tuesday actually, but for week start logic)
-    // Budget created today, no rollover possible
+describe('computeBudgetRollover - nessun accumulo dell\'avanzo', () => {
+  it('nessuna settimana passata → budget effettivo = base', () => {
     const budget = mkBudget(50, '2026-05-19')
     const info = computeBudgetRollover(budget, [], new Date(2026, 4, 19))
-    expect(info.rollover).toBe(0)
-    expect(info.weeksTracked).toBe(0)
     expect(info.effectiveBudget).toBe(50)
+    expect(info.pastWeeks).toHaveLength(0)
   })
 
-  it('1 past week with full spending → no rollover', () => {
+  it('una settimana passata con avanzo NON si accumula: budget resta alla base', () => {
     const budget = mkBudget(50, '2026-05-12')
-    // Past week: 12-18 mag, spent 50€
-    const txs = [mkTx('2026-05-15', 50)]
-    const info = computeBudgetRollover(budget, txs, new Date(2026, 4, 19))
-    expect(info.rollover).toBe(0)
-    expect(info.weeksTracked).toBe(1)
-    expect(info.effectiveBudget).toBe(50)
-  })
-
-  it('1 past week with surplus → accumulates rollover', () => {
-    const budget = mkBudget(50, '2026-05-12')
-    // Past week: spent 30€, surplus 20€
+    // Settimana passata: speso 30€, avanzo 20€ → NON deve aumentare il budget corrente
     const txs = [mkTx('2026-05-14', 30)]
     const info = computeBudgetRollover(budget, txs, new Date(2026, 4, 19))
-    expect(info.rollover).toBe(20)
-    expect(info.effectiveBudget).toBe(70)
+    expect(info.effectiveBudget).toBe(50)
+    expect(info.pastWeeks).toHaveLength(1)
+    expect(info.pastWeeks[0].surplus).toBe(20)
   })
 
-  it('overspending in past week does NOT create negative rollover', () => {
+  it('sforamento in settimana passata non intacca il budget corrente', () => {
     const budget = mkBudget(50, '2026-05-12')
-    // Past week: spent 80€, NOT counted as -30 rollover
     const txs = [mkTx('2026-05-14', 80)]
     const info = computeBudgetRollover(budget, txs, new Date(2026, 4, 19))
-    expect(info.rollover).toBe(0)
     expect(info.effectiveBudget).toBe(50)
+    expect(info.pastWeeks[0].over).toBe(30)
+    expect(info.pastWeeks[0].surplus).toBe(0)
   })
 
-  it('multiple past weeks: surplus accumulates', () => {
+  it('più settimane passate: il budget corrente resta sempre alla base', () => {
     const budget = mkBudget(50, '2026-04-28')
-    // Week of 28 apr: spent 20€, surplus 30
-    // Week of 5 mag: spent 35€, surplus 15
-    // Week of 12 mag: spent 50€, surplus 0
-    // Current week of 19 mag: 0 spent
-    // Rollover total: 30 + 15 + 0 = 45
     const txs = [
       mkTx('2026-04-30', 20),
       mkTx('2026-05-06', 35),
       mkTx('2026-05-13', 50),
     ]
     const info = computeBudgetRollover(budget, txs, new Date(2026, 4, 19))
-    expect(info.rollover).toBe(45)
-    expect(info.weeksTracked).toBe(3)
-    expect(info.effectiveBudget).toBe(95)
+    expect(info.effectiveBudget).toBe(50)
+    expect(info.pastWeeks).toHaveLength(3)
   })
 
-  it('current week spending is tracked separately from rollover', () => {
+  it('la spesa della settimana corrente è tracciata sul budget base', () => {
     const budget = mkBudget(50, '2026-05-12')
     const txs = [
-      mkTx('2026-05-14', 30),  // past week: surplus 20
-      mkTx('2026-05-20', 25),  // current week
+      mkTx('2026-05-14', 30),  // settimana passata: avanzo 20 (ignorato)
+      mkTx('2026-05-20', 25),  // settimana corrente
     ]
     const info = computeBudgetRollover(budget, txs, new Date(2026, 4, 20))
-    expect(info.rollover).toBe(20)
     expect(info.spentThisWeek).toBe(25)
-    expect(info.effectiveBudget).toBe(70)
-    expect(info.remaining).toBe(45)
+    expect(info.effectiveBudget).toBe(50)
+    expect(info.remaining).toBe(25)
     expect(info.overBudget).toBe(false)
   })
 
-  it('overspending current week with rollover available', () => {
+  it('sforamento della settimana corrente rispetto al solo budget base', () => {
     const budget = mkBudget(50, '2026-05-12')
     const txs = [
-      mkTx('2026-05-14', 10),  // past: surplus 40
-      mkTx('2026-05-20', 100), // current: spent 100
+      mkTx('2026-05-14', 10),  // passata: avanzo 40 (ignorato, non aiuta questa settimana)
+      mkTx('2026-05-20', 100), // corrente: speso 100
     ]
     const info = computeBudgetRollover(budget, txs, new Date(2026, 4, 20))
-    expect(info.rollover).toBe(40)
-    expect(info.effectiveBudget).toBe(90)
+    expect(info.effectiveBudget).toBe(50)
     expect(info.spentThisWeek).toBe(100)
-    expect(info.remaining).toBe(-10)
+    expect(info.remaining).toBe(-50)
     expect(info.overBudget).toBe(true)
   })
 
-  it('skips memo transactions', () => {
+  it('salta le transazioni memo', () => {
     const budget = mkBudget(50, '2026-05-12')
     const memoTx = { ...mkTx('2026-05-14', 30), is_memo: true }
     const info = computeBudgetRollover(budget, [memoTx], new Date(2026, 4, 19))
-    expect(info.rollover).toBe(50)
+    expect(info.pastWeeks[0].spent).toBe(0)
+    expect(info.pastWeeks[0].surplus).toBe(50)
   })
 
-  it('past weeks expose overspend amount and their transactions', () => {
+  it('lo storico espone avanzo, sforo e transazioni di ogni settimana', () => {
     const budget = mkBudget(50, '2026-05-05')
     const txs = [
       mkTx('2026-05-06', 80), // settimana 4-10 mag: sforata di 30
