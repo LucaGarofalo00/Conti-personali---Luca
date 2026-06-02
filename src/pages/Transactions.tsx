@@ -7,8 +7,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
-import { cur, TRANSACTION_CATEGORIES, todayString, FUEL_CATEGORY, parseDecimal } from '../lib/utils'
+import DecimalInput from '../components/DecimalInput'
+import { cur, TRANSACTION_CATEGORIES, todayString, FUEL_CATEGORY, parseDecimal, catLabel } from '../lib/utils'
 import { incrementFundBalance } from '../lib/fundBalances'
+import { logSupabaseError } from '../lib/logError'
 import { fuelConsumption, previousFuelFill, averageFuelConsumption, normalizeFuelType, FUEL_TYPE_LABEL, type FuelType } from '../lib/fuelConsumption'
 import InfoBox from '../components/InfoBox'
 import type { Transaction, Fund } from '../types'
@@ -33,7 +35,9 @@ function numToInput(n: number | string | null): string {
 }
 
 function txBalanceDelta(tx: Transaction): { fundId: string; delta: number }[] {
-  if (tx.is_memo) return []
+  // memo e pianificate non hanno mai mosso i saldi: non devono stornarli/applicarli
+  // quando vengono modificate o eliminate.
+  if (tx.is_memo || tx.is_planned) return []
   const out: { fundId: string; delta: number }[] = []
   if (tx.fund_id) {
     const sign = tx.type === 'income' ? 1 : -1
@@ -69,6 +73,7 @@ export default function Transactions() {
   const [filterText, setFilterText] = useState('')
   const [includePlanned, setIncludePlanned] = useState(false)
   const [includeMemo, setIncludeMemo] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [hasMore, setHasMore] = useState(true)
@@ -93,7 +98,7 @@ export default function Transactions() {
       ])
       const firstError = e1 || e2
       if (firstError) {
-        console.error('Errore Supabase:', firstError)
+        logSupabaseError('Errore Supabase:', firstError)
         toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
       }
       if (reset) {
@@ -274,6 +279,12 @@ export default function Transactions() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
+  const filtersActive = filterType !== 'all' || filterFund !== 'all' || filterSource !== 'all' || filterText !== '' || dateFrom !== '' || dateTo !== '' || includePlanned || includeMemo
+  const resetFilters = () => {
+    setFilterType('all'); setFilterFund('all'); setFilterSource('all'); setFilterText('')
+    setDateFrom(''); setDateTo(''); setIncludePlanned(false); setIncludeMemo(false)
+  }
+
   const filtered = items.filter(tx => {
     if (!includePlanned && tx.is_planned) return false
     if (!includeMemo && tx.is_memo) return false
@@ -359,8 +370,15 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-4 items-center">
-        <Filter className="w-4 h-4 text-slate-400" />
+      <button
+        onClick={() => setShowFilters(s => !s)}
+        className="sm:hidden flex items-center gap-2 mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 font-medium"
+      >
+        <Filter className="w-4 h-4" /> Filtri
+        {filtersActive && <span className="w-2 h-2 rounded-full bg-blue-500" aria-label="filtri attivi" />}
+      </button>
+      <div className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-wrap gap-3 mb-4 items-center`}>
+        <Filter className="w-4 h-4 text-slate-400 hidden sm:block" />
         <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
           <option value="all">Tutti i tipi</option>
           <option value="income">Entrate</option>
@@ -382,8 +400,12 @@ export default function Transactions() {
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Cerca..." className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
         </div>
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" placeholder="Da" />
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" placeholder="A" />
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">Da
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">A
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+        </label>
         <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
           <input type="checkbox" checked={includePlanned} onChange={e => setIncludePlanned(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
           Pianificate
@@ -392,6 +414,11 @@ export default function Transactions() {
           <input type="checkbox" checked={includeMemo} onChange={e => setIncludeMemo(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
           Memo
         </label>
+        {filtersActive && (
+          <button onClick={resetFilters} className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition">
+            <X className="w-3.5 h-3.5" /> Azzera
+          </button>
+        )}
       </div>
 
       {selectedIds.size > 0 && (
@@ -469,7 +496,7 @@ export default function Transactions() {
                         {format(new Date(tx.date), 'dd MMM yyyy', { locale: it })}
                         {fundName && ` · ${fundName}`}
                         {fundToName && ` → ${fundToName}`}
-                        {tx.category !== 'altro' && ` · ${tx.category}`}
+                        {tx.category !== 'altro' && ` · ${catLabel(tx.category)}`}
                       </p>
                       {fuelLine && <p className="text-[11px] text-slate-400 mt-0.5">{fuelLine}</p>}
                       {cons && (
@@ -533,7 +560,7 @@ export default function Transactions() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <input type="number" step="0.01" value={form.amount || ''} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
@@ -559,7 +586,7 @@ export default function Transactions() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
             <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
-              {TRANSACTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {TRANSACTION_CATEGORIES.map(c => <option key={c} value={c}>{catLabel(c)}</option>)}
             </select>
           </div>
           {form.type === 'expense' && form.category === FUEL_CATEGORY && (

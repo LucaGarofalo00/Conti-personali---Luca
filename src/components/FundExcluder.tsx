@@ -23,8 +23,13 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('keydown', keyHandler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('keydown', keyHandler)
+    }
   }, [open])
 
   useLayoutEffect(() => {
@@ -64,6 +69,8 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
     <div ref={ref} className="relative inline-block">
       <button
         onClick={() => setOpen(o => !o)}
+        aria-haspopup="true"
+        aria-expanded={open}
         className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-[13px] font-medium transition-all duration-150 ${excludedCount > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-white hover:border-slate-300'}`}
       >
         <Filter className="w-3.5 h-3.5" />

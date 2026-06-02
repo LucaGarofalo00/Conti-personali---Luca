@@ -23,3 +23,16 @@ async function rpcIncrement(fundId: string, delta: number): Promise<boolean> {
     return false
   }
 }
+
+// Trasferimento tra due fondi. Prova la RPC ATOMICA `transfer_funds` (vedi
+// supabase-rpc-balances.sql): se deployata, i due saldi cambiano nella stessa transazione.
+// Fallback ai due increment separati se la RPC non è disponibile (comportamento storico).
+export async function transferFunds(fromId: string | null, toId: string | null, amount: number): Promise<void> {
+  if (!fromId || !toId || amount === 0) return
+  try {
+    const { error } = await supabase.rpc('transfer_funds', { p_from: fromId, p_to: toId, p_delta: amount })
+    if (!error) return
+  } catch { /* RPC non disponibile: fallback sotto */ }
+  await incrementFundBalance(fromId, -amount)
+  await incrementFundBalance(toId, amount)
+}

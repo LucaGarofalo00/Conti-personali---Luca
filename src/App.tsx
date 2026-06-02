@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './components/Toast'
 import { ConfirmProvider } from './components/Confirm'
 import { isConfigured } from './lib/supabase'
+import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Auth from './pages/Auth'
 
@@ -96,7 +97,9 @@ export default function App() {
       <AuthProvider>
         <ToastProvider>
           <ConfirmProvider>
-            <AppRoutes />
+            <ErrorBoundary>
+              <AppRoutes />
+            </ErrorBoundary>
           </ConfirmProvider>
         </ToastProvider>
       </AuthProvider>

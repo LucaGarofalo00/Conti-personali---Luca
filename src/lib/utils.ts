@@ -80,6 +80,14 @@ export const TRANSACTION_CATEGORIES = [
 
 export const FUEL_CATEGORY = 'benzina'
 
+// Etichetta di visualizzazione delle categorie. Il valore salvato resta invariato (es.
+// 'benzina' attiva i campi rifornimento), ma a schermo mostriamo "Carburante" perché copre
+// sia benzina sia GPL.
+const CATEGORY_LABELS: Record<string, string> = { benzina: 'Carburante' }
+export function catLabel(c: string): string {
+  return CATEGORY_LABELS[c] ?? c
+}
+
 // Converte l'input utente in numero accettando sia la virgola (separatore decimale italiano) sia il punto.
 export function parseDecimal(s: string): number {
   const n = parseFloat(s.replace(',', '.'))

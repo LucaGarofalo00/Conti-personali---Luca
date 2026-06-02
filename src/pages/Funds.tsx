@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Wallet, Plus, Pencil, Trash2, ArrowLeftRight, PiggyBank } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
+import DecimalInput from '../components/DecimalInput'
 import { cur, iconMap, ICONS, COLORS, todayString } from '../lib/utils'
-import { incrementFundBalance } from '../lib/fundBalances'
+import { transferFunds } from '../lib/fundBalances'
+import { logSupabaseError } from '../lib/logError'
 import InfoBox from '../components/InfoBox'
 import type { Fund } from '../types'
 
@@ -30,7 +32,7 @@ export default function Funds() {
     try {
       const { data, error } = await supabase.from('funds').select('*').order('sort_order')
       if (error) {
-        console.error('Errore Supabase:', error)
+        logSupabaseError('Errore Supabase:', error)
         toast.error('Errore: ' + (error.message || 'caricamento fondi'))
       }
       setFunds(data || [])
@@ -72,27 +74,36 @@ export default function Funds() {
     load()
   }
 
+  const transferring = useRef(false)
   const doTransfer = async () => {
+    if (transferring.current) return
     if (!transfer.from_id || !transfer.to_id || transfer.amount <= 0) return
+    if (transfer.from_id === transfer.to_id) { toast.error('Scegli due fondi diversi'); return }
     const from = funds.find(f => f.id === transfer.from_id)!
     const to = funds.find(f => f.id === transfer.to_id)!
     if (transfer.amount > Number(from.balance)) {
       toast.error('Saldo insufficiente')
       return
     }
+    transferring.current = true
     setSaving(true)
-    await incrementFundBalance(from.id, -transfer.amount)
-    await incrementFundBalance(to.id, transfer.amount)
-    await supabase.from('transactions').insert({
-      user_id: user!.id, type: 'transfer', amount: transfer.amount,
-      description: `Trasferimento: ${from.name} → ${to.name}`,
-      fund_id: from.id, fund_to_id: to.id, category: 'trasferimento', date: todayString(),
-    })
-    setSaving(false)
-    toast.success('Trasferimento completato')
-    setShowTransfer(false)
-    setTransfer(emptyTransfer)
-    load()
+    try {
+      // Registra prima la transazione: se fallisce, i saldi NON vengono toccati.
+      const { error } = await supabase.from('transactions').insert({
+        user_id: user!.id, type: 'transfer', amount: transfer.amount,
+        description: `Trasferimento: ${from.name} → ${to.name}`,
+        fund_id: from.id, fund_to_id: to.id, category: 'trasferimento', date: todayString(),
+      })
+      if (error) { toast.error('Errore nel trasferimento: ' + (error.message || '')); return }
+      await transferFunds(from.id, to.id, transfer.amount)
+      toast.success('Trasferimento completato')
+      setShowTransfer(false)
+      setTransfer(emptyTransfer)
+      load()
+    } finally {
+      transferring.current = false
+      setSaving(false)
+    }
   }
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
@@ -180,7 +191,7 @@ export default function Funds() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Saldo</label>
-            <input type="number" step="0.01" value={form.balance} onChange={e => setForm({ ...form, balance: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <DecimalInput value={form.balance} onChange={n => setForm({ ...form, balance: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
           {form.type === 'main' && (
             <>
@@ -231,7 +242,7 @@ export default function Funds() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Importo</label>
-            <input type="number" step="0.01" value={transfer.amount || ''} onChange={e => setTransfer({ ...transfer, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <DecimalInput value={transfer.amount} onChange={n => setTransfer({ ...transfer, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
           <button onClick={doTransfer} disabled={!transfer.from_id || !transfer.to_id || transfer.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {saving ? 'Trasferimento...' : 'Trasferisci'}

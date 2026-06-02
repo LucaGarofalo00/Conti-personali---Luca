@@ -228,11 +228,19 @@ describe('getPeriodBreakdown - reconciliation with actual transactions', () => {
     })
     expect(paid.find(i => i.source === 'recurring_expense')?.amount).toBe(380)
 
+    // memo CON importo: conta nei totali con l'importo effettivo (senza muovere i fondi)
     const memo = getPeriodBreakdown({
       ...period, ...base, recurringIncome: [], recurringExpenses: [exp],
       actualTx: [mkActualTx({ amount: 400, date: '2026-05-20', recurring_expense_id: 'aff', is_memo: true })],
     })
-    expect(memo.filter(i => i.source === 'recurring_expense')).toHaveLength(0)
+    expect(memo.find(i => i.source === 'recurring_expense')?.amount).toBe(400)
+
+    // memo a 0 ("non avvenuto"): non conta
+    const memoZero = getPeriodBreakdown({
+      ...period, ...base, recurringIncome: [], recurringExpenses: [exp],
+      actualTx: [mkActualTx({ amount: 0, date: '2026-05-20', recurring_expense_id: 'aff', is_memo: true })],
+    })
+    expect(memoZero.filter(i => i.source === 'recurring_expense')).toHaveLength(0)
   })
 })
 

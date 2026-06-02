@@ -5,7 +5,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
+import DecimalInput from '../components/DecimalInput'
 import { cur, getBillingPeriod } from '../lib/utils'
+import { logSupabaseError } from '../lib/logError'
 import { generateIncomeOccurrences } from '../lib/incomeOccurrences'
 import InfoBox from '../components/InfoBox'
 import type { RecurringIncome, Fund, Transaction } from '../types'
@@ -41,7 +43,7 @@ export default function Income() {
       ])
       const firstError = e1 || e2
       if (firstError) {
-        console.error('Errore Supabase:', firstError)
+        logSupabaseError('Errore Supabase:', firstError)
         toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
       }
       setItems(inc || [])
@@ -122,7 +124,7 @@ export default function Income() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-slate-500">Totale entrate del periodo corrente (15-14): <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
+          <p className="text-sm text-slate-500">Totale entrate ricorrenti del periodo (15-14): <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
@@ -189,7 +191,7 @@ export default function Income() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <input type="number" step="0.01" value={form.amount || ''} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>

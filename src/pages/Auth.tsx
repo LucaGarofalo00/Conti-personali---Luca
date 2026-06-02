@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { Eye, EyeOff } from 'lucide-react'
 import Logo from '../components/Logo'
 
 type Mode = 'login' | 'register' | 'reset'
@@ -10,6 +11,7 @@ export default function Auth() {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
@@ -82,7 +84,13 @@ export default function Auth() {
             {mode !== 'reset' && (
               <div>
                 <label className="block text-[13px] font-medium text-slate-600 mb-1.5">Password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" required minLength={6} />
+                <div className="relative">
+                  <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" required minLength={6} />
+                  <button type="button" onClick={() => setShowPassword(s => !s)} aria-label={showPassword ? 'Nascondi password' : 'Mostra password'} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {mode === 'register' && <p className="text-[11px] text-slate-400 mt-1">Almeno 6 caratteri.</p>}
               </div>
             )}
 

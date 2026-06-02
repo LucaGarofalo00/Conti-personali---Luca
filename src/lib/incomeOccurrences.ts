@@ -16,7 +16,12 @@ export interface IncomeOccurrence {
 }
 
 function ensureDate(d: Date | string): Date {
-  return d instanceof Date ? d : new Date(d)
+  if (d instanceof Date) return d
+  // Parsa 'YYYY-MM-DD' come data LOCALE: new Date(stringa) la interpreterebbe come UTC,
+  // con uno shift di fuso che può escludere l'occorrenza del primo giorno del periodo
+  // (es. lo stipendio del 15, che è anche l'inizio del ciclo 15→14).
+  const [y, m, day] = d.slice(0, 10).split('-').map(Number)
+  return new Date(y, m - 1, day)
 }
 
 export function generateIncomeOccurrences(
@@ -48,7 +53,7 @@ export function generateIncomeOccurrences(
         const workStr = toDateString(workDate)
         if (inc.start_date && workStr < inc.start_date) continue
         if (inc.end_date && workStr > inc.end_date) continue
-        const matching = findMatch(periodTx, inc.id, workStr, 'monthly', consumed)
+        const matching = findMatch(periodTx, inc.id, d => inSameRecurrenceWindow(d, workStr, 'monthly'), consumed)
         out.push({
           income: inc,
           workDate,
@@ -61,24 +66,32 @@ export function generateIncomeOccurrences(
       }
     } else if (inc.frequency === 'weekly' && inc.day_of_week !== null) {
       const delay = inc.delay_days || 0
-      const cursor = new Date(periodStart)
+      // L'occorrenza appartiene al periodo in cui cade il PAGAMENTO (lavoro + delay), non il
+      // giorno di lavoro: così un sabato lavorato a fine periodo ma pagato dopo il 15 compare
+      // nel periodo successivo. Il lavoro può quindi precedere l'inizio periodo di `delay` giorni.
+      const cursor = addDays(periodStart, -delay)
       while (cursor <= periodEnd) {
         if (cursor.getDay() === inc.day_of_week) {
           const workDate = new Date(cursor)
           const paymentDate = addDays(workDate, delay)
-          const workStr = toDateString(workDate)
-          const inRange = (!inc.start_date || workStr >= inc.start_date) && (!inc.end_date || workStr <= inc.end_date)
-          if (inRange) {
-            const matching = findMatch(periodTx, inc.id, workStr, 'weekly', consumed)
-            out.push({
-              income: inc,
-              workDate,
-              workDateStr: workStr,
-              paymentDate,
-              paymentDateStr: toDateString(paymentDate),
-              status: classify(matching),
-              matchingTx: matching,
-            })
+          if (paymentDate >= periodStart && paymentDate <= periodEnd) {
+            const workStr = toDateString(workDate)
+            const payStr = toDateString(paymentDate)
+            const inRange = (!inc.start_date || workStr >= inc.start_date) && (!inc.end_date || workStr <= inc.end_date)
+            if (inRange) {
+              // La transazione che copre l'occorrenza cade tra il giorno di lavoro e quello di
+              // pagamento (gestisce sia le nuove tx datate al pagamento sia quelle al lavoro).
+              const matching = findMatch(periodTx, inc.id, d => d >= workStr && d <= payStr, consumed)
+              out.push({
+                income: inc,
+                workDate,
+                workDateStr: workStr,
+                paymentDate,
+                paymentDateStr: payStr,
+                status: classify(matching),
+                matchingTx: matching,
+              })
+            }
           }
           cursor.setDate(cursor.getDate() + 7)
         } else {
@@ -99,20 +112,21 @@ function daysInMonth(year: number, monthIdx: number): number {
 function findMatch(
   periodTx: Transaction[],
   incomeId: string,
-  dateStr: string,
-  frequency: 'monthly' | 'weekly',
+  matcher: (txDate: string) => boolean,
   consumed: Set<string>,
 ): Transaction | undefined {
   const tx = periodTx
     .filter(t => t.recurring_income_id === incomeId && !consumed.has(t.id))
     .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
-    .find(t => inSameRecurrenceWindow(t.date, dateStr, frequency))
+    .find(t => matcher(t.date))
   if (tx) consumed.add(tx.id)
   return tx
 }
 
 function classify(tx: Transaction | undefined): OccurrenceStatus {
   if (!tx) return 'pending'
-  if (tx.is_memo) return 'skipped'
+  // memo con importo = ricevuto/pagato ma senza accredito su un fondo (conta nei totali);
+  // memo a 0 = "non lavorato"/"non avvenuto" (non conta).
+  if (tx.is_memo) return Number(tx.amount) > 0 ? 'paid' : 'skipped'
   return 'paid'
 }

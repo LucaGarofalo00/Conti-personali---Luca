@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { getDateInCurrentPeriod, toDateString, todayString, getBillingPeriodFor } from './utils'
-import { incrementFundBalance } from './fundBalances'
+import { incrementFundBalance, transferFunds } from './fundBalances'
 import type { RecurringExpense, Transaction } from '../types'
 
 interface ProcessArgs {
@@ -41,7 +41,14 @@ function computeOccurrencesInCurrentPeriod(exp: RecurringExpense): Date[] {
   return []
 }
 
+let autoDeductInFlight = false
+
 export async function processAutoDeducts({ userId, expenses, periodTx }: ProcessArgs): Promise<number> {
+  // Evita esecuzioni concorrenti nello stesso runtime (doppio mount in StrictMode o load()
+  // ravvicinati): senza questo guard la stessa occorrenza può essere addebitata due volte.
+  if (autoDeductInFlight) return 0
+  autoDeductInFlight = true
+  try {
   const today = new Date()
   const todayStr = todayString()
   let processed = 0
@@ -87,8 +94,7 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
       if (txError || !inserted) continue
 
       if (isTransfer && exp.fund_to_id) {
-        await incrementFundBalance(exp.fund_id, -amount)
-        await incrementFundBalance(exp.fund_to_id, amount)
+        await transferFunds(exp.fund_id, exp.fund_to_id, amount)
       } else {
         await incrementFundBalance(exp.fund_id, -amount)
       }
@@ -99,4 +105,7 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
   }
 
   return processed
+  } finally {
+    autoDeductInFlight = false
+  }
 }

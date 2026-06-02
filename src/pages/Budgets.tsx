@@ -7,8 +7,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
+import DecimalInput from '../components/DecimalInput'
 import { cur, todayString, getBillingPeriod } from '../lib/utils'
 import { incrementFundBalance } from '../lib/fundBalances'
+import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import { computeBudgetRollover } from '../lib/budgetRollover'
 import InfoBox from '../components/InfoBox'
@@ -49,7 +51,7 @@ export default function Budgets() {
       ])
       const firstError = e1 || e2 || e3
       if (firstError) {
-        console.error('Errore Supabase:', firstError)
+        logSupabaseError('Errore Supabase:', firstError)
         toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
       }
       setBudgets(b || [])
@@ -318,7 +320,7 @@ export default function Budgets() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Budget settimanale (€)</label>
-            <input type="number" step="0.01" value={budgetForm.amount || ''} onChange={e => setBudgetForm({ ...budgetForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <DecimalInput value={budgetForm.amount} onChange={n => setBudgetForm({ ...budgetForm, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
@@ -342,7 +344,7 @@ export default function Budgets() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <input type="number" step="0.01" value={expForm.amount || ''} onChange={e => setExpForm({ ...expForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput value={expForm.amount} onChange={n => setExpForm({ ...expForm, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>

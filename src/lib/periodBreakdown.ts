@@ -1,6 +1,7 @@
-import { addDays, getDate, getDay, getDaysInMonth, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns'
+import { addDays, getDate, getDay, getDaysInMonth, startOfDay, isBefore, isAfter, isSameDay, format } from 'date-fns'
+import { it } from 'date-fns/locale'
 import { toDateString } from './utils'
-import { inSameRecurrenceWindow, type Frequency } from './recurrenceMatch'
+import { inSameRecurrenceWindow } from './recurrenceMatch'
 import type { RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
 export type BreakdownSource =
@@ -96,14 +97,19 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
   // null  → nessuna riconciliazione (usa l'importo previsto)
   // 'skip' → occorrenza gestita ma senza movimento reale (memo / "non lavorato"): non contare
   // {amount} → occorrenza confermata: usa l'importo effettivo
-  const reconcile = (map: Map<string, Transaction[]>, recId: string, occDateStr: string, frequency: Frequency): Reconciled => {
+  // matcher(txDate) decide se una transazione copre l'occorrenza. Spese/entrate normali usano
+  // la finestra (settimana/ciclo); le entrate settimanali con ritardo usano l'intervallo
+  // [giorno di lavoro … giorno di pagamento], così non collidono tra settimane adiacenti.
+  const reconcile = (map: Map<string, Transaction[]>, recId: string, matcher: (txDate: string) => boolean): Reconciled => {
     if (!actualTx) return null
     const arr = map.get(recId)
     if (!arr) return null
-    const tx = arr.find(t => !consumedTxIds.has(t.id) && inSameRecurrenceWindow(t.date, occDateStr, frequency))
+    const tx = arr.find(t => !consumedTxIds.has(t.id) && matcher(t.date))
     if (!tx) return null
     consumedTxIds.add(tx.id)
-    if (tx.is_memo) return 'skip'
+    // Memo con importo (es. "segnato senza scalare"): conta nei totali con l'importo effettivo
+    // ma non muove i fondi. Memo a 0 (es. "non lavorato"/"non avvenuto"): non conta.
+    if (tx.is_memo && Number(tx.amount) === 0) return 'skip'
     return { amount: Number(tx.amount) }
   }
 
@@ -121,7 +127,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       if (inc.frequency === 'monthly' && inc.day_of_month !== null) {
         const adjusted = Math.min(inc.day_of_month, dim)
         if (dom === adjusted) {
-          const r = reconcile(incomeByRec, inc.id, dateStr, 'monthly')
+          const r = reconcile(incomeByRec, inc.id, d => inSameRecurrenceWindow(d, dateStr, 'monthly'))
           if (r !== 'skip') {
             items.push({
               date: dateStr, description: inc.name, amount: r ? r.amount : Number(inc.amount),
@@ -133,7 +139,10 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         const delayDays = inc.delay_days || 0
         const baseDay = addDays(cursor, -delayDays)
         if (getDay(baseDay) === inc.day_of_week) {
-          const r = reconcile(incomeByRec, inc.id, toDateString(baseDay), 'weekly')
+          // L'entrata è contata nel periodo del pagamento (cursor = dateStr). La transazione
+          // che la copre cade tra il giorno di lavoro (baseDay) e quello di pagamento (dateStr).
+          const workStr = toDateString(baseDay)
+          const r = reconcile(incomeByRec, inc.id, d => d >= workStr && d <= dateStr)
           if (r !== 'skip') {
             items.push({
               date: dateStr, description: inc.name, amount: r ? r.amount : Number(inc.amount),
@@ -162,7 +171,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         if (dom === adjusted && cursor.getMonth() + 1 === exp.month_of_year) occurs = true
       }
       if (occurs) {
-        const r = reconcile(expenseByRec, exp.id, dateStr, freq)
+        const r = reconcile(expenseByRec, exp.id, d => inSameRecurrenceWindow(d, dateStr, freq))
         if (r !== 'skip') {
           items.push({
             date: dateStr,
@@ -204,8 +213,9 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         // Settimana già iniziata + dati reali: la conteggia la riconciliazione sotto (spesa reale).
         // Qui emetti la quota stimata solo per le settimane future.
         if (reconcileBudgetWithActuals && !isAfter(cursor, today)) continue
+        const range = `${format(cursor, 'd')}–${format(addDays(cursor, 6), 'd MMM', { locale: it })}`
         items.push({
-          date: dateStr, description: `${b.name} (settimana)`, amount: Number(b.amount),
+          date: dateStr, description: `${b.name} (settimana ${range})`, amount: Number(b.amount),
           kind: 'expense', source: 'weekly_budget', sourceLabel: SOURCE_LABELS.weekly_budget,
         })
       }
@@ -260,8 +270,9 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
           }
           spent = Math.round(spent * 100) / 100
           if (spent > 0) {
+            const range = `${format(weekStart, 'd')}–${format(addDays(weekStart, 6), 'd MMM', { locale: it })}`
             items.push({
-              date: wsStr, description: `${b.name} (speso settimana)`, amount: spent,
+              date: wsStr, description: `${b.name} (speso ${range})`, amount: spent,
               kind: 'expense', source: 'weekly_budget', sourceLabel: SOURCE_LABELS.weekly_budget,
             })
           }

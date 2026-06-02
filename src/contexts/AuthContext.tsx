@@ -23,6 +23,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s)
       setUser(s?.user ?? null)
       setLoading(false)
+    }).catch(() => {
+      // Se il recupero sessione fallisce (boot a freddo/offline) non lasciare lo spinner bloccato.
+      setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {

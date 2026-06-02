@@ -5,7 +5,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
-import { cur, EXPENSE_CATEGORIES, todayString, getBillingPeriod } from '../lib/utils'
+import DecimalInput from '../components/DecimalInput'
+import { cur, EXPENSE_CATEGORIES, todayString, getBillingPeriod, catLabel } from '../lib/utils'
+import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import InfoBox from '../components/InfoBox'
 import type { RecurringExpense, Fund, Transaction } from '../types'
@@ -82,7 +84,7 @@ export default function RecurringExpenses() {
       ])
       const firstError = e1 || e2
       if (firstError) {
-        console.error('Errore Supabase:', firstError)
+        logSupabaseError('Errore Supabase:', firstError)
         toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
       }
       setItems(exp || [])
@@ -198,7 +200,7 @@ export default function RecurringExpenses() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-slate-500">Totale spese del periodo corrente (15-14): <span className="font-semibold text-red-500">{cur(totalExpenses)}</span></p>
+          <p className="text-sm text-slate-500">Totale spese ricorrenti del periodo (15-14): <span className="font-semibold text-red-500">{cur(totalExpenses)}</span></p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
@@ -251,7 +253,7 @@ export default function RecurringExpenses() {
                         return `Ogni mese il ${item.day_of_month}`
                       })()} &middot; {isTransfer
                         ? `${fromFund || '?'} → ${toFund || '?'}`
-                        : item.category}
+                        : catLabel(item.category)}
                       {!isTransfer && fromFund && ` · ${fromFund}`}
                       {item.start_date && ` · Dal ${new Date(item.start_date).toLocaleDateString('it-IT')}`}
                       {item.end_date && ` · Ultimo accredito: ${new Date(item.end_date).toLocaleDateString('it-IT')}`}
@@ -313,7 +315,7 @@ export default function RecurringExpenses() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <input type="number" step="0.01" value={form.amount || ''} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
@@ -360,7 +362,7 @@ export default function RecurringExpenses() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
                 <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
-                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
+                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{catLabel(c)}</option>)}
                 </select>
               </div>
               <div>

@@ -29,7 +29,11 @@ export function useExcludedFunds(): [string[], (next: string[]) => void, (id: st
 
   const update = (next: string[]) => {
     const unique = Array.from(new Set(next))
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(unique))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(unique))
+    } catch {
+      // storage pieno o modalità privata: l'esclusione resta comunque valida per la sessione
+    }
     setIds(unique)
     window.dispatchEvent(new Event(EVENT_NAME))
   }

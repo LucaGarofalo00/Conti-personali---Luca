@@ -15,12 +15,17 @@ describe('inSameRecurrenceWindow', () => {
     expect(inSameRecurrenceWindow('2026-06-01', '2026-05-31', 'weekly')).toBe(false)
   })
 
-  it('monthly: stesso mese → true anche con giorni diversi (29 vs 30 mag)', () => {
+  it('monthly: stesso ciclo 15→14 → true anche a cavallo del mese (29 mag, 30 mag, 1 giu)', () => {
     expect(inSameRecurrenceWindow('2026-05-30', '2026-05-29', 'monthly')).toBe(true)
+    // 1 giu è ancora nel ciclo 15 mag–14 giu dell'occorrenza del 29 mag
+    expect(inSameRecurrenceWindow('2026-06-01', '2026-05-29', 'monthly')).toBe(true)
   })
 
-  it('monthly: mesi diversi → false (1 giu vs 29 mag)', () => {
-    expect(inSameRecurrenceWindow('2026-06-01', '2026-05-29', 'monthly')).toBe(false)
+  it('monthly: cicli 15→14 diversi → false', () => {
+    // 20 giu appartiene al ciclo 15 giu–14 lug, non a quello dell'occorrenza del 29 mag
+    expect(inSameRecurrenceWindow('2026-06-20', '2026-05-29', 'monthly')).toBe(false)
+    // 10 mag appartiene al ciclo 15 apr–14 mag
+    expect(inSameRecurrenceWindow('2026-05-10', '2026-05-29', 'monthly')).toBe(false)
   })
 
   it('yearly: stesso mese e anno → true, mese diverso → false', () => {
