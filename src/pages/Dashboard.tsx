@@ -19,6 +19,8 @@ import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } fro
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
 import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel } from '../lib/utils'
+import { isAmountsHidden } from '../lib/privacy'
+import { probePlannedDateSupport, withPlannedDate } from '../lib/schemaSupport'
 import { incrementFundBalance, transferFunds } from '../lib/fundBalances'
 import { logSupabaseError } from '../lib/logError'
 import { useExcludedFunds } from '../lib/excludedFunds'
@@ -87,6 +89,7 @@ export default function Dashboard() {
 
   const [confirmItem, setConfirmItem] = useState<PendingItem | null>(null)
   const [confirmAmount, setConfirmAmount] = useState(0)
+  const [confirmDate, setConfirmDate] = useState(todayString())
   const [confirmFundId, setConfirmFundId] = useState('')
   const [confirmSaving, setConfirmSaving] = useState(false)
   const [confirmFuelKm, setConfirmFuelKm] = useState('')
@@ -97,10 +100,11 @@ export default function Dashboard() {
 
   const [plannedModal, setPlannedModal] = useState(false)
   const [plannedListOpen, setPlannedListOpen] = useState(false)
-  const [breakdownModal, setBreakdownModal] = useState<'income' | 'expense' | null>(null)
+  const [breakdownModal, setBreakdownModal] = useState<'income' | 'expense' | 'net' | null>(null)
   const [completePlannedItem, setCompletePlannedItem] = useState<Transaction | null>(null)
   const [completeAmount, setCompleteAmount] = useState(0)
   const [completeFundId, setCompleteFundId] = useState('')
+  const [completeDate, setCompleteDate] = useState(todayString())
   const [completeSaving, setCompleteSaving] = useState(false)
   const [plannedForm, setPlannedForm] = useState({
     type: 'expense' as 'income' | 'expense',
@@ -112,6 +116,8 @@ export default function Dashboard() {
   const load = async () => {
     try {
       setLoadError(false)
+      // Rileva il supporto a planned_date prima di eventuali inserimenti (auto-deduct in fondo).
+      await probePlannedDateSupport()
       const { start: periodStart, end: periodEnd } = getBillingPeriod()
 
       const [f, e, i, b] = await Promise.all([
@@ -249,7 +255,10 @@ export default function Dashboard() {
       ).sort(byDate)
       const consumed = new Set<string>()
       const isOccurrencePaid = (dateStr: string): boolean => {
-        const pick = (arr: Transaction[]) => arr.find(t => !consumed.has(t.id) && inSameRecurrenceWindow(t.date, dateStr, freq))
+        // Preferisce la data prevista (planned_date) per agganciare l'occorrenza giusta anche
+        // se la spesa è stata segnata giorni prima/dopo; in assenza, ricade sulla finestra.
+        const matches = (t: Transaction) => t.planned_date ? t.planned_date === dateStr : inSameRecurrenceWindow(t.date, dateStr, freq)
+        const pick = (arr: Transaction[]) => arr.find(t => !consumed.has(t.id) && matches(t))
         const tx = pick(linkedTx) || pick(namedTx)
         if (!tx) return false
         consumed.add(tx.id)
@@ -318,6 +327,9 @@ export default function Dashboard() {
   const openConfirm = (item: PendingItem) => {
     setConfirmItem(item)
     setConfirmAmount(item.amount)
+    // Data effettiva = oggi (il momento in cui registro), modificabile. La data prevista
+    // dell'occorrenza viene comunque salvata a parte in planned_date.
+    setConfirmDate(todayString())
     setConfirmFundId(item.fund_id || '')
     setConfirmFuelKm('')
     setConfirmFuelLiters('')
@@ -345,7 +357,11 @@ export default function Dashboard() {
     const fundId = confirmFundId || null
     const fundToId = confirmItem.kind === 'transfer' ? (confirmItem.fund_to_id || null) : null
     const txType = confirmItem.kind === 'transfer' ? 'transfer' : confirmItem.kind === 'income' ? 'income' : 'expense'
-    const txDate = confirmItem.occurrence_date || todayString()
+    // La data EFFETTIVA (quando registro) è quella che conta nei saldi e nei totali; la data
+    // PREVISTA dell'occorrenza resta in planned_date per riagganciare la ricorrente anche se
+    // l'ho segnata giorni prima o dopo.
+    const effectiveDate = confirmDate || todayString()
+    const plannedDate = confirmItem.occurrence_date || effectiveDate
     const isFuel = confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY
     const fuelFields = isFuel ? {
       fuel_km: parseDecimal(confirmFuelKm) || null,
@@ -354,7 +370,7 @@ export default function Dashboard() {
       fuel_type: confirmFuelType,
     } : {}
 
-    const { error: insertError } = await supabase.from('transactions').insert({
+    const { error: insertError } = await supabase.from('transactions').insert(withPlannedDate({
       user_id: user!.id,
       type: txType,
       amount: confirmAmount,
@@ -364,9 +380,9 @@ export default function Dashboard() {
       category: confirmItem.category,
       recurring_income_id: confirmItem.recurring_income_id || null,
       recurring_expense_id: confirmItem.recurring_expense_id || null,
-      date: txDate,
+      date: effectiveDate,
       ...fuelFields,
-    })
+    }, plannedDate))
 
     if (insertError) {
       setConfirmSaving(false)
@@ -393,7 +409,7 @@ export default function Dashboard() {
 
   const skipIncomeOccurrence = async (item: PendingItem) => {
     if (!item.recurring_income_id || !item.occurrence_date) return
-    const { error } = await supabase.from('transactions').insert({
+    const { error } = await supabase.from('transactions').insert(withPlannedDate({
       user_id: user!.id,
       type: 'income',
       amount: 0,
@@ -404,7 +420,7 @@ export default function Dashboard() {
       recurring_income_id: item.recurring_income_id,
       is_memo: true,
       date: item.occurrence_date,
-    })
+    }, item.occurrence_date))
     if (error) { toast.error('Errore: ' + error.message); return }
     toast.success('Segnato come "non lavorato"')
     load()
@@ -465,12 +481,13 @@ export default function Dashboard() {
     setCompletePlannedItem(p)
     setCompleteAmount(Number(p.amount))
     setCompleteFundId(p.fund_id || '')
+    setCompleteDate(todayString())
   }
 
   const confirmCompletePlanned = async () => {
     if (!completePlannedItem || completeAmount <= 0) return
     setCompleteSaving(true)
-    const { error } = await markPlannedAsDone(completePlannedItem, { amount: completeAmount, fund_id: completeFundId || null })
+    const { error } = await markPlannedAsDone(completePlannedItem, { amount: completeAmount, fund_id: completeFundId || null, date: completeDate || todayString() })
     setCompleteSaving(false)
     if (error) { toast.error('Errore nel completamento: ' + error); return }
     setCompletePlannedItem(null)
@@ -498,7 +515,9 @@ export default function Dashboard() {
       fuel_type: confirmFuelType,
     } : {}
 
-    const { error: insertError } = await supabase.from('transactions').insert({
+    const effectiveDate = confirmDate || todayString()
+    const plannedDate = confirmItem.occurrence_date || effectiveDate
+    const { error: insertError } = await supabase.from('transactions').insert(withPlannedDate({
       user_id: user!.id,
       type: confirmItem.kind === 'income' ? 'income' : 'expense',
       amount: confirmAmount,
@@ -509,9 +528,9 @@ export default function Dashboard() {
       recurring_income_id: confirmItem.recurring_income_id || null,
       recurring_expense_id: confirmItem.recurring_expense_id || null,
       is_memo: true,
-      date: confirmItem.occurrence_date || todayString(),
+      date: effectiveDate,
       ...fuelFields,
-    })
+    }, plannedDate))
 
     if (insertError) {
       setConfirmSaving(false)
@@ -554,7 +573,7 @@ export default function Dashboard() {
   const periodNet = Math.round((est.income - est.expenses) * 100) / 100
   const plannedIncomeInPeriod = plannedInPeriod.filter(p => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0)
   const plannedExpensesInPeriod = plannedInPeriod.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0)
-  const forecast = generateForecast(funds, expenses, income, budgets, 3, excludedFundIds, planned)
+  const forecast = generateForecast(funds, expenses, income, budgets, 3, excludedFundIds, planned, periodTx)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
   const nowDate = new Date()
@@ -630,8 +649,8 @@ export default function Dashboard() {
                 label="Netto del Periodo (15-14)"
                 value={cur(periodNet)}
                 valueColor={periodNet >= 0 ? 'text-emerald-600' : 'text-red-600'}
-                sub={`Uscite ${cur(est.expenses)}${plannedExpensesInPeriod > 0 ? ` (incl. ${cur(plannedExpensesInPeriod)} pianif.)` : ''} · Entrate ${cur(est.income)}`}
-                onClick={() => setBreakdownModal('expense')}
+                sub={`Entrate ${cur(est.income)} · Uscite ${cur(est.expenses)}${plannedExpensesInPeriod > 0 ? ` (incl. ${cur(plannedExpensesInPeriod)} pianif.)` : ''}`}
+                onClick={() => setBreakdownModal('net')}
               />
               {projection && projectionTarget && nextSalary ? (
                 <Card
@@ -652,7 +671,7 @@ export default function Dashboard() {
               <p><strong>Entrate del Periodo (15-14)</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
               <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo (15-14). Click per vedere il dettaglio.</p>
               <p>Queste cifre comprendono sia le voci <strong>previste</strong> (ricorrenti, budget, pianificate) sia le <strong>transazioni manuali</strong> già registrate nel periodo: ogni movimento che aggiungi, modifichi o elimini si riflette qui (badge <span className="font-medium text-cyan-700">EFFETTIVA</span>).</p>
-              <p><strong>Budget</strong>: per le settimane <strong>già iniziate</strong> conta quanto hai <strong>speso davvero</strong> (le transazioni del budget); per le settimane <strong>future</strong> conta il valore base come stima. L'avanzo non speso <strong>non</strong> viene conteggiato come entrata.</p>
+              <p><strong>Budget</strong>: conta sempre come <strong>quota stimata</strong> (la previsione del budget), una volta per settimana, esattamente come nel previsionale. Quanto hai speso davvero lo vedi col progress bar nella pagina Budget.</p>
               {projection && projectionTarget && nextSalary && (
                 <p>
                   <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).
@@ -925,7 +944,7 @@ export default function Dashboard() {
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `€${v}`} />
+                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${v}`} />
                 <Tooltip content={<CustomTooltip />} />
                 <Area type="monotone" dataKey="balance" stroke="#4F46E5" fill="url(#grad)" strokeWidth={2} />
               </AreaChart>
@@ -1001,6 +1020,20 @@ export default function Dashboard() {
                 </p>
               )}
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data effettiva</label>
+              <input
+                type="date"
+                value={confirmDate}
+                onChange={e => setConfirmDate(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow ${confirmItem.occurrence_date && confirmDate !== confirmItem.occurrence_date ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
+              />
+              {confirmItem.occurrence_date && confirmDate !== confirmItem.occurrence_date && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Previsto il {format(new Date(confirmItem.occurrence_date + 'T00:00:00'), 'd MMM', { locale: it })}. Conta la data effettiva qui sopra; quella prevista resta registrata.
+                </p>
+              )}
+            </div>
             {confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY && (
               <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dati rifornimento (facoltativi)</p>
@@ -1054,7 +1087,7 @@ export default function Dashboard() {
                 {(() => {
                   const avg = averageFuelConsumption(confirmFuelFills, confirmFuelType)
                   const km = parseDecimal(confirmFuelKm)
-                  const beforeDate = confirmItem.occurrence_date || todayString()
+                  const beforeDate = confirmDate || todayString()
                   const ref = { id: '', date: beforeDate, created_at: new Date().toISOString(), fuel_type: confirmFuelType }
                   const prev = km > 0 ? previousFuelFill(ref, confirmFuelFills) : null
                   const cons = prev && prev.fuel_liters != null ? fuelConsumption(km, Number(prev.fuel_liters), Number(prev.amount)) : null
@@ -1111,7 +1144,7 @@ export default function Dashboard() {
       <Modal
         isOpen={!!breakdownModal}
         onClose={() => setBreakdownModal(null)}
-        title={breakdownModal === 'income' ? 'Entrate del periodo (15-14)' : 'Uscite del periodo (15-14)'}
+        title={breakdownModal === 'income' ? 'Entrate del periodo (15-14)' : breakdownModal === 'net' ? 'Netto del periodo (15-14)' : 'Uscite del periodo (15-14)'}
       >
         {breakdownModal && (() => {
           const { startDate, endDate } = getBillingPeriodFor(new Date())
@@ -1123,13 +1156,14 @@ export default function Dashboard() {
             actualTx: periodTx,
             includeActualOneOffs: true,
           })
+          const detail = breakdownModal === 'income' ? 'tutte le entrate' : breakdownModal === 'net' ? 'tutte le entrate e le uscite' : 'tutte le uscite'
           return (
             <div className="space-y-3">
               <p className="text-xs text-slate-500">
-                Dettaglio di {breakdownModal === 'income' ? 'tutte le entrate' : 'tutte le uscite'} previste nel periodo corrente. Include ricorrenti, budget settimanali (1× per settimana), spese variabili e pianificate una tantum.
+                Dettaglio di {detail} previste nel periodo corrente. Include ricorrenti, budget settimanali (1× per settimana), spese variabili e pianificate una tantum.
               </p>
               <div className="max-h-[60vh] overflow-y-auto">
-                <BreakdownList items={breakdown} kind={breakdownModal} emptyText="Nessuna voce nel periodo" />
+                <BreakdownList items={breakdown} kind={breakdownModal === 'net' ? 'both' : breakdownModal} emptyText="Nessuna voce nel periodo" />
               </div>
             </div>
           )
@@ -1166,6 +1200,20 @@ export default function Dashboard() {
                   </button>
                 )}
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data effettiva</label>
+              <input
+                type="date"
+                value={completeDate}
+                onChange={e => setCompleteDate(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow ${completeDate !== completePlannedItem.date ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
+              />
+              {completeDate !== completePlannedItem.date && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Previsto il {format(new Date(completePlannedItem.date + 'T00:00:00'), 'd MMM', { locale: it })}. Conta la data effettiva; quella prevista resta registrata.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">

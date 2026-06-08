@@ -494,6 +494,7 @@ export default function Transactions() {
                       </div>
                       <p className="text-xs text-slate-400">
                         {format(new Date(tx.date), 'dd MMM yyyy', { locale: it })}
+                        {tx.planned_date && tx.planned_date !== tx.date && ` · previsto ${format(new Date(tx.planned_date + 'T00:00:00'), 'd MMM', { locale: it })}`}
                         {fundName && ` · ${fundName}`}
                         {fundToName && ` → ${fundToName}`}
                         {tx.category !== 'altro' && ` · ${catLabel(tx.category)}`}

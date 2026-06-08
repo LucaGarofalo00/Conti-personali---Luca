@@ -14,6 +14,7 @@ import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
 import { getPeriodBreakdown, type BreakdownItem } from '../lib/periodBreakdown'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { cur, getBillingPeriodFor, toDateString } from '../lib/utils'
+import { isAmountsHidden } from '../lib/privacy'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction, ForecastPoint } from '../types'
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint }> }) {
@@ -111,7 +112,7 @@ export default function Forecast() {
 
   const targetDateObj = new Date(targetDate)
   const daysToTarget = Math.max(1, differenceInDays(targetDateObj, new Date()))
-  const forecast = generateForecast(funds, expenses, income, budgets, targetDateObj, excludedFundIds, planned)
+  const forecast = generateForecast(funds, expenses, income, budgets, targetDateObj, excludedFundIds, planned, actualTx)
   const periodNow = getBillingPeriodFor(new Date())
   const plannedInCurrent = planned.filter(p => p.date >= periodNow.start && p.date <= periodNow.end)
   const est = getMonthlyEstimates(expenses, income, budgets, excludedFundIds, plannedInCurrent)
@@ -153,6 +154,9 @@ export default function Forecast() {
       recurringExpenses: expenses, recurringIncome: income,
       weeklyBudgets: budgets, planned,
       excludedFundIds, fromToday: true,
+      // Riconcilia col reale del periodo corrente: le occorrenze già realizzate o segnate
+      // "non lavorato"/"non avvenuto" non vengono più proiettate come entrate/uscite future.
+      actualTx, excludeRealized: true,
     })
     const sorted = [...items].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
@@ -281,7 +285,7 @@ export default function Forecast() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={Math.floor(forecast.length / 8)} />
-              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `€${v}`} />
+              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${v}`} />
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#forecastGrad)" strokeWidth={2} dot={false} />
             </AreaChart>
@@ -323,6 +327,7 @@ export default function Forecast() {
                     planned,
                     excludedFundIds,
                     fromToday: true,
+                    actualTx, excludeRealized: true,
                   }),
                   ...buildActualItems(actualTx, excludedFundIds, row.startDate, effectiveEnd),
                 ].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0) : []
