@@ -363,7 +363,7 @@ describe('getPeriodBreakdown - budget conta la spesa reale', () => {
     const out = getPeriodBreakdown({
       ...period, ...base, weeklyBudgets: [budget],
       actualTx: [mkOneOff({ amount: 70, date: '2026-05-13', budget_id: 'sfizi' })],
-      includeActualOneOffs: true, now: new Date(2026, 4, 25),
+      includeActualOneOffs: true, reconcileBudgets: true, now: new Date(2026, 4, 25),
     })
     expect(totalsFromBreakdown(out).expenses).toBe(70)
     expect(totalsFromBreakdown(out).income).toBe(0)
@@ -376,7 +376,7 @@ describe('getPeriodBreakdown - budget conta la spesa reale', () => {
     const out = getPeriodBreakdown({
       ...period, ...base, weeklyBudgets: [budget],
       actualTx: [mkOneOff({ amount: 30, date: '2026-05-13', budget_id: 'sfizi' })],
-      includeActualOneOffs: true, now: new Date(2026, 4, 25),
+      includeActualOneOffs: true, reconcileBudgets: true, now: new Date(2026, 4, 25),
     })
     expect(out.filter(i => i.kind === 'income')).toHaveLength(0)
     expect(totalsFromBreakdown(out).income).toBe(0)
@@ -387,7 +387,7 @@ describe('getPeriodBreakdown - budget conta la spesa reale', () => {
     const out = getPeriodBreakdown({
       ...period, ...base, weeklyBudgets: [budget],
       actualTx: [mkOneOff({ amount: 30, date: '2026-05-13', budget_id: 'sfizi' })],
-      includeActualOneOffs: true, now: new Date(2026, 4, 13),
+      includeActualOneOffs: true, reconcileBudgets: true, now: new Date(2026, 4, 13),
     })
     expect(totalsFromBreakdown(out).expenses).toBe(30)
     expect(totalsFromBreakdown(out).income).toBe(0)
@@ -398,7 +398,7 @@ describe('getPeriodBreakdown - budget conta la spesa reale', () => {
       startDate: new Date(2026, 4, 11), endDate: new Date(2026, 4, 24),
       ...base, weeklyBudgets: [budget],
       actualTx: [mkOneOff({ amount: 30, date: '2026-05-13', budget_id: 'sfizi' })],
-      includeActualOneOffs: true, now: new Date(2026, 4, 12),
+      includeActualOneOffs: true, reconcileBudgets: true, now: new Date(2026, 4, 12),
     })
     // settimana dell'11 (iniziata): speso reale 30 · settimana del 18 (futura): quota 50
     const amounts = out.filter(i => i.source === 'weekly_budget').map(i => i.amount).sort((a, b) => a - b)
@@ -412,6 +412,29 @@ describe('getPeriodBreakdown - budget conta la spesa reale', () => {
       actualTx: [mkOneOff({ amount: 70, date: '2026-05-13', budget_id: 'sfizi' })],
       now: new Date(2026, 4, 25),
     })
+    expect(totalsFromBreakdown(out).expenses).toBe(50)
+  })
+})
+
+describe('getPeriodBreakdown - budget come quota (home: includeActualOneOffs senza reconcileBudgets)', () => {
+  // 2026-05-11 è lunedì: periodo di una sola settimana per isolare un budget.
+  const period = { startDate: new Date(2026, 4, 11), endDate: new Date(2026, 4, 17) }
+  const base = { recurringExpenses: [], recurringIncome: [], planned: [], excludedFundIds: [] }
+  const budget = mkBudget('sfizi', 50)
+
+  it('conta la quota piena del budget (la previsione), non lo speso reale', () => {
+    // La home usa includeActualOneOffs ma NON reconcileBudgets: il budget pesa come quota (50),
+    // coerentemente col previsionale, anche se la settimana è iniziata e ho speso 70.
+    const out = getPeriodBreakdown({
+      ...period, ...base, weeklyBudgets: [budget],
+      actualTx: [mkOneOff({ amount: 70, date: '2026-05-13', budget_id: 'sfizi' })],
+      includeActualOneOffs: true, now: new Date(2026, 4, 25),
+    })
+    const budgetItems = out.filter(i => i.source === 'weekly_budget')
+    expect(budgetItems).toHaveLength(1)
+    expect(budgetItems[0].amount).toBe(50)
+    // la transazione col budget_id NON viene contata come una tantum (no doppio conteggio)
+    expect(out.filter(i => i.source === 'actual_oneoff')).toHaveLength(0)
     expect(totalsFromBreakdown(out).expenses).toBe(50)
   })
 })
@@ -469,5 +492,54 @@ describe('getPeriodBreakdown - riconciliazione tollerante (stessa finestra)', ()
     })
     // l'occorrenza di giovedì 28 (stessa settimana del memo) non viene emessa
     expect(out.some(i => i.source === 'recurring_expense' && i.date === '2026-05-28')).toBe(false)
+  })
+
+  it('aggancio per planned_date: spesa segnata in un\'ALTRA settimana resta legata all\'occorrenza', () => {
+    // GPL giovedì 28 mag, ma segnata lunedì 1 giu (settimana diversa) con la data prevista.
+    const tx = mkActualTx({ amount: 27, date: '2026-06-01', recurring_expense_id: 'gpl' })
+    tx.planned_date = '2026-05-28'
+    const out = getPeriodBreakdown({
+      ...period, ...base, recurringExpenses: [mkWeekly('gpl', 4, 30)],
+      actualTx: [tx], includeActualOneOffs: true,
+    })
+    // L'occorrenza del 28 è riconciliata con l'importo reale grazie a planned_date.
+    expect(out.find(i => i.source === 'recurring_expense' && i.date === '2026-05-28')?.amount).toBe(27)
+  })
+})
+
+describe('getPeriodBreakdown - excludeRealized (modalità previsionale)', () => {
+  const period = { startDate: new Date(2026, 4, 15), endDate: new Date(2026, 5, 14) }
+  const base = { recurringExpenses: [], recurringIncome: [], weeklyBudgets: [], planned: [], excludedFundIds: [] }
+
+  it('salta le occorrenze già realizzate (confermate): non le riproietta', () => {
+    const exp = mkExp('aff', 20, 400)
+    const out = getPeriodBreakdown({
+      ...period, ...base, recurringExpenses: [exp],
+      actualTx: [mkActualTx({ amount: 400, date: '2026-05-20', recurring_expense_id: 'aff' })],
+      excludeRealized: true,
+    })
+    expect(out.filter(i => i.source === 'recurring_expense')).toHaveLength(0)
+  })
+
+  it('salta anche le occorrenze memo "non lavorato"', () => {
+    const inc = mkInc('w', { frequency: 'weekly', day_of_month: null, day_of_week: 6, amount: 50 })
+    const occ = getPeriodBreakdown({ ...period, ...base, recurringIncome: [inc] }).filter(i => i.source === 'recurring_income')
+    const skipDate = occ[0].date
+    const out = getPeriodBreakdown({
+      ...period, ...base, recurringIncome: [inc],
+      actualTx: [mkActualTx({ amount: 0, date: skipDate, recurring_income_id: 'w', is_memo: true })],
+      excludeRealized: true,
+    })
+    const after = out.filter(i => i.source === 'recurring_income')
+    expect(after).toHaveLength(occ.length - 1)
+    expect(after.some(i => i.date === skipDate)).toBe(false)
+  })
+
+  it('senza match proietta normalmente l\'importo previsto (solo il pendente)', () => {
+    const exp = mkExp('aff', 20, 400)
+    const out = getPeriodBreakdown({
+      ...period, ...base, recurringExpenses: [exp], actualTx: [], excludeRealized: true,
+    })
+    expect(out.find(i => i.source === 'recurring_expense')?.amount).toBe(400)
   })
 })

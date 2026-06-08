@@ -320,6 +320,64 @@ describe('generateForecast - transfers NOT counted as expenses (user choice)', (
   })
 })
 
+function mkActual(opts: {
+  recurring_income_id?: string
+  recurring_expense_id?: string
+  amount: number
+  date: string
+  is_memo?: boolean
+  planned_date?: string | null
+}): Transaction {
+  return {
+    id: 'a-' + Math.random(), user_id: 'u1',
+    type: opts.recurring_income_id ? 'income' : 'expense',
+    amount: opts.amount, description: 'actual',
+    fund_id: null, fund_to_id: null, category: 'altro', budget_id: null,
+    recurring_expense_id: opts.recurring_expense_id ?? null,
+    recurring_income_id: opts.recurring_income_id ?? null,
+    is_memo: opts.is_memo ?? false, is_planned: false,
+    fuel_km: null, fuel_liters: null, fuel_price_per_liter: null, fuel_type: null,
+    date: opts.date, planned_date: opts.planned_date, created_at: '',
+  }
+}
+
+describe('generateForecast - riconciliazione col reale (actualTx)', () => {
+  beforeAll(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 4, 19, 12, 0, 0))
+  })
+  afterAll(() => { vi.useRealTimers() })
+
+  it('REGRESSION: non conta il sabato segnato "non lavorato"', () => {
+    const funds = [mkFund('a', 'Main', 0)]
+    const income = [mkInc('w', 'Sabato', 50, { frequency: 'weekly', day_of_month: null, day_of_week: 6, delay_days: 0 })]
+    // Memo a 0 sul sabato 23 mag (futuro rispetto a oggi 19 mag): non deve essere proiettato.
+    const memo = mkActual({ recurring_income_id: 'w', amount: 0, date: '2026-05-23', is_memo: true })
+    const withMemo = generateForecast(funds, [], income, [], 1, [], [], [memo])
+    const without = generateForecast(funds, [], income, [], 1, [], [], [])
+    expect(withMemo[withMemo.length - 1].balance).toBe(without[without.length - 1].balance - 50)
+  })
+
+  it('REGRESSION: non riconta una spesa ricorrente già pagata (è già nel saldo)', () => {
+    const funds = [mkFund('a', 'Main', 1000)]
+    const expenses = [mkExp('aff', 'Affitto', 100, 22, 'a')] // scade il 22 mag (futuro)
+    // Pagata in anticipo oggi (19), con planned_date sul 22: l'occorrenza del 22 va saltata.
+    const paid = mkActual({ recurring_expense_id: 'aff', amount: 100, date: '2026-05-19', planned_date: '2026-05-22' })
+    const withPaid = generateForecast(funds, expenses, [], [], 1, [], [], [paid])
+    const without = generateForecast(funds, expenses, [], [], 1, [], [], [])
+    expect(without[without.length - 1].balance).toBe(900)
+    expect(withPaid[withPaid.length - 1].balance).toBe(1000)
+  })
+
+  it('senza actualTx resta una pura proiezione (comportamento storico)', () => {
+    const funds = [mkFund('a', 'Main', 0)]
+    const income = [mkInc('w', 'Sabato', 50, { frequency: 'weekly', day_of_month: null, day_of_week: 6, delay_days: 0 })]
+    const a = generateForecast(funds, [], income, [], 1, [], [])
+    const b = generateForecast(funds, [], income, [], 1, [], [], [])
+    expect(a[a.length - 1].balance).toBe(b[b.length - 1].balance)
+  })
+})
+
 describe('generateForecast - exclusions', () => {
   beforeAll(() => {
     vi.useFakeTimers()
