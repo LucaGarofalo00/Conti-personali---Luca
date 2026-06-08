@@ -147,10 +147,15 @@ export default function Forecast() {
 
   while (cursor <= targetEnd) {
     const { startDate, endDate, start } = getBillingPeriodFor(cursor)
+    // Inizio segmento = cursore (mai prima della fine del segmento precedente). Quando il periodo
+    // corrente è "aperto"/esteso, getBillingPeriodFor del periodo SUCCESSIVO può iniziare prima di
+    // dove finisce questo (sovrapposizione): partizionando su segStart evitiamo di contare due
+    // volte l'occorrenza sul giorno di confine. Nel caso normale segStart coincide col cursore.
+    const segStart = cursor > startDate ? cursor : startDate
     const effectiveEnd = targetEnd < endDate ? targetEnd : endDate
 
     const items = getPeriodBreakdown({
-      startDate, endDate: effectiveEnd,
+      startDate: segStart, endDate: effectiveEnd,
       recurringExpenses: expenses, recurringIncome: income,
       weeklyBudgets: budgets, planned,
       excludedFundIds, fromToday: true,
@@ -182,14 +187,14 @@ export default function Forecast() {
     const isTruncated = effectiveEnd < endDate
     monthlyData.push({
       month: start,
-      label: `${format(startDate, 'd MMM', { locale: it })} – ${format(effectiveEnd, 'd MMM yyyy', { locale: it })}${isTruncated ? ' (parziale)' : ''}`,
+      label: `${format(segStart, 'd MMM', { locale: it })} – ${format(effectiveEnd, 'd MMM yyyy', { locale: it })}${isTruncated ? ' (parziale)' : ''}`,
       income: Math.round(periodIncome * 100) / 100,
       expenses: Math.round(periodExpenses * 100) / 100,
       net: Math.round((periodIncome - periodExpenses) * 100) / 100,
       endBalance: Math.round(balance * 100) / 100,
       minBalance: Math.round(periodMinBalance * 100) / 100,
       minBalanceDate: periodMinDate,
-      startDate, endDate, effectiveEnd,
+      startDate: segStart, endDate, effectiveEnd,
     })
 
     runningBalance = balance
@@ -216,7 +221,7 @@ export default function Forecast() {
         <p><strong>Esempio</strong>: oggi è martedì, filtro fino a mercoledì. Nessun lunedì nel range → il budget Sfizi NON viene contato. Solo eventi del 19-20 maggio.</p>
         <p><strong>Trasferimenti tra fondi</strong>: <strong>NON contati nelle previsioni</strong>. Sono solo movimenti tra i tuoi conti, non spese reali. Per esempio: se sposti 50€/mese dal Sella a un salvadanaio "Spese MG", non riduce il tuo netto. La vera spesa la registri quando paghi davvero (es. annuale del bollo).</p>
         <p><strong>Minimo</strong>: il saldo previsto più basso del periodo.</p>
-        <p><strong>Saldo al 14</strong>: saldo previsto a fine periodo billing (giorno 14), prima del nuovo ciclo. Se "(parziale)" nel label, significa che il periodo è stato troncato dal filtro data.</p>
+        <p><strong>Saldo a fine periodo</strong>: saldo previsto all'ultimo giorno del periodo, prima del nuovo ciclo (stipendio). Se "(parziale)" nel label, significa che il periodo è stato troncato dal filtro data.</p>
       </InfoBox>
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -297,7 +302,7 @@ export default function Forecast() {
 
       <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-700">Riepilogo per Periodo Billing (15-14)</h3>
+          <h3 className="text-lg font-semibold text-slate-700">Riepilogo per Periodo</h3>
           <p className="text-xs text-slate-500 mt-1">Clicca su una riga per vedere quali entrate e uscite la compongono.</p>
         </div>
         <div className="overflow-x-auto">
@@ -310,7 +315,7 @@ export default function Forecast() {
                 <th className="text-right px-4 py-3 font-medium text-slate-600">Uscite</th>
                 <th className="text-right px-4 py-3 font-medium text-slate-600">Netto</th>
                 <th className="text-right px-4 py-3 font-medium text-slate-600" title="Saldo previsto più basso durante il periodo">Minimo</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-600" title="Saldo previsto al giorno 14, ultimo del periodo prima del nuovo ciclo">Saldo al 14</th>
+                <th className="text-right px-4 py-3 font-medium text-slate-600" title="Saldo previsto all'ultimo giorno del periodo, prima del nuovo ciclo">Saldo a fine periodo</th>
               </tr>
             </thead>
             <tbody>

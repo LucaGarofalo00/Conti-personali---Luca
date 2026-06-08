@@ -72,6 +72,17 @@ create table if not exists weekly_budgets (
   created_at timestamptz default now()
 );
 
+-- Impostazioni utente: preferenze del periodo (ciclo stipendio→stipendio) e quale entrata
+-- definisce lo stipendio. Vedi anche supabase-user-settings.sql.
+create table if not exists user_settings (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  period_start date,
+  salary_income_id uuid references recurring_income(id) on delete set null,
+  anchor_day integer not null default 15 check (anchor_day between 1 and 28),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 -- Transazioni effettive + pianificate (is_planned = true)
 create table if not exists transactions (
   id uuid default gen_random_uuid() primary key,
@@ -146,6 +157,7 @@ alter table recurring_income enable row level security;
 alter table weekly_budgets enable row level security;
 alter table variable_expenses enable row level security;
 alter table transactions enable row level security;
+alter table user_settings enable row level security;
 
 -- Drop & ricrea le policies (così sono sicure anche su DB già configurati)
 drop policy if exists "funds_select" on funds;
@@ -201,6 +213,15 @@ create policy "transactions_select" on transactions for select using (auth.uid()
 create policy "transactions_insert" on transactions for insert with check (auth.uid() = user_id);
 create policy "transactions_update" on transactions for update using (auth.uid() = user_id);
 create policy "transactions_delete" on transactions for delete using (auth.uid() = user_id);
+
+drop policy if exists "user_settings_select" on user_settings;
+drop policy if exists "user_settings_insert" on user_settings;
+drop policy if exists "user_settings_update" on user_settings;
+drop policy if exists "user_settings_delete" on user_settings;
+create policy "user_settings_select" on user_settings for select using (auth.uid() = user_id);
+create policy "user_settings_insert" on user_settings for insert with check (auth.uid() = user_id);
+create policy "user_settings_update" on user_settings for update using (auth.uid() = user_id);
+create policy "user_settings_delete" on user_settings for delete using (auth.uid() = user_id);
 
 -- ---------------------------------------------
 -- Indici per performance (idempotenti)

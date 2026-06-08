@@ -5,6 +5,7 @@ import { ToastProvider } from './components/Toast'
 import { ConfirmProvider } from './components/Confirm'
 import { isConfigured } from './lib/supabase'
 import { useAmountsHidden } from './lib/privacy'
+import { usePeriodSettings } from './lib/periodSettings'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Auth from './pages/Auth'
@@ -18,6 +19,7 @@ const Income = lazy(() => import('./pages/Income'))
 const Budgets = lazy(() => import('./pages/Budgets'))
 const Transactions = lazy(() => import('./pages/Transactions'))
 const Forecast = lazy(() => import('./pages/Forecast'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 function SetupPage() {
   return (
@@ -79,6 +81,9 @@ function AppRoutes() {
   // Sottoscrizione alla privacy importi qui in cima: al toggle, AppRoutes si ri-renderizza e
   // ricrea l'intero albero delle route, così ogni pagina rilegge cur() col nuovo stato.
   useAmountsHidden()
+  // Stessa logica per le impostazioni del periodo: all'idratazione dal DB o alla conferma di un
+  // nuovo stipendio, tutte le pagine rileggono getBillingPeriod() col periodo aggiornato.
+  usePeriodSettings()
   return (
     <Routes>
       <Route path="/auth" element={<AuthRoute />} />
@@ -89,6 +94,7 @@ function AppRoutes() {
       <Route path="/budget" element={<ProtectedRoute><Budgets /></ProtectedRoute>} />
       <Route path="/transazioni" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
       <Route path="/previsione" element={<ProtectedRoute><Forecast /></ProtectedRoute>} />
+      <Route path="/impostazioni" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
     </Routes>
   )
 }

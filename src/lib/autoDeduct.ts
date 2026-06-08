@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { getDateInCurrentPeriod, toDateString, todayString, getBillingPeriodFor } from './utils'
+import { monthlyOccurrencesInCurrentPeriod, toDateString, todayString, getBillingPeriodFor } from './utils'
 import { withPlannedDate } from './schemaSupport'
 import { incrementFundBalance, transferFunds } from './fundBalances'
 import type { RecurringExpense, Transaction } from '../types'
@@ -14,7 +14,8 @@ function computeOccurrencesInCurrentPeriod(exp: RecurringExpense): Date[] {
   const freq = exp.frequency || 'monthly'
   if (freq === 'monthly') {
     if (exp.day_of_month === null) return []
-    return [getDateInCurrentPeriod(exp.day_of_month)]
+    // Tutte le occorrenze del periodo (di norma 1; 2 se il periodo è esteso oltre il mese).
+    return monthlyOccurrencesInCurrentPeriod(exp.day_of_month)
   }
   if (freq === 'weekly' && exp.day_of_week !== null) {
     const { startDate, endDate } = getBillingPeriodFor(new Date())

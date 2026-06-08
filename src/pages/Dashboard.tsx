@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2, Pencil } from 'lucide-react'
@@ -18,8 +18,10 @@ import { getPeriodBreakdown } from '../lib/periodBreakdown'
 import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
-import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, todayString, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, monthlyOccurrencesInCurrentPeriod, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel } from '../lib/utils'
 import { isAmountsHidden } from '../lib/privacy'
+import { getSalaryIncomeId } from '../lib/periodSettings'
+import { savePeriodSettings } from '../lib/periodSettingsDb'
 import { probePlannedDateSupport, withPlannedDate } from '../lib/schemaSupport'
 import { incrementFundBalance, transferFunds } from '../lib/fundBalances'
 import { logSupabaseError } from '../lib/logError'
@@ -203,7 +205,47 @@ export default function Dashboard() {
 
   useEffect(() => { if (user) load() }, [user])
 
+  // Rilevamento automatico (con conferma) del nuovo periodo: se nel periodo corrente è stato
+  // registrato un accredito dello stipendio in una data SUCCESSIVA all'inizio del periodo, vuol
+  // dire che è arrivato il nuovo stipendio → propongo di far ripartire il periodo da quel giorno.
+  const salaryPromptRef = useRef(false)
+  useEffect(() => {
+    if (loading || !user) return
+    const salaryId = getSalaryIncomeId()
+    if (!salaryId) return
+    const { start } = getBillingPeriod()
+    const candidate = periodTx
+      .filter(t => t.recurring_income_id === salaryId && !t.is_planned && !t.is_memo && t.type === 'income' && t.date > start)
+      .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0)[0]
+    if (!candidate) return
+    let dismissed: string | null = null
+    try { dismissed = localStorage.getItem('finanzapp:periodPromptDismissed') } catch { /* no-op */ }
+    if (dismissed === candidate.date || salaryPromptRef.current) return
+    salaryPromptRef.current = true
+    ;(async () => {
+      const dateLabel = format(new Date(candidate.date + 'T00:00:00'), 'd MMM', { locale: it })
+      const ok = await confirm({
+        title: 'Nuovo stipendio rilevato',
+        message: `Sembra che lo stipendio sia arrivato il ${dateLabel}. Vuoi far iniziare il nuovo periodo da quella data?`,
+        confirmText: 'Sì, nuovo periodo',
+        cancelText: 'Non ora',
+      })
+      if (ok) {
+        const { error } = await savePeriodSettings(user.id, { periodStart: candidate.date })
+        salaryPromptRef.current = false
+        if (error) { toast.error('Errore impostazione periodo: ' + error); return }
+        toast.success(`Periodo aggiornato: parte dal ${dateLabel}`)
+        load()
+      } else {
+        try { localStorage.setItem('finanzapp:periodPromptDismissed', candidate.date) } catch { /* no-op */ }
+        salaryPromptRef.current = false
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, periodTx, user])
+
   const today = todayString()
+  const periodLabel = currentPeriodLabel()
 
   const { startDate: periodStartObj, endDate: periodEndObj } = getBillingPeriodFor(new Date())
 
@@ -226,8 +268,12 @@ export default function Dashboard() {
           cursor.setDate(cursor.getDate() + 1)
         }
       } else if (freq === 'monthly' && exp.day_of_month !== null) {
-        const due = getDateInCurrentPeriod(exp.day_of_month)
-        occurrences.push({ date: due, dateStr: format(due, 'yyyy-MM-dd') })
+        // Tutte le occorrenze mensili del periodo: di norma 1, ma in un periodo "esteso"
+        // (stipendio in ritardo, fine prolungata fino a oggi) lo span può superare il mese e una
+        // mensile ricorre due volte (es. il 12 di due mesi). Allineato a auto-deduct.
+        for (const due of monthlyOccurrencesInCurrentPeriod(exp.day_of_month)) {
+          occurrences.push({ date: due, dateStr: format(due, 'yyyy-MM-dd') })
+        }
       } else if (freq === 'yearly' && exp.day_of_month !== null && exp.month_of_year !== null) {
         const cursor = new Date(periodStartObj)
         while (cursor <= periodEndObj) {
@@ -644,11 +690,11 @@ export default function Dashboard() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <Card icon={Wallet} color="bg-blue-100 text-blue-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
-              <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Entrate del Periodo (15-14)" value={cur(est.income)} sub={plannedIncomeInPeriod > 0 ? `incl. ${cur(plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
+              <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label={`Entrate del Periodo (${periodLabel})`} value={cur(est.income)} sub={plannedIncomeInPeriod > 0 ? `incl. ${cur(plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
               <Card
                 icon={Target}
                 color={periodNet >= 0 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}
-                label="Netto del Periodo (15-14)"
+                label={`Netto del Periodo (${periodLabel})`}
                 value={cur(periodNet)}
                 valueColor={periodNet >= 0 ? 'text-emerald-600' : 'text-red-600'}
                 sub={`Entrate ${cur(est.income)} · Uscite ${cur(est.expenses)}${plannedExpensesInPeriod > 0 ? ` (incl. ${cur(plannedExpensesInPeriod)} pianif.)` : ''}`}
@@ -670,8 +716,8 @@ export default function Dashboard() {
             </div>
             <InfoBox title="Come vengono calcolate queste cifre" tone="blue">
               <p><strong>Saldo Totale</strong>: somma di tutti i fondi (escluso quelli filtrati col selettore in alto).</p>
-              <p><strong>Entrate del Periodo (15-14)</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
-              <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo (15-14). Click per vedere il dettaglio.</p>
+              <p><strong>Entrate del Periodo ({periodLabel})</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
+              <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo ({periodLabel}). Click per vedere il dettaglio.</p>
               <p>Queste cifre comprendono sia le voci <strong>previste</strong> (ricorrenti, budget, pianificate) sia le <strong>transazioni manuali</strong> già registrate nel periodo: ogni movimento che aggiungi, modifichi o elimini si riflette qui (badge <span className="font-medium text-cyan-700">EFFETTIVA</span>).</p>
               <p><strong>Budget</strong>: per le settimane <strong>già concluse</strong> conta quanto hai <strong>speso davvero</strong> (le transazioni del budget); per la settimana <strong>in corso</strong> e quelle <strong>future</strong> conta la <strong>quota stimata</strong> (la previsione). Appena una settimana finisce, passa automaticamente all'effettivo. L'avanzo non speso <strong>non</strong> viene conteggiato come entrata.</p>
               {projection && projectionTarget && nextSalary && (
@@ -690,7 +736,7 @@ export default function Dashboard() {
       {(pendingRecurringManual.length > 0 || pendingIncome.length > 0 || pendingAutoUpcoming.length > 0 || pendingVarExp.length > 0) && (
         <div className="mb-8">
           <InfoBox title="Come funzionano le Prossime Scadenze" tone="emerald">
-            <p>Tutte le voci del periodo corrente (15-14): cosa devi <strong>confermare</strong> e cosa verrà scalato in <strong>automatico</strong>.</p>
+            <p>Tutte le voci del periodo corrente ({periodLabel}): cosa devi <strong>confermare</strong> e cosa verrà scalato in <strong>automatico</strong>.</p>
             <p><strong>Spese fisse del mese</strong>: spese ricorrenti manuali. Clicca "Paga" → puoi modificare l'importo prima di registrare, poi viene creata la transazione e aggiornato il saldo del fondo.</p>
             <p><strong>Entrate da confermare</strong>: ogni sabato lavorato (con la data di pagamento attesa) e lo stipendio mensile. "Non lavorato" su un sabato → memo che lo segna come gestito senza generare entrata.</p>
             <p><strong>Spese automatiche</strong>: vengono scalate da sole dal fondo nel giorno previsto. Qui le vedi solo come promemoria — non c'è nulla da confermare.</p>
@@ -1146,7 +1192,7 @@ export default function Dashboard() {
       <Modal
         isOpen={!!breakdownModal}
         onClose={() => setBreakdownModal(null)}
-        title={breakdownModal === 'income' ? 'Entrate del periodo (15-14)' : breakdownModal === 'net' ? 'Netto del periodo (15-14)' : 'Uscite del periodo (15-14)'}
+        title={breakdownModal === 'income' ? `Entrate del periodo (${periodLabel})` : breakdownModal === 'net' ? `Netto del periodo (${periodLabel})` : `Uscite del periodo (${periodLabel})`}
       >
         {breakdownModal && (() => {
           const { startDate, endDate } = getBillingPeriodFor(new Date())

@@ -6,7 +6,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
-import { cur, EXPENSE_CATEGORIES, todayString, getBillingPeriod, catLabel } from '../lib/utils'
+import { cur, EXPENSE_CATEGORIES, todayString, getBillingPeriod, currentPeriodLabel, catLabel } from '../lib/utils'
 import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import InfoBox from '../components/InfoBox'
@@ -200,7 +200,7 @@ export default function RecurringExpenses() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-slate-500">Totale spese ricorrenti del periodo (15-14): <span className="font-semibold text-red-500">{cur(totalExpenses)}</span></p>
+          <p className="text-sm text-slate-500">Totale spese ricorrenti del periodo ({currentPeriodLabel()}): <span className="font-semibold text-red-500">{cur(totalExpenses)}</span></p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
@@ -211,7 +211,7 @@ export default function RecurringExpenses() {
         <p><strong>Frequenza mensile</strong>: scatta ogni mese nel giorno indicato (es. affitto il 1, Netflix il 5).</p>
         <p><strong>Frequenza settimanale</strong>: scatta ogni settimana nel giorno indicato (es. GPL ogni venerdì).</p>
         <p><strong>Frequenza annuale</strong>: scatta una volta l'anno nel mese e giorno indicato (es. bollo auto a marzo).</p>
-        <p><strong>Nei totali e previsioni</strong>: ogni spesa conta per le occorrenze effettive nel periodo (15-14). Niente medie: una spesa annuale conta 600€ solo nel mese in cui cade, e 0€ negli altri periodi. Una spesa settimanale conta 4-5 volte (quanti lunedì/venerdì/ecc. ci sono nel periodo).</p>
+        <p><strong>Nei totali e previsioni</strong>: ogni spesa conta per le occorrenze effettive nel periodo ({currentPeriodLabel()}). Niente medie: una spesa annuale conta 600€ solo nel mese in cui cade, e 0€ negli altri periodi. Una spesa settimanale conta 4-5 volte (quanti lunedì/venerdì/ecc. ci sono nel periodo).</p>
         <p><strong>Da confermare</strong>: nel giorno di scadenza compare nella sezione "Da Confermare" della dashboard. Clicchi "Paga" → puoi modificare l'importo prima di confermare (per esempio se questo mese hai pagato 25€ di GPL invece di 30€).</p>
         <p><strong>Automatica</strong>: nel giorno di scadenza viene scalata <strong>automaticamente</strong> dal fondo predefinito con l'importo fisso. Non compare in "Da Confermare". Richiede di aver scelto un fondo.</p>
         <p><strong>Trasferimento</strong>: sposta soldi da un fondo all'altro (es. salvadanaio Bollo, risparmio mensile). <strong>NON viene contato come spesa</strong> nelle previsioni perché è un movimento interno tra i tuoi conti. La spesa vera la registri solo quando paghi davvero (es. annuale del bollo).</p>

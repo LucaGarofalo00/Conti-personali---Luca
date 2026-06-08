@@ -87,6 +87,19 @@ export interface Transaction {
 }
 
 
+export interface UserSettings {
+  user_id: string
+  // Inizio del periodo CORRENTE = giorno reale dell'ultimo stipendio confermato (YYYY-MM-DD).
+  period_start: string | null
+  // Entrata ricorrente che definisce lo stipendio (per il rilevamento automatico del periodo).
+  salary_income_id: string | null
+  // Giorno tipico atteso dello stipendio (1..28), usato come stima per previsioni e periodi
+  // diversi da quello corrente. Default 15 = comportamento storico (ciclo 15→14).
+  anchor_day: number
+  created_at?: string
+  updated_at?: string
+}
+
 export interface ForecastPoint {
   date: string
   balance: number

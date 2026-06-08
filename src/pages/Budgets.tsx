@@ -8,7 +8,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
-import { cur, todayString, getBillingPeriod } from '../lib/utils'
+import { cur, todayString, getBillingPeriod, currentPeriodLabel } from '../lib/utils'
 import { incrementFundBalance } from '../lib/fundBalances'
 import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
@@ -155,7 +155,7 @@ export default function Budgets() {
   return (
     <div>
       <div className="mb-4">
-        <p className="text-sm text-slate-500">Totale budget del periodo corrente (15-14): <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
+        <p className="text-sm text-slate-500">Totale budget del periodo corrente ({currentPeriodLabel()}): <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="blue">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>

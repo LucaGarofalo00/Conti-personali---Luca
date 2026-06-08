@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { loadPeriodSettings } from '../lib/periodSettingsDb'
 
 interface AuthContextType {
   user: User | null
@@ -19,19 +20,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    // Idrata le impostazioni del periodo PRIMA di togliere lo spinner, così le pagine protette
+    // (Dashboard ecc.) calcolano subito il periodo corretto invece del default 15→14.
+    const settle = async (s: Session | null) => {
       setSession(s)
       setUser(s?.user ?? null)
+      if (s?.user) {
+        try { await loadPeriodSettings(s.user.id) } catch { /* tollerante: si resta sui default */ }
+      }
       setLoading(false)
-    }).catch(() => {
+    }
+
+    supabase.auth.getSession()
+      .then(({ data: { session: s } }) => settle(s))
       // Se il recupero sessione fallisce (boot a freddo/offline) non lasciare lo spinner bloccato.
-      setLoading(false)
-    })
+      .catch(() => setLoading(false))
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s)
-      setUser(s?.user ?? null)
-      setLoading(false)
+      void settle(s)
     })
 
     return () => subscription.unsubscribe()

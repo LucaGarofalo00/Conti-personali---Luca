@@ -6,7 +6,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
-import { cur, getBillingPeriod } from '../lib/utils'
+import { cur, getBillingPeriod, currentPeriodLabel } from '../lib/utils'
 import { logSupabaseError } from '../lib/logError'
 import { generateIncomeOccurrences } from '../lib/incomeOccurrences'
 import InfoBox from '../components/InfoBox'
@@ -124,7 +124,7 @@ export default function Income() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-slate-500">Totale entrate ricorrenti del periodo (15-14): <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
+          <p className="text-sm text-slate-500">Totale entrate ricorrenti del periodo ({currentPeriodLabel()}): <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
           <Plus className="w-4 h-4" /> Aggiungi
@@ -135,7 +135,7 @@ export default function Income() {
         <p><strong>Settimanale + ritardo</strong>: si lavora un giorno specifico (es. sabato) ma viene pagato dopo X giorni (es. lunedì = ritardo 2). Nella dashboard vedi <strong>ogni sabato del periodo</strong> separato, da confermare individualmente. Se non confermi, si accumulano.</p>
         <p><strong>Importo variabile</strong>: la cifra è una stima — al momento della conferma puoi inserire il valore effettivo.</p>
         <p><strong>Fondo destinazione</strong>: dove finiranno i soldi una volta confermati. Puoi anche scegliere al momento della conferma.</p>
-        <p><strong>Nelle previsioni e nel totale</strong>: ogni entrata conta per le occorrenze effettive nel periodo corrente (15-14). Es. un sabato settimanale conta 4-5 volte, lo stipendio mensile conta 1 volta. Niente medie, solo occorrenze reali.</p>
+        <p><strong>Nelle previsioni e nel totale</strong>: ogni entrata conta per le occorrenze effettive nel periodo corrente ({currentPeriodLabel()}). Es. un sabato settimanale conta 4-5 volte, lo stipendio mensile conta 1 volta. Niente medie, solo occorrenze reali.</p>
       </InfoBox>
 
       {items.length === 0 ? (
