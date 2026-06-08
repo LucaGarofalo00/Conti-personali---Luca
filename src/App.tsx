@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './components/Toast'
 import { ConfirmProvider } from './components/Confirm'
 import { isConfigured } from './lib/supabase'
+import { useAmountsHidden } from './lib/privacy'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Auth from './pages/Auth'
@@ -75,6 +76,9 @@ function AuthRoute() {
 }
 
 function AppRoutes() {
+  // Sottoscrizione alla privacy importi qui in cima: al toggle, AppRoutes si ri-renderizza e
+  // ricrea l'intero albero delle route, così ogni pagina rilegge cur() col nuovo stato.
+  useAmountsHidden()
   return (
     <Routes>
       <Route path="/auth" element={<AuthRoute />} />

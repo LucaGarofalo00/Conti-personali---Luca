@@ -77,6 +77,12 @@ export interface Transaction {
   fuel_price_per_liter: number | null
   fuel_type: 'benzina' | 'gpl' | null
   date: string
+  // Data prevista dell'occorrenza che questa transazione salda (es. il giorno di scadenza
+  // della spesa ricorrente). `date` resta la data EFFETTIVA in cui è stata registrata e che
+  // conta nei saldi/totali; `planned_date` serve solo a riagganciare l'occorrenza giusta
+  // anche se l'ho segnata giorni prima o dopo. Opzionale: assente sui movimenti manuali e sui
+  // DB non ancora migrati.
+  planned_date?: string | null
   created_at: string
 }
 
