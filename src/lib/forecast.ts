@@ -1,5 +1,6 @@
 import { addDays, addMonths, startOfWeek, getDate, getDay, getDaysInMonth, format, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { inSameRecurrenceWindow } from './recurrenceMatch'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction, ForecastPoint } from '../types'
 
 function isExcluded(fundId: string | null, excluded: Set<string>): boolean {
@@ -13,7 +14,11 @@ export function generateForecast(
   weeklyBudgets: WeeklyBudget[],
   endDateOrMonths: Date | number = 6,
   excludedFundIds: string[] = [],
-  plannedTransactions: Transaction[] = []
+  plannedTransactions: Transaction[] = [],
+  // Transazioni reali del periodo corrente: le occorrenze ricorrenti già realizzate (saldate)
+  // o segnate "non lavorato"/"non avvenuto" (memo) non vengono riproiettate, perché il loro
+  // effetto è già nel saldo di partenza (o non deve contare). Se omesso → pura proiezione.
+  actualTx: Transaction[] = []
 ): ForecastPoint[] {
   const excluded = new Set(excludedFundIds)
   const today = startOfDay(new Date())
@@ -32,6 +37,35 @@ export function generateForecast(
     .filter(p => p.type !== 'transfer' || !isExcluded(p.fund_to_id, excluded))
     .map(p => ({ ...p, dateObj: startOfDay(new Date(p.date)) }))
 
+  // Riconciliazione col reale: occorrenze ricorrenti già realizzate o memo "non lavorato"
+  // vengono saltate. L'aggancio preferisce planned_date (data prevista) e ricade sulla finestra
+  // della data effettiva. Consumo greedy: una transazione copre al più un'occorrenza.
+  const incomeByRec = new Map<string, Transaction[]>()
+  const expenseByRec = new Map<string, Transaction[]>()
+  for (const tx of actualTx) {
+    if (tx.is_planned) continue
+    if (tx.recurring_income_id) {
+      const arr = incomeByRec.get(tx.recurring_income_id) || []
+      arr.push(tx); incomeByRec.set(tx.recurring_income_id, arr)
+    }
+    if (tx.recurring_expense_id) {
+      const arr = expenseByRec.get(tx.recurring_expense_id) || []
+      arr.push(tx); expenseByRec.set(tx.recurring_expense_id, arr)
+    }
+  }
+  const byDate = (a: Transaction, b: Transaction) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+  for (const arr of incomeByRec.values()) arr.sort(byDate)
+  for (const arr of expenseByRec.values()) arr.sort(byDate)
+  const consumedRealized = new Set<string>()
+  const isRealized = (map: Map<string, Transaction[]>, recId: string, occDateStr: string, windowFn: (txDate: string) => boolean): boolean => {
+    const arr = map.get(recId)
+    if (!arr) return false
+    const tx = arr.find(t => !consumedRealized.has(t.id) && (t.planned_date ? t.planned_date === occDateStr : windowFn(t.date)))
+    if (!tx) return false
+    consumedRealized.add(tx.id)
+    return true
+  }
+
   function aggregateRange(start: Date, end: Date): { income: number; expenses: number } {
     let income = 0, expenses = 0
     const cursor = new Date(start)
@@ -48,11 +82,18 @@ export function generateForecast(
           if (inc.end_date && curStr > inc.end_date) continue
           if (inc.frequency === 'monthly' && inc.day_of_month !== null) {
             const adjusted = Math.min(inc.day_of_month, dim)
-            if (dom === adjusted) income += Number(inc.amount)
+            if (dom === adjusted && !isRealized(incomeByRec, inc.id, curStr, d => inSameRecurrenceWindow(d, curStr, 'monthly'))) {
+              income += Number(inc.amount)
+            }
           } else if (inc.frequency === 'weekly' && inc.day_of_week !== null) {
             const delayDays = inc.delay_days || 0
             const baseDay = addDays(cursor, -delayDays)
-            if (getDay(baseDay) === inc.day_of_week) income += Number(inc.amount)
+            if (getDay(baseDay) === inc.day_of_week) {
+              const workStr = format(baseDay, 'yyyy-MM-dd')
+              if (!isRealized(incomeByRec, inc.id, curStr, d => d >= workStr && d <= curStr)) {
+                income += Number(inc.amount)
+              }
+            }
           }
         }
 
@@ -65,12 +106,12 @@ export function generateForecast(
           const freq = exp.frequency || 'monthly'
           if (freq === 'monthly' && exp.day_of_month !== null) {
             const adjusted = Math.min(exp.day_of_month, dim)
-            if (dom === adjusted) expenses += Number(exp.amount)
+            if (dom === adjusted && !isRealized(expenseByRec, exp.id, curStr, d => inSameRecurrenceWindow(d, curStr, 'monthly'))) expenses += Number(exp.amount)
           } else if (freq === 'weekly' && exp.day_of_week !== null) {
-            if (getDay(cursor) === exp.day_of_week) expenses += Number(exp.amount)
+            if (getDay(cursor) === exp.day_of_week && !isRealized(expenseByRec, exp.id, curStr, d => inSameRecurrenceWindow(d, curStr, 'weekly'))) expenses += Number(exp.amount)
           } else if (freq === 'yearly' && exp.day_of_month !== null && exp.month_of_year !== null) {
             const adjusted = Math.min(exp.day_of_month, dim)
-            if (dom === adjusted && cursor.getMonth() + 1 === exp.month_of_year) expenses += Number(exp.amount)
+            if (dom === adjusted && cursor.getMonth() + 1 === exp.month_of_year && !isRealized(expenseByRec, exp.id, curStr, d => inSameRecurrenceWindow(d, curStr, 'yearly'))) expenses += Number(exp.amount)
           }
         }
 

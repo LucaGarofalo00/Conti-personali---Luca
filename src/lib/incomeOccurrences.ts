@@ -53,7 +53,7 @@ export function generateIncomeOccurrences(
         const workStr = toDateString(workDate)
         if (inc.start_date && workStr < inc.start_date) continue
         if (inc.end_date && workStr > inc.end_date) continue
-        const matching = findMatch(periodTx, inc.id, d => inSameRecurrenceWindow(d, workStr, 'monthly'), consumed)
+        const matching = findMatch(periodTx, inc.id, workStr, d => inSameRecurrenceWindow(d, workStr, 'monthly'), consumed)
         out.push({
           income: inc,
           workDate,
@@ -81,7 +81,7 @@ export function generateIncomeOccurrences(
             if (inRange) {
               // La transazione che copre l'occorrenza cade tra il giorno di lavoro e quello di
               // pagamento (gestisce sia le nuove tx datate al pagamento sia quelle al lavoro).
-              const matching = findMatch(periodTx, inc.id, d => d >= workStr && d <= payStr, consumed)
+              const matching = findMatch(periodTx, inc.id, payStr, d => d >= workStr && d <= payStr, consumed)
               out.push({
                 income: inc,
                 workDate,
@@ -112,13 +112,16 @@ function daysInMonth(year: number, monthIdx: number): number {
 function findMatch(
   periodTx: Transaction[],
   incomeId: string,
-  matcher: (txDate: string) => boolean,
+  occDateStr: string,
+  windowFn: (txDate: string) => boolean,
   consumed: Set<string>,
 ): Transaction | undefined {
+  // Preferisce la data prevista (planned_date) per agganciare l'occorrenza giusta anche se
+  // l'entrata è stata segnata in un giorno diverso; in assenza, ricade sulla finestra.
   const tx = periodTx
     .filter(t => t.recurring_income_id === incomeId && !consumed.has(t.id))
     .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
-    .find(t => matcher(t.date))
+    .find(t => t.planned_date ? t.planned_date === occDateStr : windowFn(t.date))
   if (tx) consumed.add(tx.id)
   return tx
 }

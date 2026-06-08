@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { getDateInCurrentPeriod, toDateString, todayString, getBillingPeriodFor } from './utils'
+import { withPlannedDate } from './schemaSupport'
 import { incrementFundBalance, transferFunds } from './fundBalances'
 import type { RecurringExpense, Transaction } from '../types'
 
@@ -66,13 +67,14 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
       const dueDateStr = toDateString(dueDate)
       if (exp.start_date && dueDateStr < exp.start_date) continue
 
+      const onDueDate = (tx: Transaction) => tx.date === dueDateStr || tx.planned_date === dueDateStr
       const alreadyProcessed = periodTx.some(tx =>
-        (tx.recurring_expense_id === exp.id && tx.date === dueDateStr) ||
+        (tx.recurring_expense_id === exp.id && onDueDate(tx)) ||
         (
           tx.description === exp.name &&
           tx.type === txType &&
           tx.fund_id === exp.fund_id &&
-          tx.date === dueDateStr &&
+          onDueDate(tx) &&
           (!isTransfer || tx.fund_to_id === exp.fund_to_id)
         )
       )
@@ -80,7 +82,7 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
 
       const amount = Number(exp.amount)
 
-      const { data: inserted, error: txError } = await supabase.from('transactions').insert({
+      const { data: inserted, error: txError } = await supabase.from('transactions').insert(withPlannedDate({
         user_id: userId,
         type: txType,
         amount,
@@ -90,7 +92,7 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
         category: isTransfer ? 'trasferimento' : exp.category,
         recurring_expense_id: exp.id,
         date: dueDateStr,
-      }).select().single()
+      }, dueDateStr)).select().single()
       if (txError || !inserted) continue
 
       if (isTransfer && exp.fund_to_id) {

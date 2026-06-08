@@ -1,8 +1,13 @@
 import { CreditCard, Smartphone, Globe, Banknote, BookOpen, PiggyBank, Wallet } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { isAmountsHidden } from './privacy'
 
-export const cur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+// Maschera mostrata quando la privacy importi è attiva (toggle "occhio" nell'header).
+const HIDDEN_MASK = '••••• €'
+
+export const cur = (n: number) =>
+  isAmountsHidden() ? HIDDEN_MASK : n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
 export function toDateString(date: Date): string {
   const y = date.getFullYear()

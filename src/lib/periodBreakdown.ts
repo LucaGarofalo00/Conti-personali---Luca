@@ -41,6 +41,15 @@ interface Args {
   // (spese/entrate manuali non legate a ricorrenti, budget o pianificate). Serve alle
   // card della home perché riflettano SEMPRE ogni movimento reale. Richiede actualTx.
   includeActualOneOffs?: boolean
+  // Se true, i budget settimanali GIÀ INIZIATI vengono conteggiati per la spesa reale
+  // effettiva (transazioni col budget_id) invece che per la quota fissa. Se false (default)
+  // il budget conta SEMPRE come quota stimata, coerentemente col previsionale. Richiede actualTx.
+  reconcileBudgets?: boolean
+  // Modalità previsionale: se true, le occorrenze ricorrenti GIÀ realizzate (con una
+  // transazione reale collegata, confermata o memo) NON vengono proiettate, perché il loro
+  // effetto è già nel saldo di partenza (o, per i memo "non lavorato", non deve contare).
+  // Solo le occorrenze ancora pendenti vengono stimate. Richiede actualTx.
+  excludeRealized?: boolean
   // "Oggi" iniettabile per i test deterministici (default: data reale). Determina quali
   // settimane di budget sono "già finite" ai fini del residuo.
   now?: Date
@@ -59,15 +68,15 @@ const SOURCE_LABELS: Record<BreakdownSource, string> = {
 type Reconciled = { amount: number } | 'skip' | null
 
 export function getPeriodBreakdown(args: Args): BreakdownItem[] {
-  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false, actualTx, includeActualOneOffs = false, now } = args
+  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false, actualTx, includeActualOneOffs = false, reconcileBudgets = false, excludeRealized = false, now } = args
   const excluded = new Set(excludedFundIds)
   const items: BreakdownItem[] = []
   const today = startOfDay(now ?? new Date())
   const lowerBound = fromToday && isAfter(today, startDate) ? today : startDate
-  // Con dati reali a disposizione, le settimane di budget GIÀ INIZIATE (passate o in corso)
+  // Solo con reconcileBudgets attivo le settimane di budget GIÀ INIZIATE (passate o in corso)
   // vengono conteggiate per la spesa reale effettiva (vedi sotto), non per la quota fissa.
-  // Le settimane future restano una stima a quota base.
-  const reconcileBudgetWithActuals = includeActualOneOffs && !!actualTx
+  // Altrimenti (default) il budget conta sempre come quota stimata, come nel previsionale.
+  const reconcileBudgetWithActuals = reconcileBudgets && !!actualTx
 
   // Transazioni reali collegate, raggruppate per ricorrente. La riconciliazione non avviene
   // più per data identica ma per "finestra" (settimana per le settimanali, mese per le
@@ -97,20 +106,32 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
   // null  → nessuna riconciliazione (usa l'importo previsto)
   // 'skip' → occorrenza gestita ma senza movimento reale (memo / "non lavorato"): non contare
   // {amount} → occorrenza confermata: usa l'importo effettivo
-  // matcher(txDate) decide se una transazione copre l'occorrenza. Spese/entrate normali usano
-  // la finestra (settimana/ciclo); le entrate settimanali con ritardo usano l'intervallo
-  // [giorno di lavoro … giorno di pagamento], così non collidono tra settimane adiacenti.
-  const reconcile = (map: Map<string, Transaction[]>, recId: string, matcher: (txDate: string) => boolean): Reconciled => {
+  // L'aggancio preferisce la data PREVISTA (planned_date == data occorrenza): così una spesa
+  // segnata giorni prima/dopo resta legata alla sua occorrenza anche se cade in un'altra
+  // finestra. In assenza di planned_date (movimenti vecchi/manuali) si usa windowFn sulla data
+  // effettiva: finestra (settimana/ciclo) per le normali, intervallo lavoro→pagamento per le
+  // entrate settimanali con ritardo.
+  const reconcile = (map: Map<string, Transaction[]>, recId: string, occDateStr: string, windowFn: (txDate: string) => boolean): Reconciled => {
     if (!actualTx) return null
     const arr = map.get(recId)
     if (!arr) return null
-    const tx = arr.find(t => !consumedTxIds.has(t.id) && matcher(t.date))
+    const tx = arr.find(t => !consumedTxIds.has(t.id) && (t.planned_date ? t.planned_date === occDateStr : windowFn(t.date)))
     if (!tx) return null
     consumedTxIds.add(tx.id)
     // Memo con importo (es. "segnato senza scalare"): conta nei totali con l'importo effettivo
     // ma non muove i fondi. Memo a 0 (es. "non lavorato"/"non avvenuto"): non conta.
     if (tx.is_memo && Number(tx.amount) === 0) return 'skip'
     return { amount: Number(tx.amount) }
+  }
+
+  // Dato il risultato della riconciliazione e l'importo previsto, restituisce l'importo da
+  // contare, oppure null se l'occorrenza non va emessa.
+  //  - modalità previsionale (excludeRealized): si proietta SOLO il pendente (r === null).
+  //  - modalità normale: si salta solo lo 'skip' (memo a 0); altrimenti importo reale o previsto.
+  const resolveAmount = (r: Reconciled, plannedAmount: number): number | null => {
+    if (excludeRealized) return r === null ? plannedAmount : null
+    if (r === 'skip') return null
+    return r ? r.amount : plannedAmount
   }
 
   const cursor = new Date(lowerBound)
@@ -127,10 +148,11 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       if (inc.frequency === 'monthly' && inc.day_of_month !== null) {
         const adjusted = Math.min(inc.day_of_month, dim)
         if (dom === adjusted) {
-          const r = reconcile(incomeByRec, inc.id, d => inSameRecurrenceWindow(d, dateStr, 'monthly'))
-          if (r !== 'skip') {
+          const r = reconcile(incomeByRec, inc.id, dateStr, d => inSameRecurrenceWindow(d, dateStr, 'monthly'))
+          const amt = resolveAmount(r, Number(inc.amount))
+          if (amt !== null) {
             items.push({
-              date: dateStr, description: inc.name, amount: r ? r.amount : Number(inc.amount),
+              date: dateStr, description: inc.name, amount: amt,
               kind: 'income', source: 'recurring_income', sourceLabel: SOURCE_LABELS.recurring_income,
             })
           }
@@ -142,10 +164,11 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
           // L'entrata è contata nel periodo del pagamento (cursor = dateStr). La transazione
           // che la copre cade tra il giorno di lavoro (baseDay) e quello di pagamento (dateStr).
           const workStr = toDateString(baseDay)
-          const r = reconcile(incomeByRec, inc.id, d => d >= workStr && d <= dateStr)
-          if (r !== 'skip') {
+          const r = reconcile(incomeByRec, inc.id, dateStr, d => d >= workStr && d <= dateStr)
+          const amt = resolveAmount(r, Number(inc.amount))
+          if (amt !== null) {
             items.push({
-              date: dateStr, description: inc.name, amount: r ? r.amount : Number(inc.amount),
+              date: dateStr, description: inc.name, amount: amt,
               kind: 'income', source: 'recurring_income', sourceLabel: SOURCE_LABELS.recurring_income,
             })
           }
@@ -171,12 +194,13 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         if (dom === adjusted && cursor.getMonth() + 1 === exp.month_of_year) occurs = true
       }
       if (occurs) {
-        const r = reconcile(expenseByRec, exp.id, d => inSameRecurrenceWindow(d, dateStr, freq))
-        if (r !== 'skip') {
+        const r = reconcile(expenseByRec, exp.id, dateStr, d => inSameRecurrenceWindow(d, dateStr, freq))
+        const amt = resolveAmount(r, Number(exp.amount))
+        if (amt !== null) {
           items.push({
             date: dateStr,
             description: exp.name + (freq === 'yearly' ? ' (annuale)' : ''),
-            amount: r ? r.amount : Number(exp.amount),
+            amount: amt,
             kind: 'expense',
             source: 'recurring_expense',
             sourceLabel: SOURCE_LABELS.recurring_expense,
@@ -248,11 +272,13 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         category: tx.category,
       })
     }
+  }
 
-    // Budget: per ogni settimana GIÀ INIZIATA (passata o in corso) conta la spesa reale
-    // effettiva al posto della quota fissa. Non esistono più voci "Residuo" (entrata) né
-    // "Sforamento" (uscita): il budget riflette semplicemente i movimenti reali registrati.
-    // L'avanzo non speso non viene conteggiato come entrata (resta già nel saldo del fondo).
+  // Budget: solo con reconcileBudgets, per ogni settimana GIÀ INIZIATA (passata o in corso)
+  // conta la spesa reale effettiva al posto della quota fissa. Non esistono più voci "Residuo"
+  // (entrata) né "Sforamento" (uscita): il budget riflette semplicemente i movimenti reali.
+  // L'avanzo non speso non viene conteggiato come entrata (resta già nel saldo del fondo).
+  if (reconcileBudgetWithActuals && actualTx) {
     const budgetTx = actualTx.filter(t => !t.is_planned && !t.is_memo && t.budget_id)
     for (const b of weeklyBudgets) {
       if (!b.is_active) continue
