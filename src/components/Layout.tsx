@@ -2,9 +2,10 @@ import { useState, type ReactNode } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Wallet, CreditCard, TrendingUp,
-  PiggyBank, ArrowLeftRight, LineChart, LogOut, Menu, X,
+  PiggyBank, ArrowLeftRight, LineChart, LogOut, Menu, X, Eye, EyeOff,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useAmountsHidden, toggleAmountsHidden } from '../lib/privacy'
 import Logo from './Logo'
 
 const nav = [
@@ -22,6 +23,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const amountsHidden = useAmountsHidden()
 
   const currentPage = nav.find(n => n.path === location.pathname)
   const pageTitle = currentPage?.label || 'FinanzApp'
@@ -85,6 +87,15 @@ export default function Layout({ children }: { children: ReactNode }) {
             </button>
             <Logo className="w-7 h-7 lg:hidden" />
             <span className="font-semibold text-slate-800 text-[15px] tracking-tight">{pageTitle}</span>
+            <button
+              onClick={toggleAmountsHidden}
+              aria-label={amountsHidden ? 'Mostra gli importi' : 'Nascondi gli importi'}
+              aria-pressed={amountsHidden}
+              title={amountsHidden ? 'Mostra gli importi' : 'Nascondi gli importi'}
+              className="ml-auto p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              {amountsHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           </div>
         </header>
         <main className="flex-1 overflow-auto p-4 lg:p-6">
