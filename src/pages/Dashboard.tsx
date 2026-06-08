@@ -568,6 +568,8 @@ export default function Dashboard() {
     fromToday: false,
     actualTx: periodTx,
     includeActualOneOffs: true,
+    // Budget: settimane concluse → spesa reale; settimana in corso e future → quota stimata.
+    reconcileBudgets: true,
   })
   const est = totalsFromBreakdown(periodBreakdown)
   const periodNet = Math.round((est.income - est.expenses) * 100) / 100
@@ -671,7 +673,7 @@ export default function Dashboard() {
               <p><strong>Entrate del Periodo (15-14)</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
               <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo (15-14). Click per vedere il dettaglio.</p>
               <p>Queste cifre comprendono sia le voci <strong>previste</strong> (ricorrenti, budget, pianificate) sia le <strong>transazioni manuali</strong> già registrate nel periodo: ogni movimento che aggiungi, modifichi o elimini si riflette qui (badge <span className="font-medium text-cyan-700">EFFETTIVA</span>).</p>
-              <p><strong>Budget</strong>: conta sempre come <strong>quota stimata</strong> (la previsione del budget), una volta per settimana, esattamente come nel previsionale. Quanto hai speso davvero lo vedi col progress bar nella pagina Budget.</p>
+              <p><strong>Budget</strong>: per le settimane <strong>già concluse</strong> conta quanto hai <strong>speso davvero</strong> (le transazioni del budget); per la settimana <strong>in corso</strong> e quelle <strong>future</strong> conta la <strong>quota stimata</strong> (la previsione). Appena una settimana finisce, passa automaticamente all'effettivo. L'avanzo non speso <strong>non</strong> viene conteggiato come entrata.</p>
               {projection && projectionTarget && nextSalary && (
                 <p>
                   <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).
@@ -1155,6 +1157,7 @@ export default function Dashboard() {
             excludedFundIds, fromToday: false,
             actualTx: periodTx,
             includeActualOneOffs: true,
+            reconcileBudgets: true,
           })
           const detail = breakdownModal === 'income' ? 'tutte le entrate' : breakdownModal === 'net' ? 'tutte le entrate e le uscite' : 'tutte le uscite'
           return (
