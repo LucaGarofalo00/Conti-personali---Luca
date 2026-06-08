@@ -37,6 +37,10 @@ alter table transactions add column if not exists fuel_price_per_liter numeric(1
 -- Tipo di carburante del rifornimento ('benzina' o 'gpl'), per consumi separati su auto bifuel
 alter table transactions add column if not exists fuel_type text;
 
+-- Data prevista dell'occorrenza saldata: serve per le spese segnate giorni prima/dopo.
+-- La colonna `date` resta la data EFFETTIVA (quando registrata), che conta nei saldi e totali.
+alter table transactions add column if not exists planned_date date;
+
 -- Indici opzionali per performance
 create index if not exists idx_transactions_planned on transactions(user_id, is_planned);
 create index if not exists idx_transactions_recurring_expense on transactions(recurring_expense_id);

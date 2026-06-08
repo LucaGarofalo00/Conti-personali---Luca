@@ -92,6 +92,7 @@ create table if not exists transactions (
   fuel_liters numeric(10,2),
   fuel_price_per_liter numeric(10,3),
   date date not null default current_date,
+  planned_date date,
   created_at timestamptz default now()
 );
 
@@ -121,6 +122,8 @@ alter table transactions add column if not exists is_planned boolean not null de
 alter table transactions add column if not exists fuel_km numeric(10,2);
 alter table transactions add column if not exists fuel_liters numeric(10,2);
 alter table transactions add column if not exists fuel_price_per_liter numeric(10,3);
+-- Data prevista dell'occorrenza saldata (la `date` resta quella effettiva, che conta nei saldi)
+alter table transactions add column if not exists planned_date date;
 
 -- Assicura che il check constraint su recurring_expenses.type esista
 do $$
