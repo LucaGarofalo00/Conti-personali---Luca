@@ -234,9 +234,10 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       for (const b of weeklyBudgets) {
         if (!b.is_active) continue
         if (b.fund_id && excluded.has(b.fund_id)) continue
-        // Settimana già iniziata + dati reali: la conteggia la riconciliazione sotto (spesa reale).
-        // Qui emetti la quota stimata solo per le settimane future.
-        if (reconcileBudgetWithActuals && !isAfter(cursor, today)) continue
+        // Settimana già CONCLUSA (domenica passata) + dati reali: la conteggia la riconciliazione
+        // sotto con la spesa reale effettiva. Qui emetti la quota stimata (la previsione) per la
+        // settimana IN CORSO e per quelle future, finché non sono concluse.
+        if (reconcileBudgetWithActuals && isBefore(addDays(cursor, 6), today)) continue
         const range = `${format(cursor, 'd')}–${format(addDays(cursor, 6), 'd MMM', { locale: it })}`
         items.push({
           date: dateStr, description: `${b.name} (settimana ${range})`, amount: Number(b.amount),
@@ -274,9 +275,10 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
     }
   }
 
-  // Budget: solo con reconcileBudgets, per ogni settimana GIÀ INIZIATA (passata o in corso)
-  // conta la spesa reale effettiva al posto della quota fissa. Non esistono più voci "Residuo"
-  // (entrata) né "Sforamento" (uscita): il budget riflette semplicemente i movimenti reali.
+  // Budget: solo con reconcileBudgets, per ogni settimana GIÀ CONCLUSA (domenica passata)
+  // conta la spesa reale effettiva al posto della quota stimata. La settimana in corso e quelle
+  // future restano alla quota (gestita nel loop sopra). Non esistono più voci "Residuo" (entrata)
+  // né "Sforamento" (uscita): il budget riflette semplicemente i movimenti reali registrati.
   // L'avanzo non speso non viene conteggiato come entrata (resta già nel saldo del fondo).
   if (reconcileBudgetWithActuals && actualTx) {
     const budgetTx = actualTx.filter(t => !t.is_planned && !t.is_memo && t.budget_id)
@@ -285,7 +287,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       if (b.fund_id && excluded.has(b.fund_id)) continue
       const wcur = new Date(lowerBound)
       while (!isAfter(wcur, endDate)) {
-        if (getDay(wcur) === 1 && !isBefore(wcur, startDate) && !isAfter(wcur, today)) {
+        if (getDay(wcur) === 1 && !isBefore(wcur, startDate) && isBefore(addDays(wcur, 6), today)) {
           const weekStart = new Date(wcur)
           const weekEnd = addDays(weekStart, 7)
           const wsStr = toDateString(weekStart)
