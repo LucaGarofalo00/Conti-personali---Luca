@@ -277,15 +277,9 @@ export default function Transactions() {
     gpl: averageFuelConsumption(fuelFills, 'gpl'),
   }), [fuelFills])
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
-
-  const filtersActive = filterType !== 'all' || filterFund !== 'all' || filterSource !== 'all' || filterText !== '' || dateFrom !== '' || dateTo !== '' || includePlanned || includeMemo
-  const resetFilters = () => {
-    setFilterType('all'); setFilterFund('all'); setFilterSource('all'); setFilterText('')
-    setDateFrom(''); setDateTo(''); setIncludePlanned(false); setIncludeMemo(false)
-  }
-
-  const filtered = items.filter(tx => {
+  // Memoizzato: senza, la lista verrebbe ri-filtrata su TUTTI gli item caricati a ogni render
+  // (selezione di righe, digitazione nel modale, ecc.). Si ricalcola solo al cambio di filtri/dati.
+  const filtered = useMemo(() => items.filter(tx => {
     if (!includePlanned && tx.is_planned) return false
     if (!includeMemo && tx.is_memo) return false
     if (filterType !== 'all' && tx.type !== filterType) return false
@@ -298,7 +292,15 @@ export default function Transactions() {
     }
     if (filterText && !tx.description.toLowerCase().includes(filterText.toLowerCase()) && !tx.category.toLowerCase().includes(filterText.toLowerCase())) return false
     return true
-  })
+  }), [items, includePlanned, includeMemo, filterType, filterFund, filterSource, filterText])
+
+  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+
+  const filtersActive = filterType !== 'all' || filterFund !== 'all' || filterSource !== 'all' || filterText !== '' || dateFrom !== '' || dateTo !== '' || includePlanned || includeMemo
+  const resetFilters = () => {
+    setFilterType('all'); setFilterFund('all'); setFilterSource('all'); setFilterText('')
+    setDateFrom(''); setDateTo(''); setIncludePlanned(false); setIncludeMemo(false)
+  }
 
   const filteredVisibleIds = filtered.map(t => t.id)
   const allFilteredSelected = filteredVisibleIds.length > 0 && filteredVisibleIds.every(id => selectedIds.has(id))

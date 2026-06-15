@@ -10,7 +10,7 @@ import FundExcluder from '../components/FundExcluder'
 import InfoBox from '../components/InfoBox'
 import BreakdownList from '../components/BreakdownList'
 import Modal from '../components/Modal'
-import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
+import { getMonthlyEstimates } from '../lib/forecast'
 import { getPeriodBreakdown, type BreakdownItem } from '../lib/periodBreakdown'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { cur, getBillingPeriodFor, toDateString, parseLocalDate } from '../lib/utils'
@@ -24,8 +24,8 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
     <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-200 text-sm">
       <p className="font-medium text-slate-700 mb-1">{d.label}</p>
       <p className="text-blue-600">Saldo: {cur(d.balance)}</p>
-      <p className="text-emerald-600">Entrate sett.: {cur(d.income)}</p>
-      <p className="text-red-500">Uscite sett.: {cur(d.expenses)}</p>
+      <p className="text-emerald-600">Entrate: {cur(d.income)}</p>
+      <p className="text-red-500">Uscite: {cur(d.expenses)}</p>
     </div>
   )
 }
@@ -112,7 +112,6 @@ export default function Forecast() {
 
   const targetDateObj = parseLocalDate(targetDate)
   const daysToTarget = Math.max(1, differenceInDays(targetDateObj, new Date()))
-  const forecast = generateForecast(funds, expenses, income, budgets, targetDateObj, excludedFundIds, planned, actualTx)
   const periodNow = getBillingPeriodFor(new Date())
   const plannedInCurrent = planned.filter(p => p.date >= periodNow.start && p.date <= periodNow.end)
   const est = getMonthlyEstimates(expenses, income, budgets, excludedFundIds, plannedInCurrent)
@@ -140,6 +139,10 @@ export default function Forecast() {
   }
 
   const monthlyData: PeriodRow[] = []
+  // Saldo dopo OGNI evento, accumulato lungo lo stesso walk per-periodo usato per le card e la
+  // tabella: da qui ricaviamo la serie del grafico, così grafico, "Saldo al…", "Minimo" e
+  // riepilogo vengono da UN'unica fonte e non possono divergere (niente più secondo motore).
+  const eventBalances: { date: string; balance: number; income: number; expenses: number }[] = []
   let runningBalance = startBalance
   let globalMinBalance = startBalance
   let globalMinDate = today
@@ -176,12 +179,18 @@ export default function Forecast() {
       else { balance -= it.amount; periodExpenses += it.amount }
       if (balance < periodMinBalance) {
         periodMinBalance = balance
-        periodMinDate = new Date(it.date)
+        periodMinDate = parseLocalDate(it.date)
       }
       if (balance < globalMinBalance) {
         globalMinBalance = balance
-        globalMinDate = new Date(it.date)
+        globalMinDate = parseLocalDate(it.date)
       }
+      eventBalances.push({
+        date: it.date,
+        balance,
+        income: it.kind === 'income' ? it.amount : 0,
+        expenses: it.kind === 'expense' ? it.amount : 0,
+      })
     }
 
     const isTruncated = effectiveEnd < endDate
@@ -203,7 +212,27 @@ export default function Forecast() {
 
   const endBalance = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1].endBalance : startBalance
   const trend = endBalance - startBalance
-  const minPoint = { balance: globalMinBalance, label: format(globalMinDate, 'dd MMM', { locale: it }) }
+  const minPoint = { balance: globalMinBalance, label: format(globalMinDate, 'd MMM', { locale: it }) }
+
+  // Serie del grafico: punto di partenza (oggi, saldo attuale) + un punto per ogni GIORNO con
+  // eventi, col saldo di fine giornata preso dallo stesso walk delle card/tabella. L'ultimo punto
+  // coincide quindi con "Saldo al…" e la curva riflette lo stesso saldo progressivo del riepilogo.
+  const dayMap = new Map<string, { balance: number; income: number; expenses: number }>()
+  for (const ev of eventBalances) {
+    const d = dayMap.get(ev.date) || { balance: ev.balance, income: 0, expenses: 0 }
+    d.balance = ev.balance // gli eventi sono cronologici: l'ultimo della giornata è il saldo di fine giornata
+    d.income += ev.income
+    d.expenses += ev.expenses
+    dayMap.set(ev.date, d)
+  }
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  const chartData: ForecastPoint[] = [
+    { date: toDateString(today), balance: r2(startBalance), income: 0, expenses: 0, label: format(today, 'd MMM', { locale: it }) },
+    ...[...dayMap.entries()].map(([date, v]) => ({
+      date, balance: r2(v.balance), income: r2(v.income), expenses: r2(v.expenses),
+      label: format(parseLocalDate(date), 'd MMM', { locale: it }),
+    })),
+  ]
 
   return (
     <div>
@@ -280,9 +309,9 @@ export default function Forecast() {
 
       <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-6 mb-8">
         <h3 className="text-lg font-semibold text-slate-700 mb-4">Proiezione Saldo</h3>
-        {forecast.length > 1 ? (
+        {chartData.length > 1 ? (
           <ResponsiveContainer width="100%" height={350}>
-            <AreaChart data={forecast}>
+            <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="forecastGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
@@ -290,7 +319,7 @@ export default function Forecast() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={Math.floor(forecast.length / 8)} />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={Math.max(0, Math.floor(chartData.length / 8))} />
               <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${Number(v).toLocaleString('it-IT')}`} />
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#forecastGrad)" strokeWidth={2} dot={false} />

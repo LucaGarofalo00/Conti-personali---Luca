@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2, Pencil } from 'lucide-react'
@@ -243,6 +243,14 @@ export default function Dashboard() {
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, periodTx, user])
+
+  // Memoizzato: la proiezione a 3 mesi (walk settimanale su entrate/spese) è la computazione più
+  // pesante della pagina e dipende solo dai dati; senza memo verrebbe rifatta a ogni keystroke nei
+  // modali di conferma. Si ricalcola solo quando cambiano davvero i dati o i fondi esclusi.
+  const forecast = useMemo(
+    () => generateForecast(funds, expenses, income, budgets, 3, excludedFundIds, planned, periodTx),
+    [funds, expenses, income, budgets, excludedFundIds, planned, periodTx],
+  )
 
   const today = todayString()
   const periodLabel = currentPeriodLabel()
@@ -624,7 +632,6 @@ export default function Dashboard() {
   const notExcluded = (p: Transaction) => !(p.fund_id && excludedFundIds.includes(p.fund_id))
   const plannedIncomeInPeriod = plannedInPeriod.filter(p => p.type === 'income' && notExcluded(p)).reduce((s, p) => s + Number(p.amount), 0)
   const plannedExpensesInPeriod = plannedInPeriod.filter(p => p.type === 'expense' && notExcluded(p)).reduce((s, p) => s + Number(p.amount), 0)
-  const forecast = generateForecast(funds, expenses, income, budgets, 3, excludedFundIds, planned, periodTx)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
 

@@ -359,7 +359,7 @@ describe('getPeriodBreakdown - budget conta la spesa reale', () => {
   const base = { recurringExpenses: [], recurringIncome: [], planned: [], excludedFundIds: [] }
   const budget = mkBudget('sfizi', 50)
 
-  it('settimana iniziata: conta lo speso reale, niente "Sforamento" separato', () => {
+  it('settimana conclusa: conta lo speso reale, niente "Sforamento" separato', () => {
     const out = getPeriodBreakdown({
       ...period, ...base, weeklyBudgets: [budget],
       actualTx: [mkOneOff({ amount: 70, date: '2026-05-13', budget_id: 'sfizi' })],
@@ -383,27 +383,30 @@ describe('getPeriodBreakdown - budget conta la spesa reale', () => {
     expect(totalsFromBreakdown(out).expenses).toBe(30)
   })
 
-  it('settimana in corso: conta lo speso reale finora, non la quota piena', () => {
+  it('settimana in corso (non ancora conclusa): usa la quota stimata, non lo speso parziale', () => {
+    // Proiezione conservativa: finché la settimana non è chiusa (domenica passata) si assume di
+    // spendere l'intero budget, così il "netto del periodo" non risulta troppo ottimista a metà
+    // settimana e cattura comunque eventuali sforamenti quando la settimana si concluderà.
     const out = getPeriodBreakdown({
       ...period, ...base, weeklyBudgets: [budget],
       actualTx: [mkOneOff({ amount: 30, date: '2026-05-13', budget_id: 'sfizi' })],
       includeActualOneOffs: true, reconcileBudgets: true, now: new Date(2026, 4, 13),
     })
-    expect(totalsFromBreakdown(out).expenses).toBe(30)
+    expect(totalsFromBreakdown(out).expenses).toBe(50)
     expect(totalsFromBreakdown(out).income).toBe(0)
   })
 
-  it('settimana futura: usa la quota base come stima, non la spesa reale', () => {
+  it('settimana in corso + settimana futura: entrambe alla quota base (nessuna conclusa)', () => {
     const out = getPeriodBreakdown({
       startDate: new Date(2026, 4, 11), endDate: new Date(2026, 4, 24),
       ...base, weeklyBudgets: [budget],
       actualTx: [mkOneOff({ amount: 30, date: '2026-05-13', budget_id: 'sfizi' })],
       includeActualOneOffs: true, reconcileBudgets: true, now: new Date(2026, 4, 12),
     })
-    // settimana dell'11 (iniziata): speso reale 30 · settimana del 18 (futura): quota 50
+    // settimana dell'11 (in corso) e del 18 (futura): nessuna conclusa → quota 50 entrambe.
     const amounts = out.filter(i => i.source === 'weekly_budget').map(i => i.amount).sort((a, b) => a - b)
-    expect(amounts).toEqual([30, 50])
-    expect(totalsFromBreakdown(out).expenses).toBe(80)
+    expect(amounts).toEqual([50, 50])
+    expect(totalsFromBreakdown(out).expenses).toBe(100)
   })
 
   it('senza il flag resta la quota fissa settimanale (pura proiezione)', () => {

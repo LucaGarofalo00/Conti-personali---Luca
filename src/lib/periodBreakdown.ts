@@ -41,9 +41,11 @@ interface Args {
   // (spese/entrate manuali non legate a ricorrenti, budget o pianificate). Serve alle
   // card della home perché riflettano SEMPRE ogni movimento reale. Richiede actualTx.
   includeActualOneOffs?: boolean
-  // Se true, i budget settimanali GIÀ INIZIATI vengono conteggiati per la spesa reale
-  // effettiva (transazioni col budget_id) invece che per la quota fissa. Se false (default)
-  // il budget conta SEMPRE come quota stimata, coerentemente col previsionale. Richiede actualTx.
+  // Se true, i budget settimanali con la settimana GIÀ CONCLUSA (domenica passata) vengono
+  // conteggiati per la spesa reale effettiva (transazioni col budget_id) invece che per la quota.
+  // La settimana IN CORSO e quelle future restano alla quota stimata (proiezione conservativa: si
+  // assume di spendere il budget finché la settimana non è chiusa). Se false (default) il budget
+  // conta SEMPRE come quota fissa, coerentemente col previsionale. Richiede actualTx.
   reconcileBudgets?: boolean
   // Modalità previsionale: se true, le occorrenze ricorrenti GIÀ realizzate (con una
   // transazione reale collegata, confermata o memo) NON vengono proiettate, perché il loro
