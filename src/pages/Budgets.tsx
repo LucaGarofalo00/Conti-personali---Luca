@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ShoppingBag, Receipt, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
-import { startOfWeek, addDays, format } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,7 +8,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
-import { cur, todayString, getBillingPeriod, currentPeriodLabel } from '../lib/utils'
+import { cur, todayString, getBillingPeriod, currentPeriodLabel, parseLocalDate, fmtDate } from '../lib/utils'
 import { incrementFundBalance } from '../lib/fundBalances'
 import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
@@ -141,8 +141,8 @@ export default function Budgets() {
 
   const { start: pStart, end: pEnd } = getBillingPeriod()
   const budgetBreakdown = getPeriodBreakdown({
-    startDate: new Date(pStart),
-    endDate: new Date(pEnd),
+    startDate: parseLocalDate(pStart),
+    endDate: parseLocalDate(pEnd),
     recurringExpenses: [],
     recurringIncome: [],
     weeklyBudgets: budgets.filter(b => b.is_active),
@@ -155,7 +155,7 @@ export default function Budgets() {
   return (
     <div>
       <div className="mb-4">
-        <p className="text-sm text-slate-500">Totale budget del periodo corrente ({currentPeriodLabel()}): <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
+        <p className="text-sm text-slate-500">Totale budget del periodo ({currentPeriodLabel()}): <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="blue">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
@@ -186,7 +186,9 @@ export default function Budgets() {
             {budgets.map(b => {
               const rollInfo = computeBudgetRollover(b, budgetTx)
               const limit = Number(b.amount)
-              const txsThisWeekObjs = budgetTx.filter(t => t.budget_id === b.id && new Date(t.date) >= startOfWeek(new Date(), { weekStartsOn: 1 }))
+              // Riusa le tx della settimana già filtrate dal rollover (niente memo, niente date
+              // future), invece di ricalcolare un filtro divergente qui.
+              const txsThisWeekObjs = rollInfo.txsThisWeek
               const effective = rollInfo.effectiveBudget
               const spentThisWeek = rollInfo.spentThisWeek
               const remaining = rollInfo.remaining
@@ -239,7 +241,7 @@ export default function Budgets() {
                           <div className="flex items-center gap-2 min-w-0">
                             <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span className="text-slate-600 truncate">{tx.description}</span>
-                            <span className="text-xs text-slate-400 shrink-0">{format(new Date(tx.date), 'dd MMM', { locale: it })}</span>
+                            <span className="text-xs text-slate-400 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="font-medium text-red-500">-{cur(Number(tx.amount))}</span>
@@ -291,7 +293,7 @@ export default function Budgets() {
                                         <span className="flex items-center gap-2 min-w-0">
                                           <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                           <span className="text-slate-600 truncate">{tx.description}</span>
-                                          <span className="text-xs text-slate-400 shrink-0">{format(new Date(tx.date), 'dd MMM', { locale: it })}</span>
+                                          <span className="text-xs text-slate-400 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                                         </span>
                                         <span className="font-medium text-red-500 shrink-0">-{cur(Number(tx.amount))}</span>
                                       </div>
@@ -315,22 +317,22 @@ export default function Budgets() {
       <Modal isOpen={showBudgetModal} onClose={() => setShowBudgetModal(false)} title={editingBudget ? 'Modifica Budget' : 'Nuovo Budget Settimanale'}>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input type="text" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Sfizi, Mangiare fuori..." />
+            <label htmlFor="bud-name" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
+            <input id="bud-name" type="text" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Sfizi, Mangiare fuori..." />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Budget settimanale (€)</label>
-            <DecimalInput value={budgetForm.amount} onChange={n => setBudgetForm({ ...budgetForm, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <label htmlFor="bud-amount" className="block text-sm font-medium text-slate-700 mb-1">Budget settimanale (€)</label>
+            <DecimalInput id="bud-amount" value={budgetForm.amount} onChange={n => setBudgetForm({ ...budgetForm, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
-            <select value={budgetForm.fund_id} onChange={e => setBudgetForm({ ...budgetForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <label htmlFor="bud-fund" className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
+            <select id="bud-fund" value={budgetForm.fund_id} onChange={e => setBudgetForm({ ...budgetForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Scegli al momento della spesa</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
           <button onClick={saveBudget} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
-            {saving ? 'Salvataggio...' : editingBudget ? 'Salva' : 'Aggiungi'}
+            {saving ? 'Salvataggio...' : editingBudget ? 'Salva Modifiche' : 'Aggiungi Budget'}
           </button>
         </div>
       </Modal>
@@ -338,22 +340,22 @@ export default function Budgets() {
       <Modal isOpen={!!expBudgetId} onClose={() => setExpBudgetId(null)} title={expBudgetId ? `Spesa per "${expBudgetId.name}"` : ''}>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input type="text" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Pizza, Gelato..." />
+            <label htmlFor="bexp-desc" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
+            <input id="bexp-desc" type="text" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Pizza, Gelato..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput value={expForm.amount} onChange={n => setExpForm({ ...expForm, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="bexp-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+              <DecimalInput id="bexp-amount" value={expForm.amount} onChange={n => setExpForm({ ...expForm, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-              <input type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="bexp-date" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+              <input id="bexp-date" type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Paga con</label>
-            <select value={expForm.fund_id} onChange={e => setExpForm({ ...expForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <label htmlFor="bexp-fund" className="block text-sm font-medium text-slate-700 mb-1">Paga con</label>
+            <select id="bexp-fund" value={expForm.fund_id} onChange={e => setExpForm({ ...expForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Nessun fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>

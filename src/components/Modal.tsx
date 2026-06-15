@@ -10,9 +10,10 @@ interface ModalProps {
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
-// Conteggio di riferimenti: con modali impilati lo scroll del body resta bloccato
-// finché l'ultimo non si chiude.
-let openCount = 0
+// Stack dei pannelli modali aperti (ordine di apertura). Serve a due cose: tenere bloccato lo
+// scroll del body finché l'ultimo non si chiude, e far reagire a Escape/Tab SOLO il modale in cima
+// (con modali impilati, es. un Confirm sopra un form, Escape non deve chiudere l'intero stack).
+const modalStack: HTMLElement[] = []
 
 export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -23,21 +24,23 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
 
   useEffect(() => {
     if (!isOpen) return
+    const panel = panelRef.current
     const previouslyFocused = document.activeElement as HTMLElement | null
 
-    if (openCount === 0) {
+    if (modalStack.length === 0) {
       const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
       document.body.style.paddingRight = `${scrollbarWidth}px`
       document.body.style.overflow = 'hidden'
     }
-    openCount++
+    if (panel) modalStack.push(panel)
 
-    panelRef.current?.focus()
+    panel?.focus()
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // Solo il modale in cima allo stack gestisce i tasti: gli altri sotto restano inerti.
+      if (modalStack[modalStack.length - 1] !== panel) return
       if (e.key === 'Escape') { onCloseRef.current(); return }
       if (e.key !== 'Tab') return
-      const panel = panelRef.current
       if (!panel) return
       const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(el => el.offsetParent !== null)
       if (items.length === 0) { e.preventDefault(); return }
@@ -50,8 +53,11 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
-      openCount = Math.max(0, openCount - 1)
-      if (openCount === 0) {
+      if (panel) {
+        const idx = modalStack.indexOf(panel)
+        if (idx !== -1) modalStack.splice(idx, 1)
+      }
+      if (modalStack.length === 0) {
         document.body.style.paddingRight = ''
         document.body.style.overflow = ''
       }

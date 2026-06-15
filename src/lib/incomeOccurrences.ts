@@ -41,12 +41,17 @@ export function generateIncomeOccurrences(
     if (!inc.is_active) continue
 
     if (inc.frequency === 'monthly' && inc.day_of_month !== null) {
+      // Itera mese per mese da periodStart a periodEnd: in un periodo "aperto"/esteso (stipendio in
+      // ritardo) che copre più mesi NON va persa l'occorrenza dei mesi intermedi (coerente con
+      // monthlyOccurrencesInCurrentPeriod / getPeriodBreakdown del motore spese).
       const candidates: Date[] = []
-      const sm = periodStart.getMonth(), sy = periodStart.getFullYear()
-      candidates.push(new Date(sy, sm, Math.min(inc.day_of_month, daysInMonth(sy, sm))))
-      const em = periodEnd.getMonth(), ey = periodEnd.getFullYear()
-      if (em !== sm || ey !== sy) {
-        candidates.push(new Date(ey, em, Math.min(inc.day_of_month, daysInMonth(ey, em))))
+      let cy = periodStart.getFullYear(), cm = periodStart.getMonth()
+      for (let guard = 0; guard < 36; guard++) {
+        const d = new Date(cy, cm, Math.min(inc.day_of_month, daysInMonth(cy, cm)))
+        if (d > periodEnd) break
+        if (d >= periodStart) candidates.push(d)
+        cm++
+        if (cm > 11) { cm = 0; cy++ }
       }
       for (const workDate of candidates) {
         if (workDate < periodStart || workDate > periodEnd) continue

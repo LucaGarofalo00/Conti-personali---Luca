@@ -14,7 +14,14 @@ export async function loadPeriodSettings(userId: string): Promise<void> {
       .select('period_start, salary_income_id, anchor_day')
       .eq('user_id', userId)
       .maybeSingle()
-    if (error || !data) return
+    // Distinguere i due casi: `error` (rete/tabella mancante) → conserva l'ultimo valore noto;
+    // `!data` (utente SENZA riga, es. nuovo account sullo stesso browser) → reset ai DEFAULT, così
+    // non si ereditano periodStart/salaryIncomeId/anchorDay rimasti in localStorage da un altro utente.
+    if (error) return
+    if (!data) {
+      setLocalPeriodSettings({ periodStart: null, salaryIncomeId: null, anchorDay: 15 })
+      return
+    }
     setLocalPeriodSettings({
       periodStart: data.period_start ?? null,
       salaryIncomeId: data.salary_income_id ?? null,

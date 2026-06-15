@@ -79,11 +79,18 @@ export function setLocalPeriodSettings(partial: Partial<PeriodSettings>): void {
   for (const l of listeners) l()
 }
 
-// Solo per i test: riporta lo stato ai default (senza toccare localStorage del browser reale).
-export function __resetPeriodSettingsForTest(): void {
+// Riporta lo store ai default e pulisce lo specchio localStorage. Va chiamata al LOGOUT, così un
+// altro utente che accede sullo stesso browser non eredita periodStart/salaryIncomeId/anchorDay del
+// precedente prima che l'idratazione dal DB completi (o se non ha ancora una riga user_settings).
+export function resetPeriodSettings(): void {
   state = { ...DEFAULTS }
   try { localStorage.removeItem(STORAGE_KEY) } catch { /* no-op */ }
   for (const l of listeners) l()
+}
+
+// Solo per i test: riporta lo stato ai default (senza toccare localStorage del browser reale).
+export function __resetPeriodSettingsForTest(): void {
+  resetPeriodSettings()
 }
 
 function subscribe(listener: () => void): () => void {

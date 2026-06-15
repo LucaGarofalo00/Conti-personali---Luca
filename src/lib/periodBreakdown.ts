@@ -1,6 +1,6 @@
 import { addDays, getDate, getDay, getDaysInMonth, startOfDay, isBefore, isAfter, isSameDay, format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { toDateString } from './utils'
+import { toDateString, parseLocalDate } from './utils'
 import { inSameRecurrenceWindow } from './recurrenceMatch'
 import type { RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
@@ -179,7 +179,8 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
     for (const exp of recurringExpenses) {
       if (!exp.is_active) continue
       if (exp.start_date && dateStr < exp.start_date) continue
-      if (exp.end_date && isAfter(cursor, new Date(exp.end_date))) continue
+      // end_date INCLUSIVO come stringa locale (coerente col ramo entrate sopra, niente shift UTC).
+      if (exp.end_date && dateStr > exp.end_date) continue
       if ((exp.type || 'expense') === 'transfer') continue
       if (exp.fund_id && excluded.has(exp.fund_id)) continue
       const freq = exp.frequency || 'monthly'
@@ -214,7 +215,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       if (!p.is_planned) continue
       if (p.fund_id && excluded.has(p.fund_id)) continue
       if (p.type === 'transfer' && p.fund_to_id && excluded.has(p.fund_to_id)) continue
-      const pDate = startOfDay(new Date(p.date))
+      const pDate = startOfDay(parseLocalDate(p.date))
       if (!isSameDay(pDate, cursor)) continue
       if (p.type === 'income') {
         items.push({

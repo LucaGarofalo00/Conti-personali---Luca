@@ -6,7 +6,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
-import { cur, getBillingPeriod, currentPeriodLabel } from '../lib/utils'
+import { cur, getBillingPeriod, currentPeriodLabel, todayString, fmtDate } from '../lib/utils'
 import { logSupabaseError } from '../lib/logError'
 import { generateIncomeOccurrences } from '../lib/incomeOccurrences'
 import InfoBox from '../components/InfoBox'
@@ -83,6 +83,9 @@ export default function Income() {
       fund_id: form.fund_id || null,
       day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
       day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
+      // delay_days ha senso solo per le settimanali: per le mensili lo azzero così non resta un
+      // valore fantasma nel DB senza alcun effetto.
+      delay_days: form.frequency === 'weekly' ? form.delay_days : 0,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
     }
@@ -113,6 +116,7 @@ export default function Income() {
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
   const { start: pStart, end: pEnd } = getBillingPeriod()
+  const today = todayString()
   const occurrencesInPeriod = generateIncomeOccurrences(items.filter(i => i.is_active), pStart, pEnd, periodTx)
   const totalMonthly = occurrencesInPeriod.reduce((s, o) => {
     if (o.status === 'skipped') return s
@@ -141,21 +145,22 @@ export default function Income() {
       {items.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-slate-200/60 shadow-sm">
           <p className="text-slate-400 mb-4">Nessuna entrata configurata</p>
-          <button onClick={openAdd} className="text-blue-600 font-medium hover:text-blue-700">Aggiungi la prima entrata</button>
+          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium"><Plus className="w-4 h-4" /> Aggiungi la prima entrata</button>
         </div>
       ) : (
         <div className="space-y-3">
           {items.map(item => {
             const fundName = funds.find(f => f.id === item.fund_id)?.name
+            const isExpired = !!item.end_date && item.end_date < today
             return (
-              <div key={item.id} className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between transition ${!item.is_active ? 'opacity-50' : ''}`}>
-                <div className="flex items-center gap-4">
-                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva entrata' : 'Attiva entrata'} className="text-slate-400 hover:text-blue-600 transition">
+              <div key={item.id} className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between gap-3 transition ${!item.is_active || isExpired ? 'opacity-50' : ''}`}>
+                <div className="flex items-center gap-4 min-w-0">
+                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva entrata' : 'Attiva entrata'} className="text-slate-400 hover:text-blue-600 transition shrink-0">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-emerald-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
-                  <div>
-                    <p className="font-medium text-slate-800">{item.name} {item.is_variable && <span className="text-xs text-amber-500 font-normal">(variabile)</span>}</p>
-                    <p className="text-xs text-slate-400 flex items-center gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-800 break-words">{item.name} {item.is_variable && <span className="text-xs text-amber-500 font-normal">(variabile)</span>}{isExpired && <span className="text-xs text-slate-400 font-normal"> · terminata</span>}</p>
+                    <p className="text-xs text-slate-400 flex items-center flex-wrap gap-x-2 gap-y-0.5">
                       {item.frequency === 'monthly' ? (
                         <><Calendar className="w-3 h-3" /> Giorno {item.day_of_month}</>
                       ) : (
@@ -163,12 +168,12 @@ export default function Income() {
                       )}
                       {item.delay_days > 0 && <span>· Ritardo {item.delay_days}gg</span>}
                       {fundName && <span>· {fundName}</span>}
-                      {item.start_date && <span>· Dal {new Date(item.start_date).toLocaleDateString('it-IT')}</span>}
-                      {item.end_date && <span>· Fino al {new Date(item.end_date).toLocaleDateString('it-IT')}</span>}
+                      {item.start_date && <span>· Dal {fmtDate(item.start_date)}</span>}
+                      {item.end_date && <span>· Fino al {fmtDate(item.end_date)}</span>}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
                     <span className="text-lg font-semibold text-emerald-600">{cur(Number(item.amount))}</span>
                     <p className="text-xs text-slate-400">{item.frequency === 'monthly' ? '/mese' : '/settimana'}</p>
@@ -185,17 +190,17 @@ export default function Income() {
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? 'Modifica Entrata' : 'Nuova Entrata'}>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Stipendio, Lavoro sabato..." />
+            <label htmlFor="inc-name" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
+            <input id="inc-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Stipendio, Lavoro sabato..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="inc-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+              <DecimalInput id="inc-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
-              <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <label htmlFor="inc-frequency" className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
+              <select id="inc-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                 <option value="monthly">Mensile</option>
                 <option value="weekly">Settimanale</option>
               </select>
@@ -203,20 +208,20 @@ export default function Income() {
           </div>
           {form.frequency === 'monthly' ? (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Giorno del mese</label>
-              <input type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="inc-day-month" className="block text-sm font-medium text-slate-700 mb-1">Giorno del mese</label>
+              <input id="inc-day-month" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Giorno della settimana</label>
-                <select value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <label htmlFor="inc-day-week" className="block text-sm font-medium text-slate-700 mb-1">Giorno della settimana</label>
+                <select id="inc-day-week" value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                   {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Ritardo pagamento (gg)</label>
-                <input type="number" min={0} value={form.delay_days} onChange={e => setForm({ ...form, delay_days: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+                <label htmlFor="inc-delay" className="block text-sm font-medium text-slate-700 mb-1">Ritardo pagamento (gg)</label>
+                <input id="inc-delay" type="number" min={0} value={form.delay_days} onChange={e => setForm({ ...form, delay_days: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               </div>
             </div>
           )}
@@ -225,23 +230,23 @@ export default function Income() {
             <label htmlFor="variable" className="text-sm text-slate-700">Importo variabile (la cifra indicata è una stima)</label>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Fondo destinazione (opzionale)</label>
-            <select value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <label htmlFor="inc-fund" className="block text-sm font-medium text-slate-700 mb-1">Fondo destinazione (opzionale)</label>
+            <select id="inc-fund" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Nessuno</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
-              <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="inc-start" className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
+              <input id="inc-start" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.start_date && (
                 <button onClick={() => setForm({ ...form, start_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi</button>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data fine (opzionale)</label>
-              <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="inc-end" className="block text-sm font-medium text-slate-700 mb-1">Data fine (opzionale)</label>
+              <input id="inc-end" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.end_date && (
                 <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi</button>
               )}

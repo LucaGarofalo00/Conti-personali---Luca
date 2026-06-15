@@ -73,7 +73,9 @@ export function averageFuelConsumption(all: Transaction[], fuelType: FuelType): 
   let kmSum = 0
   let litersSum = 0
   let costSum = 0
-  let hasCost = true
+  // Km percorsi solo sulle coppie che HANNO un costo: così una singola coppia senza costo non
+  // azzera del tutto l'€/km, ma lo calcola sulle coppie valide.
+  let kmSumWithCost = 0
   for (let i = 1; i < fills.length; i++) {
     const km = Number(fills[i].fuel_km)
     const liters = Number(fills[i - 1].fuel_liters)
@@ -81,14 +83,13 @@ export function averageFuelConsumption(all: Transaction[], fuelType: FuelType): 
     kmSum += km
     litersSum += liters
     const prevCost = Number(fills[i - 1].amount)
-    if (prevCost > 0) costSum += prevCost
-    else hasCost = false
+    if (prevCost > 0) { costSum += prevCost; kmSumWithCost += km }
   }
 
   if (!(kmSum > 0) || !(litersSum > 0)) return null
   return {
     kmPerLiter: kmSum / litersSum,
     litersPer100Km: (litersSum / kmSum) * 100,
-    costPerKm: hasCost && costSum > 0 ? costSum / kmSum : null,
+    costPerKm: kmSumWithCost > 0 && costSum > 0 ? costSum / kmSumWithCost : null,
   }
 }

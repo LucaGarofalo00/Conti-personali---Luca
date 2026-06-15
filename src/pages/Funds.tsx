@@ -56,9 +56,12 @@ export default function Funds() {
   const save = async () => {
     if (!form.name.trim()) { toast.error('Inserisci un nome'); return }
     setSaving(true)
+    // In modifica aggiorno solo i campi realmente editabili: tipo/parent/ordinamento NON devono
+    // cambiare riscrivendo l'intero form. In creazione assegno un sort_order incrementale (gli
+    // insert con sort_order 0 producevano un ordinamento indefinito).
     const { error } = editing
-      ? await supabase.from('funds').update(form).eq('id', editing.id)
-      : await supabase.from('funds').insert({ user_id: user!.id, ...form })
+      ? await supabase.from('funds').update({ name: form.name, balance: form.balance, icon: form.icon, color: form.color }).eq('id', editing.id)
+      : await supabase.from('funds').insert({ user_id: user!.id, ...form, sort_order: funds.length })
     setSaving(false)
     if (error) { toast.error('Errore nel salvataggio'); return }
     toast.success(editing ? 'Fondo aggiornato' : 'Fondo creato')
@@ -81,7 +84,12 @@ export default function Funds() {
     if (transfer.from_id === transfer.to_id) { toast.error('Scegli due fondi diversi'); return }
     const from = funds.find(f => f.id === transfer.from_id)!
     const to = funds.find(f => f.id === transfer.to_id)!
-    if (transfer.amount > Number(from.balance)) {
+    // Ri-leggo il saldo del fondo di partenza dal DB subito prima del controllo: l'array in memoria
+    // potrebbe essere stale (modifiche da un'altra scheda/dispositivo) e far passare un trasferimento
+    // che porterebbe il saldo in negativo.
+    const { data: freshFrom } = await supabase.from('funds').select('balance').eq('id', from.id).single()
+    const fromBalance = freshFrom ? Number(freshFrom.balance) : Number(from.balance)
+    if (transfer.amount > fromBalance) {
       toast.error('Saldo insufficiente')
       return
     }
@@ -115,9 +123,9 @@ export default function Funds() {
     <div>
       <InfoBox title="Come funzionano i fondi" tone="blue">
         <p>Un <strong>fondo</strong> è un contenitore di denaro: conto in banca, contanti, carta, salvadanaio, ecc.</p>
-        <p>Il saldo dei fondi si aggiorna automaticamente quando: confermi una transazione dalla dashboard, registri una spesa in un budget/variable, scatti un'auto-deduct, o aggiungi/elimini una transazione.</p>
-        <p><strong>Salvadanaio (sub)</strong>: fondo "figlio" di un fondo principale, utile per organizzare (es. "Risparmio Vacanze" sotto "Carta").</p>
-        <p><strong>Trasferisci</strong>: sposta denaro da un fondo a un altro. Crea una transazione di tipo "transfer".</p>
+        <p>Il saldo dei fondi si aggiorna automaticamente quando: confermi una transazione dalla dashboard, registri una spesa di un budget, scatta un addebito automatico, o aggiungi/elimini una transazione.</p>
+        <p><strong>Salvadanaio</strong>: fondo "figlio" di un fondo principale, utile per organizzare (es. "Risparmio Vacanze" sotto "Carta").</p>
+        <p><strong>Trasferisci</strong>: sposta denaro da un fondo a un altro. Crea una transazione di tipo trasferimento.</p>
         <p>Nel filtro globale puoi <strong>escludere</strong> fondi dalle previsioni e dalle stime mensili (utile per simulare scenari "se non avessi accesso ai risparmi").</p>
       </InfoBox>
       <div className="flex items-center justify-between mb-4">
@@ -132,6 +140,15 @@ export default function Funds() {
         </div>
       </div>
 
+      {mainFunds.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-dashed border-slate-200">
+          <Wallet className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <p className="text-sm text-slate-500 mb-4">Non hai ancora nessun fondo</p>
+          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
+            <Plus className="w-4 h-4" /> Aggiungi il primo fondo
+          </button>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {mainFunds.map(fund => {
           const Icon = iconMap[fund.icon] || Wallet
@@ -160,7 +177,7 @@ export default function Funds() {
                   {subs.map(sub => (
                     <div key={sub.id} className="flex items-center justify-between">
                       <span className="text-sm text-slate-500 flex items-center gap-1.5">
-                        <PiggyBank className="w-3.5 h-3.5" /> {sub.name}
+                        <PiggyBank className="w-3.5 h-3.5" style={{ color: sub.color }} /> {sub.name}
                       </span>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-slate-700">{cur(Number(sub.balance))}</span>
@@ -182,16 +199,17 @@ export default function Funds() {
           )
         })}
       </div>
+      )}
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? 'Modifica Fondo' : 'Nuovo Fondo'}>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <label htmlFor="fund-name" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
+            <input id="fund-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Saldo</label>
-            <DecimalInput value={form.balance} onChange={n => setForm({ ...form, balance: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <label htmlFor="fund-balance" className="block text-sm font-medium text-slate-700 mb-1">Saldo (€)</label>
+            <DecimalInput id="fund-balance" value={form.balance} onChange={n => setForm({ ...form, balance: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
           {form.type === 'main' && (
             <>
@@ -227,24 +245,24 @@ export default function Funds() {
       <Modal isOpen={showTransfer} onClose={() => setShowTransfer(false)} title="Trasferisci Fondi">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Da</label>
-            <select value={transfer.from_id} onChange={e => setTransfer({ ...transfer, from_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <label htmlFor="transfer-from" className="block text-sm font-medium text-slate-700 mb-1">Da</label>
+            <select id="transfer-from" value={transfer.from_id} onChange={e => setTransfer({ ...transfer, from_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Seleziona fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">A</label>
-            <select value={transfer.to_id} onChange={e => setTransfer({ ...transfer, to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <label htmlFor="transfer-to" className="block text-sm font-medium text-slate-700 mb-1">A</label>
+            <select id="transfer-to" value={transfer.to_id} onChange={e => setTransfer({ ...transfer, to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Seleziona fondo</option>
               {funds.filter(f => f.id !== transfer.from_id).map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Importo</label>
-            <DecimalInput value={transfer.amount} onChange={n => setTransfer({ ...transfer, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <label htmlFor="transfer-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+            <DecimalInput id="transfer-amount" value={transfer.amount} onChange={n => setTransfer({ ...transfer, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
-          <button onClick={doTransfer} disabled={!transfer.from_id || !transfer.to_id || transfer.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
+          <button onClick={doTransfer} disabled={!transfer.from_id || !transfer.to_id || transfer.from_id === transfer.to_id || transfer.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
             {saving ? 'Trasferimento...' : 'Trasferisci'}
           </button>
         </div>

@@ -72,9 +72,13 @@ export async function processAutoDeducts({ userId, expenses, periodTx }: Process
       const alreadyProcessed = periodTx.some(tx =>
         (tx.recurring_expense_id === exp.id && onDueDate(tx)) ||
         (
-          tx.description === exp.name &&
+          // Ripiego per movimenti NON collegati (vecchi memo/import): match su tipo+fondo+importo+
+          // data+destinazione, SENZA la descrizione (che cambia se la spesa viene rinominata e
+          // farebbe sfuggire l'occorrenza → rischio doppio addebito).
+          !tx.recurring_expense_id &&
           tx.type === txType &&
           tx.fund_id === exp.fund_id &&
+          Number(tx.amount) === Number(exp.amount) &&
           onDueDate(tx) &&
           (!isTransfer || tx.fund_to_id === exp.fund_to_id)
         )

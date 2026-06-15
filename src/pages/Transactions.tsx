@@ -1,14 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Pencil, ArrowUpRight, ArrowDownRight, ArrowLeftRight, Filter, CheckSquare, Square, X, Search } from 'lucide-react'
-import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
-import { cur, TRANSACTION_CATEGORIES, todayString, FUEL_CATEGORY, parseDecimal, catLabel } from '../lib/utils'
+import { cur, TRANSACTION_CATEGORIES, todayString, FUEL_CATEGORY, parseDecimal, catLabel, fmtDate } from '../lib/utils'
+import { isAmountsHidden } from '../lib/privacy'
 import { incrementFundBalance } from '../lib/fundBalances'
 import { logSupabaseError } from '../lib/logError'
 import { fuelConsumption, previousFuelFill, averageFuelConsumption, normalizeFuelType, FUEL_TYPE_LABEL, type FuelType } from '../lib/fuelConsumption'
@@ -222,7 +221,8 @@ export default function Transactions() {
   const bulkDelete = async () => {
     const selected = items.filter(tx => selectedIds.has(tx.id))
     if (selected.length === 0) return
-    const total = selected.reduce((s, tx) => s + (tx.is_memo ? 0 : Number(tx.amount)), 0)
+    // Memo e pianificate non muovono i fondi: non vanno conteggiate nel totale "saldi ripristinati".
+    const total = selected.reduce((s, tx) => s + (tx.is_memo || tx.is_planned ? 0 : Number(tx.amount)), 0)
     const msg = `Eliminare ${selected.length} transazion${selected.length === 1 ? 'e' : 'i'}? I saldi verranno ripristinati per un totale di ${cur(total)}.`
     if (!(await confirm({ message: msg, confirmText: 'Elimina', danger: true }))) return
 
@@ -321,13 +321,17 @@ export default function Transactions() {
   }
 
   const selectDuplicates = () => {
+    // Seleziona SOLO i duplicati attualmente visibili in lista: così non si selezionano (e poi
+    // eliminano) pianificate/voci nascoste da un filtro che l'utente non sta vedendo.
+    const visible = new Set(filteredVisibleIds)
+    const toSelect = [...duplicateGroups].filter(id => visible.has(id))
     setSelectedIds(prev => {
       const next = new Set(prev)
-      duplicateGroups.forEach(id => next.add(id))
+      toSelect.forEach(id => next.add(id))
       return next
     })
-    if (duplicateGroups.size === 0) toast.error('Nessun duplicato trovato')
-    else toast.success(`${duplicateGroups.size} duplicat${duplicateGroups.size === 1 ? 'o' : 'i'} selezionat${duplicateGroups.size === 1 ? 'o' : 'i'}`)
+    if (toSelect.length === 0) toast.error('Nessun duplicato visibile trovato')
+    else toast.success(`${toSelect.length} duplicat${toSelect.length === 1 ? 'o' : 'i'} selezionat${toSelect.length === 1 ? 'o' : 'i'}`)
   }
 
   const TypeIcon = ({ type }: { type: string }) => {
@@ -341,7 +345,7 @@ export default function Transactions() {
       <InfoBox title="Cosa vedi qui" tone="blue">
         <p>Tutte le transazioni effettive che hanno modificato (o modificheranno) i tuoi fondi. Ogni riga ha badge che indicano da dove proviene:</p>
         <ul className="list-disc ml-4 space-y-0.5">
-          <li><strong>entrata ric.</strong> / <strong>auto-uscita</strong>: generata confermando una voce ricorrente o da auto-deduct</li>
+          <li><strong>entrata ric.</strong> / <strong>spesa ric.</strong>: generata confermando una voce ricorrente o da addebito automatico</li>
           <li><strong>budget</strong>: spesa inserita dentro un budget settimanale</li>
           <li><strong>memo</strong>: "solo pagato" o "non lavorato" — non muove i fondi</li>
           <li><strong>pianif.</strong>: futura/pianificata, non ancora avvenuta — non influisce sul saldo</li>
@@ -463,7 +467,7 @@ export default function Transactions() {
               if (isFuelTx && (tx.fuel_km != null || tx.fuel_liters != null)) fuelParts.push(FUEL_TYPE_LABEL[txFuelType])
               if (tx.fuel_km != null) fuelParts.push(`${Number(tx.fuel_km).toLocaleString('it-IT')} km`)
               if (tx.fuel_liters != null) fuelParts.push(`${Number(tx.fuel_liters).toLocaleString('it-IT')} L`)
-              if (tx.fuel_price_per_liter != null) fuelParts.push(`${Number(tx.fuel_price_per_liter).toLocaleString('it-IT', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} €/L`)
+              if (tx.fuel_price_per_liter != null) fuelParts.push(isAmountsHidden() ? '••••• €/L' : `${Number(tx.fuel_price_per_liter).toLocaleString('it-IT', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} €/L`)
               const fuelLine = fuelParts.join(' · ')
               const prevFill = isFuelTx && tx.fuel_km != null ? previousFuelFill(tx, fuelFills) : null
               const cons = prevFill && prevFill.fuel_liters != null
@@ -488,13 +492,13 @@ export default function Transactions() {
                         {isDuplicate && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium uppercase">duplicato</span>}
                         {tx.is_planned && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium uppercase">pianif.</span>}
                         {tx.is_memo && <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium uppercase">memo</span>}
-                        {tx.recurring_expense_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">auto-uscita</span>}
+                        {tx.recurring_expense_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">spesa ric.</span>}
                         {tx.recurring_income_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">entrata ric.</span>}
                         {tx.budget_id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium uppercase">budget</span>}
                       </div>
                       <p className="text-xs text-slate-400">
-                        {format(new Date(tx.date), 'dd MMM yyyy', { locale: it })}
-                        {tx.planned_date && tx.planned_date !== tx.date && ` · previsto ${format(new Date(tx.planned_date + 'T00:00:00'), 'd MMM', { locale: it })}`}
+                        {fmtDate(tx.date)}
+                        {tx.planned_date && tx.planned_date !== tx.date && ` · previsto ${fmtDate(tx.planned_date, 'd MMM')}`}
                         {fundName && ` · ${fundName}`}
                         {fundToName && ` → ${fundToName}`}
                         {tx.category !== 'altro' && ` · ${catLabel(tx.category)}`}
@@ -555,38 +559,38 @@ export default function Transactions() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Spesa supermercato..." />
+            <label htmlFor="tx-desc" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
+            <input id="tx-desc" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Spesa supermercato..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="tx-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+              <DecimalInput id="tx-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="tx-date" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+              <input id="tx-date" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">{form.type === 'transfer' ? 'Da fondo' : 'Fondo'}</label>
-            <select value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <label htmlFor="tx-fund" className="block text-sm font-medium text-slate-700 mb-1">{form.type === 'transfer' ? 'Da fondo' : 'Fondo'}</label>
+            <select id="tx-fund" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Nessun fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
           {form.type === 'transfer' && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">A fondo</label>
-              <select value={form.fund_to_id} onChange={e => setForm({ ...form, fund_to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <label htmlFor="tx-fund-to" className="block text-sm font-medium text-slate-700 mb-1">A fondo</label>
+              <select id="tx-fund-to" value={form.fund_to_id} onChange={e => setForm({ ...form, fund_to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                 <option value="">Seleziona</option>
                 {funds.filter(f => f.id !== form.fund_id).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
-            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
+            <label htmlFor="tx-category" className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
+            <select id="tx-category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
               {TRANSACTION_CATEGORIES.map(c => <option key={c} value={c}>{catLabel(c)}</option>)}
             </select>
           </div>

@@ -18,7 +18,7 @@ import { getPeriodBreakdown } from '../lib/periodBreakdown'
 import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
-import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, monthlyOccurrencesInCurrentPeriod, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, monthlyOccurrencesInCurrentPeriod, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel, parseLocalDate, fmtDate } from '../lib/utils'
 import { isAmountsHidden } from '../lib/privacy'
 import { getSalaryIncomeId } from '../lib/periodSettings'
 import { savePeriodSettings } from '../lib/periodSettingsDb'
@@ -366,8 +366,6 @@ export default function Dashboard() {
     }
   })
 
-  const pendingVarExp: PendingItem[] = []
-
   const confirmedRecurringCount = pendingRecurringManual.filter(p => p.confirmed).length
 
   const openConfirm = (item: PendingItem) => {
@@ -565,7 +563,9 @@ export default function Dashboard() {
     const plannedDate = confirmItem.occurrence_date || effectiveDate
     const { error: insertError } = await supabase.from('transactions').insert(withPlannedDate({
       user_id: user!.id,
-      type: confirmItem.kind === 'income' ? 'income' : 'expense',
+      // Rispetta il tipo dell'occorrenza: un trasferimento "segnato senza scalare" resta un memo di
+      // tipo 'transfer' (escluso da entrate/uscite), non un'uscita che falserebbe i totali.
+      type: confirmItem.kind === 'income' ? 'income' : confirmItem.kind === 'transfer' ? 'transfer' : 'expense',
       amount: confirmAmount,
       description: confirmItem.name,
       fund_id: null,
@@ -604,8 +604,8 @@ export default function Dashboard() {
   const { start: pStartForEst, end: pEndForEst } = getBillingPeriod()
   const plannedInPeriod = planned.filter(p => p.date >= pStartForEst && p.date <= pEndForEst)
   const periodBreakdown = getPeriodBreakdown({
-    startDate: new Date(pStartForEst),
-    endDate: new Date(pEndForEst),
+    startDate: parseLocalDate(pStartForEst),
+    endDate: parseLocalDate(pEndForEst),
     recurringExpenses: expenses,
     recurringIncome: income,
     weeklyBudgets: budgets,
@@ -619,12 +619,14 @@ export default function Dashboard() {
   })
   const est = totalsFromBreakdown(periodBreakdown)
   const periodNet = Math.round((est.income - est.expenses) * 100) / 100
-  const plannedIncomeInPeriod = plannedInPeriod.filter(p => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0)
-  const plannedExpensesInPeriod = plannedInPeriod.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0)
+  // Coerente col valore della card: il breakdown scarta le pianificate su fondi esclusi, quindi
+  // anche il sottotitolo "incl. … pianif." deve escluderle, altrimenti i numeri non tornano.
+  const notExcluded = (p: Transaction) => !(p.fund_id && excludedFundIds.includes(p.fund_id))
+  const plannedIncomeInPeriod = plannedInPeriod.filter(p => p.type === 'income' && notExcluded(p)).reduce((s, p) => s + Number(p.amount), 0)
+  const plannedExpensesInPeriod = plannedInPeriod.filter(p => p.type === 'expense' && notExcluded(p)).reduce((s, p) => s + Number(p.amount), 0)
   const forecast = generateForecast(funds, expenses, income, budgets, 3, excludedFundIds, planned, periodTx)
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
-  const nowDate = new Date()
 
   const recentTx = [...periodTx]
     .filter(tx => !tx.is_memo)
@@ -707,33 +709,32 @@ export default function Dashboard() {
                   label={`Saldo il ${format(projectionTarget, 'd MMM', { locale: it })}`}
                   value={cur(projection.balance)}
                   valueColor={projection.balance >= 0 ? 'text-purple-700' : 'text-red-600'}
-                  sub={`Giorno prima di "${nextSalary.income.name}"`}
-                  onClick={() => setBreakdownModal('expense')}
+                  sub={`Giorno prima di "${nextSalary.income.name.trim()}"`}
                 />
               ) : (
                 <Card icon={TrendingDown} color="bg-slate-100 text-slate-400" label="Saldo prossimo stipendio" value="—" sub="Configura un'entrata mensile" />
               )}
             </div>
             <InfoBox title="Come vengono calcolate queste cifre" tone="blue">
-              <p><strong>Saldo Totale</strong>: somma di tutti i fondi (escluso quelli filtrati col selettore in alto).</p>
+              <p><strong>Saldo Totale</strong> (mostrato come <strong>Saldo Filtrato</strong> quando escludi dei fondi col selettore in alto): somma di tutti i fondi inclusi.</p>
               <p><strong>Entrate del Periodo ({periodLabel})</strong>: somma di tutto quello che effettivamente entra nel periodo corrente. Es: se hai stipendio mensile 1500€ + sabato 50€ × 4 occorrenze = 1700€. Una spesa annuale del bollo a marzo non compare se non siamo a marzo.</p>
               <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo ({periodLabel}). Click per vedere il dettaglio.</p>
               <p>Queste cifre comprendono sia le voci <strong>previste</strong> (ricorrenti, budget, pianificate) sia le <strong>transazioni manuali</strong> già registrate nel periodo: ogni movimento che aggiungi, modifichi o elimini si riflette qui (badge <span className="font-medium text-cyan-700">EFFETTIVA</span>).</p>
               <p><strong>Budget</strong>: per le settimane <strong>già concluse</strong> conta quanto hai <strong>speso davvero</strong> (le transazioni del budget); per la settimana <strong>in corso</strong> e quelle <strong>future</strong> conta la <strong>quota stimata</strong> (la previsione). Appena una settimana finisce, passa automaticamente all'effettivo. L'avanzo non speso <strong>non</strong> viene conteggiato come entrata.</p>
               {projection && projectionTarget && nextSalary && (
                 <p>
-                  <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).
+                  <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name.trim()}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).
                   Conta <strong>TUTTO</strong>: ricorrenti, budget settimanali, spese variabili (GPL/benzina come stima), pianificate.
                   Da oggi al {format(projectionTarget, 'd MMM', { locale: it })}: <span className="text-emerald-600">+{cur(projection.totalIncome)}</span> entrate, <span className="text-red-500">-{cur(projection.totalExpenses)}</span> uscite.
                 </p>
               )}
-              <p className="text-amber-700"><strong>Nota su GPL/Benzina</strong>: usate come <strong>stime fisse</strong> per la previsione (es. 30€/sett GPL). Se in alcuni mesi spendi diversamente (25€ invece di 30€), modifica la stima nella pagina Budget. L'effettiva spesa la vedi col progress bar nella stessa pagina.</p>
+              <p className="text-amber-700"><strong>Nota su GPL/Benzina</strong>: usate come <strong>stime fisse</strong> per la previsione (es. 30€/sett GPL). Se in alcuni mesi spendi diversamente (25€ invece di 30€), modifica l'importo nella pagina <strong>Spese Ricorrenti</strong>. Quando registri il rifornimento puoi inserire km/litri per vedere i consumi reali.</p>
             </InfoBox>
           </>
         )
       })()}
 
-      {(pendingRecurringManual.length > 0 || pendingIncome.length > 0 || pendingAutoUpcoming.length > 0 || pendingVarExp.length > 0) && (
+      {(pendingRecurringManual.length > 0 || pendingIncome.length > 0 || pendingAutoUpcoming.length > 0) && (
         <div className="mb-8">
           <InfoBox title="Come funzionano le Prossime Scadenze" tone="emerald">
             <p>Tutte le voci del periodo corrente ({periodLabel}): cosa devi <strong>confermare</strong> e cosa verrà scalato in <strong>automatico</strong>.</p>
@@ -897,8 +898,8 @@ export default function Dashboard() {
               <div className="space-y-2">
                 {periodPlanned.map(p => {
                   const fundName = funds.find(f => f.id === p.fund_id)?.name
-                  const dueDate = new Date(p.date)
-                  const isPast = dueDate <= nowDate
+                  // Solo-data in locale: una pianificata in scadenza OGGI non è "scaduta".
+                  const isPast = p.date < today
                   return (
                     <div key={p.id} className={`bg-white rounded-xl border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-4 flex items-center justify-between`}>
                       <div className="min-w-0 flex-1">
@@ -907,7 +908,7 @@ export default function Dashboard() {
                           {isPast && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium uppercase">scaduta</span>}
                         </div>
                         <p className="text-xs text-slate-400">
-                          {format(dueDate, 'd MMM yyyy', { locale: it })}
+                          {fmtDate(p.date)}
                           {fundName && ` · ${fundName}`}
                           {' · '}{p.type === 'income' ? '+' : '-'}{cur(Number(p.amount))}
                         </p>
@@ -987,14 +988,14 @@ export default function Dashboard() {
               <AreaChart data={forecast}>
                 <defs>
                   <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#4F46E5" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${v}`} />
+                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${Number(v).toLocaleString('it-IT')}`} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="balance" stroke="#4F46E5" fill="url(#grad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#grad)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -1015,11 +1016,11 @@ export default function Dashboard() {
                     <div>
                       <p className="text-[13px] font-medium text-slate-700">{tx.description}</p>
                       <p className="text-[11px] text-slate-400">
-                        {format(new Date(tx.date), 'd MMM', { locale: it })} &middot; {catLabel(tx.category)}
+                        {fmtDate(tx.date)} &middot; {catLabel(tx.category)}
                       </p>
                     </div>
-                    <span className={`text-[13px] font-semibold ${tx.type === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {tx.type === 'income' ? '+' : '-'}{cur(Number(tx.amount))}
+                    <span className={`text-[13px] font-semibold ${tx.type === 'income' ? 'text-emerald-600' : tx.type === 'expense' ? 'text-red-500' : 'text-blue-600'}`}>
+                      {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}{cur(Number(tx.amount))}
                     </span>
                   </div>
                 ))}
@@ -1287,8 +1288,7 @@ export default function Dashboard() {
           <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
             {planned.map(p => {
               const fundName = funds.find(f => f.id === p.fund_id)?.name
-              const dueDate = new Date(p.date)
-              const isPast = dueDate <= nowDate
+              const isPast = p.date < today
               return (
                 <div key={p.id} className={`bg-white rounded-lg border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-3 flex items-center justify-between gap-2`}>
                   <div className="min-w-0 flex-1">
@@ -1297,7 +1297,7 @@ export default function Dashboard() {
                       {isPast && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium uppercase">scaduta</span>}
                     </div>
                     <p className="text-xs text-slate-400">
-                      {format(dueDate, 'd MMM yyyy', { locale: it })}
+                      {fmtDate(p.date)}
                       {fundName && ` · ${fundName}`}
                       {' · '}{p.type === 'income' ? '+' : '-'}{cur(Number(p.amount))}
                     </p>

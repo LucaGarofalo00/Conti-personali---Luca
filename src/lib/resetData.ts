@@ -30,6 +30,26 @@ export async function resetFromToday(userId: string): Promise<ResetResult> {
   const resetDate = todayString()
   const cur = getPeriodSettings()
 
+  const finalizeLocal = () => {
+    setLocalPeriodSettings({ periodStart: resetDate })
+    try { localStorage.removeItem(PROMPT_DISMISSED_KEY) } catch { /* localStorage non disponibile */ }
+  }
+
+  // Percorso PREFERITO: RPC ATOMICA (vedi supabase-reset-from-today.sql) che fa upsert periodo +
+  // delete movimenti + delete pianificate passate in UN'UNICA transazione (o tutto o niente).
+  try {
+    const { data, error } = await supabase.rpc('reset_from_today', {
+      p_user_id: userId,
+      p_period_start: resetDate,
+      p_salary_income_id: cur.salaryIncomeId,
+      p_anchor_day: cur.anchorDay,
+    })
+    if (!error) {
+      finalizeLocal()
+      return { error: null, deletedPastPlanned: typeof data === 'number' ? data : 0 }
+    }
+  } catch { /* RPC non deployata: fallback NON atomico sotto */ }
+
   // 1) Persisti PRIMA il nuovo inizio periodo sul DB (gating reversibile). Se fallisce, esci
   //    senza eliminare nulla.
   const settingsRes = await supabase.from('user_settings').upsert(
@@ -46,13 +66,17 @@ export async function resetFromToday(userId: string): Promise<ResetResult> {
     return { error: settingsRes.error.message || 'Errore salvataggio periodo' }
   }
 
-  // 2) Movimenti reali (storico) → via tutti.
+  // 2) Movimenti reali (storico) → via tutti. Se fallisce: il periodo sul DB è già a OGGI, quindi
+  //    allineo lo store locale così la UI non resta sul vecchio periodo (DB e UI coerenti).
   const delReal = await supabase
     .from('transactions')
     .delete()
     .eq('user_id', userId)
     .eq('is_planned', false)
-  if (delReal.error) return { error: delReal.error.message || 'Errore eliminazione movimenti' }
+  if (delReal.error) {
+    finalizeLocal()
+    return { error: delReal.error.message || 'Errore eliminazione movimenti' }
+  }
 
   // 3) Pianificate passate (data < oggi) → via; quelle future restano.
   const delPastPlanned = await supabase
@@ -62,11 +86,13 @@ export async function resetFromToday(userId: string): Promise<ResetResult> {
     .eq('is_planned', true)
     .lt('date', resetDate)
     .select('id')
-  if (delPastPlanned.error) return { error: delPastPlanned.error.message || 'Errore eliminazione pianificate passate' }
+  if (delPastPlanned.error) {
+    finalizeLocal()
+    return { error: delPastPlanned.error.message || 'Errore eliminazione pianificate passate' }
+  }
 
   // 4) Tutto ok: allinea lo store locale (UI) e azzera l'eventuale "non ora" del prompt stipendio.
-  setLocalPeriodSettings({ periodStart: resetDate })
-  try { localStorage.removeItem(PROMPT_DISMISSED_KEY) } catch { /* localStorage non disponibile */ }
+  finalizeLocal()
 
   return { error: null, deletedPastPlanned: delPastPlanned.data?.length ?? 0 }
 }

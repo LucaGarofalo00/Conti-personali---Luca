@@ -35,7 +35,7 @@ export function generateForecast(
   const pendingPlanned = plannedTransactions
     .filter(p => p.is_planned && !isExcluded(p.fund_id, excluded))
     .filter(p => p.type !== 'transfer' || !isExcluded(p.fund_to_id, excluded))
-    .map(p => ({ ...p, dateObj: startOfDay(new Date(p.date)) }))
+    .map(p => ({ ...p, dateObj: startOfDay(parseLocalDate(p.date)) }))
 
   // Riconciliazione col reale: occorrenze ricorrenti già realizzate o memo "non lavorato"
   // vengono saltate. L'aggancio preferisce planned_date (data prevista) e ricade sulla finestra
@@ -100,7 +100,9 @@ export function generateForecast(
         for (const exp of recurringExpenses) {
           if (!exp.is_active) continue
           if (exp.start_date && curStr < exp.start_date) continue
-          if (exp.end_date && isAfter(cursor, new Date(exp.end_date))) continue
+          // end_date INCLUSIVO confrontato come stringa locale (coerente col ramo entrate sopra,
+          // evita lo shift UTC di new Date('YYYY-MM-DD')).
+          if (exp.end_date && curStr > exp.end_date) continue
           if ((exp.type || 'expense') === 'transfer') continue
           if (isExcluded(exp.fund_id, excluded)) continue
           const freq = exp.frequency || 'monthly'
@@ -162,11 +164,14 @@ export function generateForecast(
     weekStart = addDays(weekStart, 7)
   }
 
-  return points
+  // Il punto iniziale "oggi" e il primo punto settimanale ricadono sulla stessa data (la label
+  // della prima settimana è clampata a oggi): rimuovi i duplicati di data consecutivi tenendo
+  // l'ultimo (quello col movimento della settimana), così l'asse X non mostra due volte "oggi".
+  return points.filter((p, i) => i === points.length - 1 || p.date !== points[i + 1].date)
 }
 
 import { getPeriodBreakdown, totalsFromBreakdown } from './periodBreakdown'
-import { getBillingPeriodFor } from './utils'
+import { getBillingPeriodFor, todayString, parseLocalDate } from './utils'
 
 export interface BalanceProjection {
   balance: number
@@ -227,7 +232,7 @@ export function findNextMonthlyIncomeDate(income: RecurringIncome[]): { date: Da
   let best: { date: Date; income: RecurringIncome } | null = null
   for (const inc of income) {
     if (!inc.is_active || inc.frequency !== 'monthly' || inc.day_of_month === null) continue
-    if (inc.end_date && new Date(inc.end_date) < today) continue
+    if (inc.end_date && inc.end_date < todayString()) continue
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), Math.min(inc.day_of_month, new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()))
     let candidate = thisMonth
     if (isBefore(candidate, today)) {
@@ -256,8 +261,10 @@ export function getMonthlyEstimates(
 
   for (const inc of recurringIncome) {
     if (!inc.is_active) continue
-    if (inc.end_date && new Date(inc.end_date) < new Date()) continue
-    if (inc.start_date && new Date(inc.start_date) > new Date()) continue
+    // Bound INCLUSIVI confrontati come stringa locale (un'entrata valida fino a OGGI conta ancora;
+    // niente shift UTC di new Date('YYYY-MM-DD')).
+    if (inc.end_date && inc.end_date < todayString()) continue
+    if (inc.start_date && inc.start_date > todayString()) continue
     if (isExcluded(inc.fund_id, excluded)) continue
     monthlyIncome += inc.frequency === 'monthly'
       ? Number(inc.amount)
@@ -266,8 +273,8 @@ export function getMonthlyEstimates(
 
   for (const exp of recurringExpenses) {
     if (!exp.is_active) continue
-    if (exp.end_date && new Date(exp.end_date) < new Date()) continue
-    if (exp.start_date && new Date(exp.start_date) > new Date()) continue
+    if (exp.end_date && exp.end_date < todayString()) continue
+    if (exp.start_date && exp.start_date > todayString()) continue
     if ((exp.type || 'expense') === 'transfer') continue
     if (isExcluded(exp.fund_id, excluded)) continue
     const freq = exp.frequency || 'monthly'

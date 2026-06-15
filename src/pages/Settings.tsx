@@ -101,26 +101,27 @@ export default function Settings() {
       {/* PERIODO */}
       <section className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-5">
         <div className="flex items-center gap-2 mb-1">
-          <CalendarRange className="w-5 h-5 text-indigo-600" />
+          <CalendarRange className="w-5 h-5 text-blue-600" />
           <h2 className="text-base font-semibold text-slate-800">Periodo dello stipendio</h2>
         </div>
         <p className="text-sm text-slate-500 mb-4">
-          Periodo (anteprima): <span className="font-semibold text-indigo-700">{formatPeriodRange(period.startDate, period.endDate)}</span>
+          Periodo (anteprima): <span className="font-semibold text-blue-700">{formatPeriodRange(period.startDate, period.endDate)}</span>
         </p>
 
         <InfoBox title="Come funziona il periodo" tone="blue">
           <p>Il periodo va <strong>dal giorno in cui arriva lo stipendio</strong> al giorno prima dello stipendio successivo (es. stipendio il 15 → periodo 15→14; stipendio il 12 → 12→11).</p>
-          <p>Siccome il giorno cambia ogni mese, scegli quale entrata è <strong>lo stipendio</strong>: quando la registri nella dashboard, l'app ti propone di far partire il nuovo periodo da quella data reale (con conferma).</p>
+          <p>Siccome il giorno cambia ogni mese, scegli quale entrata è <strong>lo stipendio</strong>: quando la registri nella dashboard, l’app ti propone di far partire il nuovo periodo da quella data reale (con conferma).</p>
           <p>Il <strong>giorno tipico</strong> serve solo come stima per le previsioni finché il prossimo stipendio non arriva davvero.</p>
         </InfoBox>
 
         <div className="space-y-4 mt-2">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Entrata che definisce lo stipendio</label>
+            <label htmlFor="set-salary" className="block text-sm font-medium text-slate-700 mb-1">Entrata che definisce lo stipendio</label>
             <select
+              id="set-salary"
               value={salaryIncomeId}
               onChange={e => setSalaryIncomeId(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-shadow"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
             >
               <option value="">Nessuna (periodo a giorno fisso)</option>
               {monthlyIncomes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
@@ -132,28 +133,27 @@ export default function Settings() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Inizio periodo corrente</label>
+              <label htmlFor="set-period-start" className="block text-sm font-medium text-slate-700 mb-1">Inizio periodo corrente</label>
               <input
+                id="set-period-start"
                 type="date"
                 value={periodStart}
                 onChange={e => setPeriodStart(e.target.value)}
-                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-shadow"
+                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
               />
-              <button onClick={() => setPeriodStart(todayString())} className="text-xs text-indigo-600 mt-1 hover:text-indigo-700">Imposta a oggi</button>
+              <button onClick={() => setPeriodStart(todayString())} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Imposta a oggi</button>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Giorno tipico (stima)</label>
+              <label htmlFor="set-anchor" className="block text-sm font-medium text-slate-700 mb-1">Giorno tipico (stima)</label>
               <input
+                id="set-anchor"
                 type="number" min={1} max={28}
                 value={anchorDay}
                 onChange={e => setAnchorDay(Math.min(28, Math.max(1, parseInt(e.target.value) || 1)))}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-shadow"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
               />
             </div>
           </div>
-          <p className="text-xs text-slate-400">
-            Periodo calcolato: <span className="font-medium text-slate-600">{period.start} → {period.end}</span>
-          </p>
 
           <button
             onClick={save}

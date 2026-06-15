@@ -84,6 +84,10 @@ function AppRoutes() {
   // Stessa logica per le impostazioni del periodo: all'idratazione dal DB o alla conferma di un
   // nuovo stipendio, tutte le pagine rileggono getBillingPeriod() col periodo aggiornato.
   usePeriodSettings()
+  // Se si arriva da un link di recupero password, mostra la schermata "Imposta nuova password"
+  // a prescindere dalla route (altrimenti la sessione di recupero finirebbe dritta in Dashboard).
+  const { recovery } = useAuth()
+  if (recovery) return <Auth recovery />
   return (
     <Routes>
       <Route path="/auth" element={<AuthRoute />} />
@@ -95,6 +99,9 @@ function AppRoutes() {
       <Route path="/transazioni" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
       <Route path="/previsione" element={<ProtectedRoute><Forecast /></ProtectedRoute>} />
       <Route path="/impostazioni" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      {/* Rotta catch-all: un hash sconosciuto (bookmark stale, refuso) torna alla Dashboard
+          invece di lasciare una pagina bianca senza via d'uscita. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

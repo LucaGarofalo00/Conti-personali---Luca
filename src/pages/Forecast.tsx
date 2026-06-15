@@ -13,7 +13,7 @@ import Modal from '../components/Modal'
 import { generateForecast, getMonthlyEstimates } from '../lib/forecast'
 import { getPeriodBreakdown, type BreakdownItem } from '../lib/periodBreakdown'
 import { useExcludedFunds } from '../lib/excludedFunds'
-import { cur, getBillingPeriodFor, toDateString } from '../lib/utils'
+import { cur, getBillingPeriodFor, toDateString, parseLocalDate } from '../lib/utils'
 import { isAmountsHidden } from '../lib/privacy'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction, ForecastPoint } from '../types'
 
@@ -110,7 +110,7 @@ export default function Forecast() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
-  const targetDateObj = new Date(targetDate)
+  const targetDateObj = parseLocalDate(targetDate)
   const daysToTarget = Math.max(1, differenceInDays(targetDateObj, new Date()))
   const forecast = generateForecast(funds, expenses, income, budgets, targetDateObj, excludedFundIds, planned, actualTx)
   const periodNow = getBillingPeriodFor(new Date())
@@ -238,8 +238,9 @@ export default function Forecast() {
             onClear={() => excludedFundIds.forEach(id => toggleExcluded(id))}
           />
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">Fino al</label>
+            <label htmlFor="forecast-target" className="text-xs text-slate-500">Fino al</label>
             <input
+              id="forecast-target"
               type="date"
               value={targetDate}
               min={toDateString(new Date())}
@@ -290,7 +291,7 @@ export default function Forecast() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={Math.floor(forecast.length / 8)} />
-              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${v}`} />
+              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${Number(v).toLocaleString('it-IT')}`} />
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#forecastGrad)" strokeWidth={2} dot={false} />
             </AreaChart>
@@ -321,7 +322,9 @@ export default function Forecast() {
             <tbody>
               {monthlyData.map(row => {
                 const isOpen = expandedPeriods.has(row.month)
-                const effectiveEnd = targetDateObj < row.endDate ? targetDateObj : row.endDate
+                // Riusa la stessa fine-effettiva già calcolata per la riga, invece di ricalcolarla
+                // con una variabile diversa (evita divergenze sul giorno di confine).
+                const effectiveEnd = row.effectiveEnd
                 const breakdown = isOpen ? [
                   ...getPeriodBreakdown({
                     startDate: row.startDate,

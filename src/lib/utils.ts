@@ -22,9 +22,16 @@ export function todayString(): string {
 }
 
 // Parsa 'YYYY-MM-DD' come data LOCALE a mezzanotte (new Date(stringa) la interpreterebbe come UTC).
-function parseLocalDate(s: string): Date {
+export function parseLocalDate(s: string): Date {
   const [y, m, d] = s.slice(0, 10).split('-').map(Number)
   return new Date(y, m - 1, d)
+}
+
+// Formattazione data coerente in tutta l'app a partire da una stringa 'YYYY-MM-DD' (parse LOCALE,
+// così non slitta di un giorno per il fuso). Usare SEMPRE questa al posto di
+// format(new Date(str), ...) per le date salvate come stringa.
+export function fmtDate(s: string, pattern = 'd MMM yyyy'): string {
+  return format(parseLocalDate(s), pattern, { locale: it })
 }
 
 function clampDay(year: number, monthIdx: number, day: number): number {
