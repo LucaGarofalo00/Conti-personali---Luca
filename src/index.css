@@ -26,9 +26,15 @@
   --shadow-xl:  0 8px 16px -4px rgb(15 23 42 / 0.08), 0 20px 44px -8px rgb(15 23 42 / 0.14);
   --shadow-2xl: 0 12px 24px -6px rgb(15 23 42 / 0.10), 0 32px 64px -12px rgb(15 23 42 / 0.18);
 
-  /* Raggi un filo più ampi sulle superfici grandi: curva più "continua", aria Apple. */
-  --radius-xl: 0.875rem;   /* 14px — card */
-  --radius-2xl: 1.125rem;  /* 18px — pannelli e card auth */
+  /* Raggi decisi e continui sulle superfici grandi: curvatura morbida, aria Apple. */
+  --radius-lg: 0.625rem;   /* 10px — bottoni/input */
+  --radius-xl: 1.125rem;   /* 18px — card */
+  --radius-2xl: 1.5rem;    /* 24px — pannelli, hero, card auth */
+  --radius-3xl: 2rem;      /* 32px — hero grandi */
+
+  /* Gradiente brand (indigo → violet, come il logo) per hero e accenti */
+  --brand-from: #4f46e5;
+  --brand-to: #7c3aed;
 }
 
 /* ----------------------------------------------------------------------------
@@ -131,6 +137,32 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator {
 ::selection {
   background-color: #e0e7ff;
   color: #3730a3;
+}
+
+/* ----------------------------------------------------------------------------
+   Utility brand condivise (hero, accenti)
+   ---------------------------------------------------------------------------- */
+@layer components {
+  /* Superficie brand: gradiente diagonale indigo → violet come il logo */
+  .bg-brand {
+    background-image: linear-gradient(135deg, var(--brand-from) 0%, var(--brand-to) 100%);
+  }
+  /* Velo luminoso in alto a destra per dare profondità all'hero */
+  .hero-glow {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .hero-glow::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(120% 120% at 100% 0%, rgb(255 255 255 / 0.22), transparent 55%),
+      radial-gradient(90% 90% at 0% 100%, rgb(0 0 0 / 0.10), transparent 60%);
+    pointer-events: none;
+  }
 }
 
 /* Rispetta chi ha ridotto le animazioni di sistema (Apple HIG / accessibilità) */
