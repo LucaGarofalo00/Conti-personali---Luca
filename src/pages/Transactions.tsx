@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, Pencil, ArrowUpRight, ArrowDownRight, ArrowLeftRight, Filter, CheckSquare, Square, X, Search } from 'lucide-react'
+import { Plus, Trash2, Pencil, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, Filter, CheckSquare, Square, X, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
@@ -337,9 +337,9 @@ export default function Transactions() {
   }
 
   const TypeIcon = ({ type }: { type: string }) => {
-    if (type === 'income') return <ArrowDownRight className="w-4 h-4 text-emerald-500" />
-    if (type === 'expense') return <ArrowUpRight className="w-4 h-4 text-red-500" />
-    return <ArrowLeftRight className="w-4 h-4 text-blue-500" />
+    if (type === 'income') return <ArrowDownLeft className="w-5 h-5" />
+    if (type === 'expense') return <ArrowUpRight className="w-5 h-5" />
+    return <ArrowLeftRight className="w-5 h-5" />
   }
 
   return (
@@ -357,6 +357,7 @@ export default function Transactions() {
       </InfoBox>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">Transazioni</h1>
           <p className="text-sm text-slate-500">
             {filtered.length} di {items.length} transazion{items.length === 1 ? 'e' : 'i'}
             {duplicateGroups.size > 0 && (
@@ -385,7 +386,7 @@ export default function Transactions() {
         <Filter className="w-4 h-4" aria-hidden="true" /> Filtri
         {filtersActive && <span className="w-2 h-2 rounded-full bg-blue-500" aria-label="filtri attivi" />}
       </button>
-      <div id="tx-filters-panel" className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-wrap gap-3 mb-4 items-center`}>
+      <div id="tx-filters-panel" className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-wrap gap-3 mb-6 items-center bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4`}>
         <Filter className="w-4 h-4 text-slate-400 hidden sm:block" aria-hidden="true" />
         <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
           <option value="all">Tutti i tipi</option>
@@ -430,7 +431,7 @@ export default function Transactions() {
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="sticky top-16 z-20 mb-3 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between shadow-sm">
+        <div className="sticky top-16 z-20 mb-3 bg-blue-50 border border-blue-200 rounded-2xl p-3 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-blue-700">{selectedIds.size} selezionat{selectedIds.size === 1 ? 'a' : 'e'}</span>
             <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors">
@@ -448,12 +449,12 @@ export default function Transactions() {
       )}
 
       {filtered.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-slate-200/60 shadow-sm">
+        <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow-sm">
           <p className="text-slate-400">Nessuna transazione trovata</p>
         </div>
       ) : (
         <>
-          <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm px-4 py-2 mb-2 flex items-center gap-3">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm px-4 py-2 mb-2 flex items-center gap-3">
             <button onClick={toggleSelectAll} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
               {allFilteredSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className={`w-4 h-4 ${someFilteredSelected ? 'text-blue-400' : 'text-slate-400'}`} />}
               <span>{allFilteredSelected ? 'Deseleziona tutte' : 'Seleziona tutte'}</span>
@@ -481,20 +482,20 @@ export default function Transactions() {
               return (
                 <div
                   key={tx.id}
-                  className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between transition-colors ${isSelected ? 'border-blue-500 bg-blue-50/30' : isDuplicate ? 'border-amber-300' : 'hover:border-slate-300'}`}
+                  className={`bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 flex items-center justify-between transition-colors ${isSelected ? 'border-blue-500 bg-blue-50/30' : isDuplicate ? 'border-amber-300' : 'hover:border-slate-300'}`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <button onClick={() => toggleSelect(tx.id)} aria-label={isSelected ? 'Deseleziona transazione' : 'Seleziona transazione'} aria-pressed={isSelected} className="shrink-0">
                       {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-slate-300 hover:text-slate-500" />}
                     </button>
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${tx.type === 'income' ? 'bg-emerald-50' : tx.type === 'expense' ? 'bg-red-50' : 'bg-blue-50'}`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tx.type === 'income' ? 'bg-emerald-100 text-emerald-600' : tx.type === 'expense' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
                       <TypeIcon type={tx.type} />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-slate-800 text-sm truncate">{tx.description || (tx.type === 'income' ? 'Entrata' : tx.type === 'expense' ? 'Uscita' : 'Trasferimento')}</p>
                         {isDuplicate && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-md font-medium uppercase">duplicato</span>}
-                        {tx.is_planned && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-md font-medium uppercase">pianif.</span>}
+                        {tx.is_planned && <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-md font-medium uppercase">pianif.</span>}
                         {tx.is_memo && <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-medium uppercase">memo</span>}
                         {tx.recurring_expense_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-medium uppercase">spesa ric.</span>}
                         {tx.recurring_income_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-medium uppercase">entrata ric.</span>}
@@ -523,7 +524,7 @@ export default function Transactions() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    <span className={`text-base sm:text-lg font-semibold tracking-tight ${tx.type === 'income' ? 'text-emerald-600' : tx.type === 'expense' ? 'text-red-500' : 'text-blue-600'}`}>
+                    <span className={`text-base sm:text-lg font-semibold tracking-tight tabular-nums ${tx.type === 'income' ? 'text-emerald-600' : tx.type === 'expense' ? 'text-red-500' : 'text-blue-600'}`}>
                       {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}{cur(Number(tx.amount))}
                     </span>
                     <button onClick={() => openEdit(tx)} aria-label="Modifica transazione" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-[transform,background-color,color] active:scale-90">

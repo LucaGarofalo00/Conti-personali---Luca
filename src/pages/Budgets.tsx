@@ -154,8 +154,9 @@ export default function Budgets() {
 
   return (
     <div>
-      <div className="mb-4">
-        <p className="text-sm text-slate-500">Totale budget del periodo ({currentPeriodLabel()}): <span className="text-base font-semibold text-red-500 tracking-tight tabular-nums">{cur(totalMonthlyAll)}</span></p>
+      <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 shadow-sm p-5">
+        <p className="text-sm font-medium text-red-600/80">Totale budget del periodo ({currentPeriodLabel()})</p>
+        <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums">{cur(totalMonthlyAll)}</p>
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="blue">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
@@ -166,11 +167,13 @@ export default function Budgets() {
         <p>Per spese fisse mensili (affitto, abbonamenti, ecc.) usa la sezione <strong>Spese Ricorrenti</strong>.</p>
       </InfoBox>
 
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-blue-600" aria-hidden="true" />
-            <h3 className="text-lg font-semibold text-slate-700">Budget Settimanali</h3>
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 text-blue-600 shrink-0" aria-hidden="true">
+              <ShoppingBag className="w-5 h-5" />
+            </span>
+            <h3 className="text-lg font-semibold text-slate-900 tracking-tight">Budget Settimanali</h3>
           </div>
           <button onClick={() => { setEditingBudget(null); setBudgetForm({ name: '', amount: 0, fund_id: '' }); setShowBudgetModal(true) }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium">
             <Plus className="w-4 h-4" aria-hidden="true" /> Nuovo Budget
@@ -178,11 +181,11 @@ export default function Budgets() {
         </div>
 
         {budgets.length === 0 ? (
-          <div className="text-center py-8 bg-white rounded-xl border border-slate-200">
-            <p className="text-slate-400 text-sm">Nessun budget settimanale configurato</p>
+          <div className="text-center py-10 bg-white rounded-2xl border border-slate-200/70 shadow-sm">
+            <p className="text-slate-500 text-base font-medium">Nessun budget settimanale configurato</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {budgets.map(b => {
               const rollInfo = computeBudgetRollover(b, budgetTx)
               const limit = Number(b.amount)
@@ -197,12 +200,15 @@ export default function Budgets() {
               const fundName = funds.find(f => f.id === b.fund_id)?.name
 
               return (
-                <div key={b.id} className={`bg-white rounded-xl border shadow-sm transition-shadow ${overBudget ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200/60'} p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
+                <div key={b.id} className={`bg-white rounded-2xl border shadow-sm transition-shadow ${overBudget ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200/70'} p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <button onClick={() => toggleBudget(b)} aria-label={b.is_active ? 'Disattiva budget' : 'Attiva budget'} aria-pressed={b.is_active} className="transition-transform active:scale-90">{b.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
+                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 text-blue-600 shrink-0" aria-hidden="true">
+                        <ShoppingBag className="w-5 h-5" />
+                      </span>
                       <div>
-                        <p className="font-semibold text-slate-800">{b.name}</p>
+                        <p className="text-base font-semibold text-slate-900 tracking-tight">{b.name}</p>
                         <p className="text-xs text-slate-500">{cur(limit)}/settimana{fundName ? ` · ${fundName}` : ''}</p>
                       </div>
                     </div>
@@ -213,9 +219,9 @@ export default function Budgets() {
                   </div>
 
                   <div className="mb-2">
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-slate-500">Speso questa settimana: <span className="font-medium text-slate-700 tracking-tight tabular-nums">{cur(spentThisWeek)}</span> / {cur(effective)}</span>
-                      <span className={`font-medium tracking-tight tabular-nums ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
+                    <div className="flex items-end justify-between gap-3 mb-2">
+                      <span className="text-sm text-slate-500">Speso questa settimana: <span className="block text-xl font-bold text-slate-900 tracking-tight tabular-nums">{cur(spentThisWeek)}</span> <span className="text-xs text-slate-400">/ {cur(effective)}</span></span>
+                      <span className={`text-xl font-bold tracking-tight tabular-nums text-right ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
                         {overBudget ? `Sforato di ${cur(Math.abs(remaining))}` : `Rimangono ${cur(remaining)}`}
                       </span>
                     </div>
@@ -238,8 +244,10 @@ export default function Budgets() {
                       <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Spese questa settimana</p>
                       {txsThisWeekObjs.map(tx => (
                         <div key={tx.id} className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-red-100 text-red-600 shrink-0" aria-hidden="true">
+                              <Receipt className="w-4 h-4" />
+                            </span>
                             <span className="text-slate-600 truncate">{tx.description}</span>
                             <span className="text-xs text-slate-500 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                           </div>
@@ -290,8 +298,10 @@ export default function Budgets() {
                                   ) : (
                                     week.txs.map(tx => (
                                       <div key={tx.id} className="flex items-center justify-between text-sm">
-                                        <span className="flex items-center gap-2 min-w-0">
-                                          <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                                        <span className="flex items-center gap-2.5 min-w-0">
+                                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-red-100 text-red-600 shrink-0" aria-hidden="true">
+                                            <Receipt className="w-3.5 h-3.5" />
+                                          </span>
                                           <span className="text-slate-600 truncate">{tx.description}</span>
                                           <span className="text-xs text-slate-500 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                                         </span>

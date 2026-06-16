@@ -97,16 +97,19 @@ export default function Settings() {
   const monthlyIncomes = incomes.filter(i => i.frequency === 'monthly')
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-8">
       {/* PERIODO */}
-      <section className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <CalendarRange className="w-5 h-5 text-blue-600" aria-hidden="true" />
-          <h2 className="text-base font-semibold text-slate-800 tracking-tight">Periodo dello stipendio</h2>
+      <section className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/15 text-blue-600 flex items-center justify-center shrink-0">
+            <CalendarRange className="w-5 h-5" aria-hidden="true" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Periodo dello stipendio</h2>
         </div>
-        <p className="text-sm text-slate-500 mb-4">
-          Periodo (anteprima): <span className="font-semibold text-blue-700 tracking-tight">{formatPeriodRange(period.startDate, period.endDate)}</span>
-        </p>
+        <div className="mb-6">
+          <p className="text-sm text-slate-500 mb-1">Periodo (anteprima)</p>
+          <p className="text-2xl font-bold tracking-tight tabular-nums text-blue-700">{formatPeriodRange(period.startDate, period.endDate)}</p>
+        </div>
 
         <InfoBox title="Come funziona il periodo" tone="blue">
           <p>Il periodo va <strong>dal giorno in cui arriva lo stipendio</strong> al giorno prima dello stipendio successivo (es. stipendio il 15 → periodo 15→14; stipendio il 12 → 12→11).</p>
@@ -166,12 +169,14 @@ export default function Settings() {
       </section>
 
       {/* RICOMINCIA DA OGGI */}
-      <section className="bg-white rounded-xl border border-red-200 shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <RotateCcw className="w-5 h-5 text-red-600" aria-hidden="true" />
-          <h2 className="text-base font-semibold text-slate-800 tracking-tight">Ricomincia da oggi</h2>
+      <section className="rounded-2xl border border-red-200 shadow-sm p-6" style={{ background: 'linear-gradient(135deg, #ef44441A 0%, #ffffff 60%)' }}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-red-500/15 text-red-600 flex items-center justify-center shrink-0">
+            <RotateCcw className="w-5 h-5" aria-hidden="true" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Ricomincia da oggi</h2>
         </div>
-        <p className="text-sm text-slate-500 mb-3">Azzera lo storico e riparti pulito dal periodo corrente.</p>
+        <p className="text-sm text-slate-500 mb-4">Azzera lo storico e riparti pulito dal periodo corrente.</p>
 
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700 space-y-1 mb-4">
           <p className="flex items-start gap-2"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" /> <span><strong>Cosa viene eliminato</strong>: tutti i movimenti registrati (entrate, uscite, trasferimenti) e le pianificate <strong>già scadute</strong>. Operazione <strong>non reversibile</strong>.</span></p>

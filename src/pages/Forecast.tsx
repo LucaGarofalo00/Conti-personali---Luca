@@ -282,23 +282,23 @@ export default function Forecast() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard icon={Target} color="bg-blue-100 text-blue-600" label="Saldo Attuale" value={cur(startBalance)}
+        <MetricCard icon={Target} color="bg-blue-100 text-blue-600" tint="bg-blue-50 border-blue-100" valueColor="text-blue-700" label="Saldo Attuale" value={cur(startBalance)}
           onClick={() => setInfoCard({ title: 'Saldo Attuale', body: (<>
             <p>La somma di <strong>tutti i tuoi fondi adesso</strong> (esclusi quelli tolti col filtro in alto).</p>
             <p>È il punto di partenza della previsione: tutti gli altri numeri partono da qui.</p>
           </>) })} />
-        <MetricCard icon={trend >= 0 ? TrendingUp : TrendingDown} color={trend >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} label={`Saldo al ${format(targetDateObj, 'd MMM yyyy', { locale: it })}`} value={cur(endBalance)}
+        <MetricCard icon={trend >= 0 ? TrendingUp : TrendingDown} color={trend >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} tint={trend >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'} valueColor={trend >= 0 ? 'text-emerald-700' : 'text-red-700'} label={`Saldo al ${format(targetDateObj, 'd MMM yyyy', { locale: it })}`} value={cur(endBalance)}
           onClick={() => setInfoCard({ title: `Saldo al ${format(targetDateObj, 'd MMM yyyy', { locale: it })}`, body: (<>
             <p>Quanto la previsione stima che avrai <strong>a quella data</strong>.</p>
             <p>Parte dal saldo attuale, poi aggiunge le entrate e toglie le spese previste fino ad allora: ricorrenti, budget settimanali e pianificate.</p>
             <p>Cambi la data col selettore <strong>«Fino al»</strong> qui sopra.</p>
           </>) })} />
-        <MetricCard icon={AlertTriangle} color={minPoint.balance < 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'} label="Minimo Previsto" value={cur(minPoint.balance)} sub={minPoint.label}
+        <MetricCard icon={AlertTriangle} color={minPoint.balance < 0 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'} tint={minPoint.balance < 0 ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'} valueColor={minPoint.balance < 0 ? 'text-red-700' : 'text-amber-700'} label="Minimo Previsto" value={cur(minPoint.balance)} sub={minPoint.label}
           onClick={() => setInfoCard({ title: 'Minimo Previsto', body: (<>
             <p>Il punto <strong>più basso</strong> che il saldo potrebbe toccare da oggi alla data scelta, con il giorno in cui succede.</p>
             <p>Serve a capire se rischi di restare a corto (o andare sotto zero) prima del prossimo accredito, anche se a fine periodo il saldo torna positivo.</p>
           </>) })} />
-        <MetricCard icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label="Netto mensile medio" value={cur(est.monthlyNet)} sub={est.monthlyNet >= 0 ? 'In media risparmi' : 'In media in rosso'}
+        <MetricCard icon={TrendingUp} color="bg-emerald-100 text-emerald-600" tint="bg-emerald-50 border-emerald-100" valueColor="text-emerald-700" label="Netto mensile medio" value={cur(est.monthlyNet)} sub={est.monthlyNet >= 0 ? 'In media risparmi' : 'In media in rosso'}
           onClick={() => setInfoCard({ title: 'Netto mensile medio', body: (<>
             <p>La <strong>media</strong> di quanto entra meno quanto esce in un mese tipo.</p>
             <p>Le voci settimanali contano ×4,33, quelle annuali ÷12 (es. il bollo da 600€ una volta l'anno qui pesa 50€/mese).</p>
@@ -307,8 +307,8 @@ export default function Forecast() {
           </>) })} />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-6 mb-8">
-        <h3 className="text-lg font-semibold text-slate-700 mb-4">Proiezione Saldo</h3>
+      <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-6 mb-8">
+        <h3 className="text-lg font-semibold tracking-tight text-slate-900 mb-4">Proiezione Saldo</h3>
         {chartData.length > 1 ? (
           <ResponsiveContainer width="100%" height={350}>
             <AreaChart data={chartData}>
@@ -330,9 +330,9 @@ export default function Forecast() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-700">Riepilogo per Periodo</h3>
+      <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-200">
+          <h3 className="text-lg font-semibold tracking-tight text-slate-900">Riepilogo per Periodo</h3>
           <p className="text-xs text-slate-500 mt-1">Clicca su una riga per vedere quali entrate e uscite la compongono.</p>
         </div>
         <div className="overflow-x-auto">
@@ -409,10 +409,10 @@ export default function Forecast() {
       </div>
 
       {minPoint.balance < 0 && (
-        <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+        <div className="mt-6 p-5 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-medium text-red-700">Attenzione: saldo negativo previsto</p>
+            <p className="font-semibold tracking-tight text-red-700">Attenzione: saldo negativo previsto</p>
             <p className="text-sm text-red-600 mt-1">Il saldo potrebbe scendere a {cur(minPoint.balance)} intorno al {minPoint.label}. Considera di ridurre le spese o aumentare le entrate.</p>
           </div>
         </div>
@@ -425,22 +425,22 @@ export default function Forecast() {
   )
 }
 
-function MetricCard({ icon: Icon, color, label, value, sub, onClick }: { icon: React.ElementType; color: string; label: string; value: string; sub?: string; onClick?: () => void }) {
+function MetricCard({ icon: Icon, color, label, value, sub, onClick, tint, valueColor }: { icon: React.ElementType; color: string; label: string; value: string; sub?: string; onClick?: () => void; tint?: string; valueColor?: string }) {
   const Wrapper = onClick ? 'button' : 'div'
   return (
     <Wrapper
       onClick={onClick}
-      className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 text-left w-full ${onClick ? 'hover:shadow-md hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer' : ''}`}
+      className={`${tint || 'bg-white border-slate-200/70'} rounded-2xl border shadow-sm p-5 text-left w-full ${onClick ? 'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer' : ''}`}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
-          <Icon className="w-4 h-4" />
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color}`}>
+          <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
         </div>
-        <span className="text-sm text-slate-500 flex-1 leading-tight">{label}</span>
-        {onClick && <HelpCircle className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
+        <span className="text-sm font-medium text-slate-500 flex-1 leading-snug">{label}</span>
+        {onClick && <HelpCircle className="w-3.5 h-3.5 text-slate-300 shrink-0" aria-hidden="true" />}
       </div>
-      <p className="text-xl font-bold tracking-tight tabular-nums text-slate-800">{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+      <p className={`text-2xl font-bold tracking-tight tabular-nums ${valueColor || 'text-slate-900'}`}>{value}</p>
+      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
     </Wrapper>
   )
 }

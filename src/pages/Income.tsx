@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Clock, Calendar } from 'lucide-react'
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Clock, Calendar, ArrowDownToLine } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
@@ -126,11 +126,19 @@ export default function Income() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <p className="text-sm text-slate-500">Totale entrate ricorrenti del periodo ({currentPeriodLabel()}): <span className="font-semibold text-emerald-600 tracking-tight">{cur(totalMonthly)}</span></p>
+      <div className="flex items-end justify-between gap-3 mb-6">
+        <div className="rounded-2xl bg-emerald-50 border border-emerald-100 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
+              <ArrowDownToLine className="w-5 h-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-sm text-emerald-700/80">Totale entrate ricorrenti del periodo ({currentPeriodLabel()})</p>
+              <p className="text-2xl font-bold tracking-tight tabular-nums text-emerald-700 mt-0.5">{cur(totalMonthly)}</p>
+            </div>
+          </div>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium">
+        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium shrink-0">
           <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi
         </button>
       </div>
@@ -143,9 +151,12 @@ export default function Income() {
       </InfoBox>
 
       {items.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-slate-200/60 shadow-sm">
-          <p className="text-slate-500 mb-4">Nessuna entrata configurata</p>
-          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium"><Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi la prima entrata</button>
+        <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow-sm">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center mx-auto mb-4">
+            <ArrowDownToLine className="w-6 h-6" aria-hidden="true" />
+          </div>
+          <p className="text-base font-semibold tracking-tight text-slate-900 mb-4">Nessuna entrata configurata</p>
+          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium"><Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi la prima entrata</button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -153,11 +164,14 @@ export default function Income() {
             const fundName = funds.find(f => f.id === item.fund_id)?.name
             const isExpired = !!item.end_date && item.end_date < today
             return (
-              <div key={item.id} className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between gap-3 hover:shadow-md hover:border-slate-300/60 transition-shadow ${!item.is_active || isExpired ? 'opacity-50' : ''}`}>
+              <div key={item.id} className={`bg-white rounded-2xl border border-slate-200/70 border-l-4 border-l-emerald-400 shadow-sm p-5 flex items-center justify-between gap-3 hover:shadow-md hover:border-slate-300/60 transition-shadow ${!item.is_active || isExpired ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-4 min-w-0">
                   <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva entrata' : 'Attiva entrata'} aria-pressed={item.is_active} className="text-slate-400 hover:text-blue-600 active:scale-90 transition-[transform,color] shrink-0">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-emerald-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
+                    <ArrowDownToLine className="w-5 h-5" aria-hidden="true" />
+                  </div>
                   <div className="min-w-0">
                     <p className="font-medium text-slate-800 break-words">{item.name} {item.is_variable && <span className="text-xs text-amber-500 font-normal">(variabile)</span>}{isExpired && <span className="text-xs text-slate-400 font-normal"> · terminata</span>}</p>
                     <p className="text-xs text-slate-500 flex items-center flex-wrap gap-x-2 gap-y-0.5">
@@ -175,7 +189,7 @@ export default function Income() {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <span className="text-lg font-semibold text-emerald-600 tracking-tight">{cur(Number(item.amount))}</span>
+                    <span className="text-2xl font-bold text-emerald-600 tracking-tight tabular-nums">{cur(Number(item.amount))}</span>
                     <p className="text-xs text-slate-500">{item.frequency === 'monthly' ? '/mese' : '/settimana'}</p>
                   </div>
                   <button onClick={() => openEdit(item)} aria-label="Modifica entrata" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-4 h-4" /></button>

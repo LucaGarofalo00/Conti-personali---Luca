@@ -64,12 +64,12 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-indigo-50 via-slate-50 to-violet-100">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center mb-8">
-          <Logo className="w-16 h-16 drop-shadow-md mb-3" />
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-800 mb-1">FinanzApp</h1>
+          <Logo className="w-20 h-20 drop-shadow-md mb-4" />
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">FinanzApp</h1>
           <p className="text-sm text-slate-400">Gestisci le tue finanze personali</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 p-6">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200/70 p-7">
           {(mode === 'login' || mode === 'register') && (
             <div className="flex mb-6 bg-slate-100 rounded-lg p-0.5">
               <button onClick={() => switchMode('login')} className={`flex-1 py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${mode === 'login' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}>
@@ -83,14 +83,14 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
 
           {mode === 'reset' && (
             <div className="mb-6">
-              <h2 className="text-[15px] font-semibold text-slate-800 mb-1">Recupera Password</h2>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-1">Recupera Password</h2>
               <p className="text-[13px] text-slate-400">Inserisci la tua email per ricevere il link di recupero</p>
             </div>
           )}
 
           {mode === 'recovery' && (
             <div className="mb-6">
-              <h2 className="text-[15px] font-semibold text-slate-800 mb-1">Imposta nuova password</h2>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-1">Imposta nuova password</h2>
               <p className="text-[13px] text-slate-400">Scegli una nuova password per il tuo account</p>
             </div>
           )}

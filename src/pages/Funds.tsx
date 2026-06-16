@@ -128,7 +128,7 @@ export default function Funds() {
         <p><strong>Trasferisci</strong>: sposta denaro da un fondo a un altro. Crea una transazione di tipo trasferimento.</p>
         <p>Nel filtro globale puoi <strong>escludere</strong> fondi dalle previsioni e dalle stime mensili (utile per simulare scenari "se non avessi accesso ai risparmi").</p>
       </InfoBox>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <span />
         <div className="flex gap-2">
           <button onClick={() => { setTransfer(emptyTransfer); setShowTransfer(true) }} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium">
@@ -141,9 +141,11 @@ export default function Funds() {
       </div>
 
       {mainFunds.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-dashed border-slate-200">
-          <Wallet className="w-12 h-12 text-slate-300 mx-auto mb-3" aria-hidden="true" />
-          <p className="text-sm text-slate-500 mb-4">Non hai ancora nessun fondo</p>
+        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
+          <div className="w-16 h-16 rounded-2xl bg-violet-500/15 text-violet-600 flex items-center justify-center mx-auto mb-3">
+            <Wallet className="w-8 h-8" aria-hidden="true" />
+          </div>
+          <p className="text-base font-semibold tracking-tight text-slate-900 mb-4">Non hai ancora nessun fondo</p>
           <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium">
             <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi il primo fondo
           </button>
@@ -154,14 +156,14 @@ export default function Funds() {
           const Icon = iconMap[fund.icon] || Wallet
           const subs = subFunds.filter(s => s.parent_id === fund.id)
           return (
-            <div key={fund.id} className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-5">
+            <div key={fund.id} className="rounded-2xl border border-slate-200/70 shadow-sm p-5" style={{ background: `linear-gradient(135deg, ${fund.color}1A 0%, #ffffff 60%)` }}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-lg flex items-center justify-center" style={{ backgroundColor: fund.color + '20' }}>
-                    <Icon className="w-5 h-5" style={{ color: fund.color }} />
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm" style={{ backgroundColor: fund.color }}>
+                    <Icon className="w-5 h-5 text-white" aria-hidden="true" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-800">{fund.name}</p>
+                    <p className="text-base font-semibold tracking-tight text-slate-900">{fund.name}</p>
                     <p className="text-xs text-slate-400">Fondo principale</p>
                   </div>
                 </div>
@@ -170,17 +172,20 @@ export default function Funds() {
                   <button onClick={() => remove(fund.id)} aria-label="Elimina fondo" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
-              <p className="text-2xl font-bold text-slate-800 mb-1 tracking-tight tabular-nums">{cur(Number(fund.balance))}</p>
+              <p className="text-3xl font-bold text-slate-900 mb-1 tracking-tight tabular-nums">{cur(Number(fund.balance))}</p>
 
               {subs.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                   {subs.map(sub => (
                     <div key={sub.id} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-500 flex items-center gap-1.5">
-                        <PiggyBank className="w-3.5 h-3.5" style={{ color: sub.color }} aria-hidden="true" /> {sub.name}
+                      <span className="text-sm text-slate-600 flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: sub.color + '1F' }}>
+                          <PiggyBank className="w-3.5 h-3.5" style={{ color: sub.color }} aria-hidden="true" />
+                        </span>
+                        {sub.name}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-700 tabular-nums">{cur(Number(sub.balance))}</span>
+                        <span className="text-[15px] font-semibold text-slate-800 tabular-nums">{cur(Number(sub.balance))}</span>
                         <button onClick={() => openEdit(sub)} aria-label="Modifica salvadanaio" className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-3 h-3" /></button>
                         <button onClick={() => remove(sub.id)} aria-label="Elimina salvadanaio" className="p-1 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-3 h-3" /></button>
                       </div>

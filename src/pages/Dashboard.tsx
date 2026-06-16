@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2, Pencil } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2, Pencil, ArrowLeftRight, LineChart } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
@@ -697,29 +697,60 @@ export default function Dashboard() {
           : null
         return (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <Card icon={Wallet} color="bg-blue-100 text-blue-600" label={hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'} value={cur(totalBalance)} />
-              <Card icon={TrendingUp} color="bg-emerald-100 text-emerald-600" label={`Entrate del Periodo (${periodLabel})`} value={cur(est.income)} sub={plannedIncomeInPeriod > 0 ? `incl. ${cur(plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
+            <div className="bg-brand hero-glow rounded-3xl p-6 sm:p-8 mb-4 text-white shadow-lg shadow-indigo-600/25">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white/15">
+                  <Wallet className="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span className="text-sm font-medium text-white/85">{hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'}</span>
+              </div>
+              <p className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums">{cur(totalBalance)}</p>
+              {hasExclusions
+                ? <p className="text-xs text-white/75 mt-2.5">Saldo totale reale: <span className="font-semibold text-white">{cur(totalBalanceAll)}</span></p>
+                : <p className="text-xs text-white/70 mt-2.5">Somma di tutti i tuoi fondi · {periodLabel}</p>}
+              <div className="mt-6 grid grid-cols-4 gap-2 sm:gap-3">
+                <button onClick={openAddPlanned} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95">
+                  <CalendarClock className="w-5 h-5" aria-hidden="true" />
+                  <span className="text-[11px] font-medium text-white/90">Pianifica</span>
+                </button>
+                <Link to="/transazioni" className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95">
+                  <ArrowLeftRight className="w-5 h-5" aria-hidden="true" />
+                  <span className="text-[11px] font-medium text-white/90">Transazioni</span>
+                </Link>
+                <Link to="/budget" className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95">
+                  <PiggyBank className="w-5 h-5" aria-hidden="true" />
+                  <span className="text-[11px] font-medium text-white/90">Budget</span>
+                </Link>
+                <Link to="/previsione" className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95">
+                  <LineChart className="w-5 h-5" aria-hidden="true" />
+                  <span className="text-[11px] font-medium text-white/90">Previsione</span>
+                </Link>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+              <Card icon={TrendingUp} color="bg-emerald-500/15 text-emerald-600" tint="bg-emerald-50 border-emerald-100" label={`Entrate del Periodo (${periodLabel})`} value={cur(est.income)} valueColor="text-emerald-700" sub={plannedIncomeInPeriod > 0 ? `incl. ${cur(plannedIncomeInPeriod)} pianif.` : undefined} onClick={() => setBreakdownModal('income')} />
               <Card
                 icon={Target}
-                color={periodNet >= 0 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}
+                color={periodNet >= 0 ? 'bg-amber-500/15 text-amber-600' : 'bg-red-500/15 text-red-600'}
+                tint={periodNet >= 0 ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'}
                 label={`Netto del Periodo (${periodLabel})`}
                 value={cur(periodNet)}
-                valueColor={periodNet >= 0 ? 'text-emerald-600' : 'text-red-600'}
+                valueColor={periodNet >= 0 ? 'text-amber-700' : 'text-red-700'}
                 sub={`Entrate ${cur(est.income)} · Uscite ${cur(est.expenses)}${plannedExpensesInPeriod > 0 ? ` (incl. ${cur(plannedExpensesInPeriod)} pianif.)` : ''}`}
                 onClick={() => setBreakdownModal('net')}
               />
               {projection && projectionTarget && nextSalary ? (
                 <Card
                   icon={projection.balance >= 0 ? TrendingUp : TrendingDown}
-                  color={projection.balance >= 0 ? 'bg-purple-100 text-purple-600' : 'bg-red-100 text-red-600'}
+                  color={projection.balance >= 0 ? 'bg-violet-500/15 text-violet-600' : 'bg-red-500/15 text-red-600'}
+                  tint={projection.balance >= 0 ? 'bg-violet-50 border-violet-100' : 'bg-red-50 border-red-100'}
                   label={`Saldo il ${format(projectionTarget, 'd MMM', { locale: it })}`}
                   value={cur(projection.balance)}
-                  valueColor={projection.balance >= 0 ? 'text-purple-700' : 'text-red-600'}
+                  valueColor={projection.balance >= 0 ? 'text-violet-700' : 'text-red-700'}
                   sub={`Giorno prima di "${nextSalary.income.name.trim()}"`}
                 />
               ) : (
-                <Card icon={TrendingDown} color="bg-slate-100 text-slate-400" label="Saldo prossimo stipendio" value="—" sub="Configura un'entrata mensile" />
+                <Card icon={TrendingDown} color="bg-slate-200 text-slate-400" tint="bg-slate-50 border-slate-200" label="Saldo prossimo stipendio" value="—" sub="Configura un'entrata mensile" />
               )}
             </div>
             <InfoBox title="Come vengono calcolate queste cifre" tone="blue">
@@ -942,7 +973,7 @@ export default function Dashboard() {
 
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[15px] font-semibold text-slate-700">I tuoi Fondi</h3>
+          <h3 className="text-base font-semibold tracking-tight text-slate-900">I tuoi Fondi</h3>
           <Link to="/fondi" className="text-[13px] text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1 transition-colors">
             Gestisci <ArrowRight className="w-3 h-3" aria-hidden="true" />
           </Link>
@@ -953,17 +984,17 @@ export default function Dashboard() {
             const subs = subFunds.filter(s => s.parent_id === fund.id)
             const totalWithSubs = Number(fund.balance) + subs.reduce((s, sf) => s + Number(sf.balance), 0)
             return (
-              <div key={fund.id} className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-all duration-200">
+              <div key={fund.id} className="rounded-2xl border border-slate-200/70 shadow-sm p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200" style={{ background: `linear-gradient(135deg, ${fund.color}1A 0%, #ffffff 60%)` }}>
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: fund.color + '12' }}>
-                    <Icon className="w-[18px] h-[18px]" style={{ color: fund.color }} />
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm" style={{ backgroundColor: fund.color }}>
+                    <Icon className="w-5 h-5 text-white" aria-hidden="true" />
                   </div>
                   <div>
-                    <p className="font-medium text-slate-800 text-sm">{fund.name}</p>
+                    <p className="font-semibold text-slate-800 text-sm">{fund.name}</p>
                     <p className="text-[11px] text-slate-400">{subs.length > 0 ? `Totale: ${cur(totalWithSubs)}` : ''}</p>
                   </div>
                 </div>
-                <p className="text-xl font-semibold tracking-tight tabular-nums text-slate-800">{cur(Number(fund.balance))}</p>
+                <p className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{cur(Number(fund.balance))}</p>
                 {subs.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
                     {subs.map(sub => (
@@ -983,9 +1014,9 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[15px] font-semibold text-slate-700">Previsione 3 Mesi</h3>
+            <h3 className="text-base font-semibold tracking-tight text-slate-900">Previsione 3 Mesi</h3>
             <Link to="/previsione" className="text-[13px] text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1 transition-colors">
               Vedi tutto <ArrowRight className="w-3 h-3" aria-hidden="true" />
             </Link>
@@ -1011,9 +1042,9 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-4">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[15px] font-semibold text-slate-700">Ultime Transazioni</h3>
+              <h3 className="text-base font-semibold tracking-tight text-slate-900">Ultime Transazioni</h3>
               <Clock className="w-4 h-4 text-slate-300" aria-hidden="true" />
             </div>
             {recentTx.length > 0 ? (
@@ -1380,21 +1411,21 @@ export default function Dashboard() {
   )
 }
 
-function Card({ icon: Icon, color, label, value, valueColor, sub, onClick }: { icon: React.ElementType; color: string; label: string; value: string; valueColor?: string; sub?: string; onClick?: () => void }) {
+function Card({ icon: Icon, color, label, value, valueColor, sub, onClick, tint }: { icon: React.ElementType; color: string; label: string; value: string; valueColor?: string; sub?: string; onClick?: () => void; tint?: string }) {
   const Wrapper = onClick ? 'button' : 'div'
   return (
     <Wrapper
       onClick={onClick}
-      className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 text-left w-full ${onClick ? 'hover:shadow-md hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer' : ''}`}
+      className={`rounded-2xl border shadow-sm p-5 text-left w-full ${tint || 'bg-white border-slate-200/70'} ${onClick ? 'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer' : ''}`}
     >
-      <div className="flex items-center gap-2.5 mb-2">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
-          <Icon className="w-4 h-4" aria-hidden="true" />
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color}`}>
+          <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
         </div>
-        <span className="text-[13px] text-slate-500 flex-1 leading-tight">{label}</span>
+        <span className="text-[13px] font-medium text-slate-500 flex-1 leading-snug">{label}</span>
       </div>
-      <p className={`text-xl font-semibold tracking-tight tabular-nums ${valueColor || 'text-slate-800'}`}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{sub}</p>}
+      <p className={`text-2xl font-bold tracking-tight tabular-nums ${valueColor || 'text-slate-900'}`}>{value}</p>
+      {sub && <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">{sub}</p>}
     </Wrapper>
   )
 }
