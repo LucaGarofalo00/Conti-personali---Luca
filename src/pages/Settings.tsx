@@ -101,11 +101,11 @@ export default function Settings() {
       {/* PERIODO */}
       <section className="bg-white rounded-xl border border-slate-200/60 shadow-sm p-5">
         <div className="flex items-center gap-2 mb-1">
-          <CalendarRange className="w-5 h-5 text-blue-600" />
-          <h2 className="text-base font-semibold text-slate-800">Periodo dello stipendio</h2>
+          <CalendarRange className="w-5 h-5 text-blue-600" aria-hidden="true" />
+          <h2 className="text-base font-semibold text-slate-800 tracking-tight">Periodo dello stipendio</h2>
         </div>
         <p className="text-sm text-slate-500 mb-4">
-          Periodo (anteprima): <span className="font-semibold text-blue-700">{formatPeriodRange(period.startDate, period.endDate)}</span>
+          Periodo (anteprima): <span className="font-semibold text-blue-700 tracking-tight">{formatPeriodRange(period.startDate, period.endDate)}</span>
         </p>
 
         <InfoBox title="Come funziona il periodo" tone="blue">
@@ -141,7 +141,7 @@ export default function Settings() {
                 onChange={e => setPeriodStart(e.target.value)}
                 className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
               />
-              <button onClick={() => setPeriodStart(todayString())} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Imposta a oggi</button>
+              <button onClick={() => setPeriodStart(todayString())} className="text-xs text-blue-600 mt-1 hover:text-blue-700 active:scale-95 transition-[transform,color]">Imposta a oggi</button>
             </div>
             <div>
               <label htmlFor="set-anchor" className="block text-sm font-medium text-slate-700 mb-1">Giorno tipico (stima)</label>
@@ -158,9 +158,9 @@ export default function Settings() {
           <button
             onClick={save}
             disabled={saving}
-            className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 active:scale-[0.98] transition-[transform,background-color]"
           >
-            <Save className="w-4 h-4" /> {saving ? 'Salvataggio...' : 'Salva impostazioni'}
+            <Save className="w-4 h-4" aria-hidden="true" /> {saving ? 'Salvataggio...' : 'Salva impostazioni'}
           </button>
         </div>
       </section>
@@ -168,13 +168,13 @@ export default function Settings() {
       {/* RICOMINCIA DA OGGI */}
       <section className="bg-white rounded-xl border border-red-200 shadow-sm p-5">
         <div className="flex items-center gap-2 mb-1">
-          <RotateCcw className="w-5 h-5 text-red-600" />
-          <h2 className="text-base font-semibold text-slate-800">Ricomincia da oggi</h2>
+          <RotateCcw className="w-5 h-5 text-red-600" aria-hidden="true" />
+          <h2 className="text-base font-semibold text-slate-800 tracking-tight">Ricomincia da oggi</h2>
         </div>
         <p className="text-sm text-slate-500 mb-3">Azzera lo storico e riparti pulito dal periodo corrente.</p>
 
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700 space-y-1 mb-4">
-          <p className="flex items-start gap-2"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> <span><strong>Cosa viene eliminato</strong>: tutti i movimenti registrati (entrate, uscite, trasferimenti) e le pianificate <strong>già scadute</strong>. Operazione <strong>non reversibile</strong>.</span></p>
+          <p className="flex items-start gap-2"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" /> <span><strong>Cosa viene eliminato</strong>: tutti i movimenti registrati (entrate, uscite, trasferimenti) e le pianificate <strong>già scadute</strong>. Operazione <strong>non reversibile</strong>.</span></p>
           <p className="ml-6"><strong>Cosa resta</strong>: fondi, entrate, spese ricorrenti, budget e le pianificate <strong>future</strong>. I saldi dei fondi restano invariati — reimpostali nella pagina <strong>Fondi</strong>.</p>
           <p className="ml-6">Le spese ricorrenti scadute <strong>prima di oggi</strong> non verranno più mostrate: il periodo riparte da oggi.</p>
         </div>
@@ -182,9 +182,9 @@ export default function Settings() {
         <button
           onClick={doReset}
           disabled={resetting}
-          className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+          className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 active:scale-[0.98] transition-[transform,background-color]"
         >
-          <RotateCcw className="w-4 h-4" /> {resetting ? 'In corso...' : 'Ricomincia da oggi'}
+          <RotateCcw className="w-4 h-4" aria-hidden="true" /> {resetting ? 'In corso...' : 'Ricomincia da oggi'}
         </button>
       </section>
     </div>

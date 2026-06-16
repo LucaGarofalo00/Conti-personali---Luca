@@ -128,10 +128,10 @@ export default function Income() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-slate-500">Totale entrate ricorrenti del periodo ({currentPeriodLabel()}): <span className="font-semibold text-emerald-600">{cur(totalMonthly)}</span></p>
+          <p className="text-sm text-slate-500">Totale entrate ricorrenti del periodo ({currentPeriodLabel()}): <span className="font-semibold text-emerald-600 tracking-tight">{cur(totalMonthly)}</span></p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
-          <Plus className="w-4 h-4" /> Aggiungi
+        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium">
+          <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi
         </button>
       </div>
       <InfoBox title="Come funzionano le entrate" tone="emerald">
@@ -144,8 +144,8 @@ export default function Income() {
 
       {items.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-slate-200/60 shadow-sm">
-          <p className="text-slate-400 mb-4">Nessuna entrata configurata</p>
-          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium"><Plus className="w-4 h-4" /> Aggiungi la prima entrata</button>
+          <p className="text-slate-500 mb-4">Nessuna entrata configurata</p>
+          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium"><Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi la prima entrata</button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -153,18 +153,18 @@ export default function Income() {
             const fundName = funds.find(f => f.id === item.fund_id)?.name
             const isExpired = !!item.end_date && item.end_date < today
             return (
-              <div key={item.id} className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between gap-3 transition ${!item.is_active || isExpired ? 'opacity-50' : ''}`}>
+              <div key={item.id} className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between gap-3 hover:shadow-md hover:border-slate-300/60 transition-shadow ${!item.is_active || isExpired ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-4 min-w-0">
-                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva entrata' : 'Attiva entrata'} className="text-slate-400 hover:text-blue-600 transition shrink-0">
+                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva entrata' : 'Attiva entrata'} aria-pressed={item.is_active} className="text-slate-400 hover:text-blue-600 active:scale-90 transition-[transform,color] shrink-0">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-emerald-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <div className="min-w-0">
                     <p className="font-medium text-slate-800 break-words">{item.name} {item.is_variable && <span className="text-xs text-amber-500 font-normal">(variabile)</span>}{isExpired && <span className="text-xs text-slate-400 font-normal"> · terminata</span>}</p>
-                    <p className="text-xs text-slate-400 flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                    <p className="text-xs text-slate-500 flex items-center flex-wrap gap-x-2 gap-y-0.5">
                       {item.frequency === 'monthly' ? (
-                        <><Calendar className="w-3 h-3" /> Giorno {item.day_of_month}</>
+                        <><Calendar className="w-3 h-3" aria-hidden="true" /> Giorno {item.day_of_month}</>
                       ) : (
-                        <><Clock className="w-3 h-3" /> Ogni {DAYS[item.day_of_week ?? 0]}</>
+                        <><Clock className="w-3 h-3" aria-hidden="true" /> Ogni {DAYS[item.day_of_week ?? 0]}</>
                       )}
                       {item.delay_days > 0 && <span>· Ritardo {item.delay_days}gg</span>}
                       {fundName && <span>· {fundName}</span>}
@@ -175,11 +175,11 @@ export default function Income() {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <span className="text-lg font-semibold text-emerald-600">{cur(Number(item.amount))}</span>
-                    <p className="text-xs text-slate-400">{item.frequency === 'monthly' ? '/mese' : '/settimana'}</p>
+                    <span className="text-lg font-semibold text-emerald-600 tracking-tight">{cur(Number(item.amount))}</span>
+                    <p className="text-xs text-slate-500">{item.frequency === 'monthly' ? '/mese' : '/settimana'}</p>
                   </div>
-                  <button onClick={() => openEdit(item)} aria-label="Modifica entrata" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => remove(item.id)} aria-label="Elimina entrata" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => openEdit(item)} aria-label="Modifica entrata" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(item.id)} aria-label="Elimina entrata" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
             )
@@ -252,8 +252,8 @@ export default function Income() {
               )}
             </div>
           </div>
-          <p className="text-xs text-slate-400">La data di inizio può essere anche passata (entrata già in corso). Lascia vuoto per "sempre attiva".</p>
-          <button onClick={save} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
+          <p className="text-xs text-slate-500">La data di inizio può essere anche passata (entrata già in corso). Lascia vuoto per "sempre attiva".</p>
+          <button onClick={save} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 active:scale-[0.98] transition-[transform,background-color]">
             {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Aggiungi Entrata'}
           </button>
         </div>

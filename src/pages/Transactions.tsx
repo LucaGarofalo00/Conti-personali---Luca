@@ -366,25 +366,27 @@ export default function Transactions() {
         </div>
         <div className="flex flex-wrap gap-2">
           {duplicateGroups.size > 0 && (
-            <button onClick={selectDuplicates} className="flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition text-sm font-medium">
+            <button onClick={selectDuplicates} className="flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-[transform,background-color] active:scale-[0.98] text-sm font-medium">
               Seleziona duplicati
             </button>
           )}
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
-            <Plus className="w-4 h-4" /> Nuova
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium">
+            <Plus className="w-4 h-4" aria-hidden="true" /> Nuova
           </button>
         </div>
       </div>
 
       <button
         onClick={() => setShowFilters(s => !s)}
-        className="sm:hidden flex items-center gap-2 mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 font-medium"
+        aria-expanded={showFilters}
+        aria-controls="tx-filters-panel"
+        className="sm:hidden flex items-center gap-2 mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 font-medium transition-[transform,background-color] active:scale-[0.98]"
       >
-        <Filter className="w-4 h-4" /> Filtri
+        <Filter className="w-4 h-4" aria-hidden="true" /> Filtri
         {filtersActive && <span className="w-2 h-2 rounded-full bg-blue-500" aria-label="filtri attivi" />}
       </button>
-      <div className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-wrap gap-3 mb-4 items-center`}>
-        <Filter className="w-4 h-4 text-slate-400 hidden sm:block" />
+      <div id="tx-filters-panel" className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-wrap gap-3 mb-4 items-center`}>
+        <Filter className="w-4 h-4 text-slate-400 hidden sm:block" aria-hidden="true" />
         <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
           <option value="all">Tutti i tipi</option>
           <option value="income">Entrate</option>
@@ -421,8 +423,8 @@ export default function Transactions() {
           Memo
         </label>
         {filtersActive && (
-          <button onClick={resetFilters} className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition">
-            <X className="w-3.5 h-3.5" /> Azzera
+          <button onClick={resetFilters} className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-[transform,background-color] active:scale-[0.98]">
+            <X className="w-3.5 h-3.5" aria-hidden="true" /> Azzera
           </button>
         )}
       </div>
@@ -431,16 +433,16 @@ export default function Transactions() {
         <div className="sticky top-16 z-20 mb-3 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-blue-700">{selectedIds.size} selezionat{selectedIds.size === 1 ? 'a' : 'e'}</span>
-            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
-              <X className="w-3 h-3" /> Deseleziona
+            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors">
+              <X className="w-3 h-3" aria-hidden="true" /> Deseleziona
             </button>
           </div>
           <button
             onClick={bulkDelete}
             disabled={bulkDeleting}
-            className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition text-sm font-medium"
+            className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98] text-sm font-medium"
           >
-            <Trash2 className="w-4 h-4" /> {bulkDeleting ? 'Eliminazione...' : 'Elimina'}
+            <Trash2 className="w-4 h-4" aria-hidden="true" /> {bulkDeleting ? 'Eliminazione...' : 'Elimina'}
           </button>
         </div>
       )}
@@ -452,7 +454,7 @@ export default function Transactions() {
       ) : (
         <>
           <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm px-4 py-2 mb-2 flex items-center gap-3">
-            <button onClick={toggleSelectAll} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-800">
+            <button onClick={toggleSelectAll} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
               {allFilteredSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className={`w-4 h-4 ${someFilteredSelected ? 'text-blue-400' : 'text-slate-400'}`} />}
               <span>{allFilteredSelected ? 'Deseleziona tutte' : 'Seleziona tutte'}</span>
             </button>
@@ -479,7 +481,7 @@ export default function Transactions() {
               return (
                 <div
                   key={tx.id}
-                  className={`bg-white rounded-xl border p-4 flex items-center justify-between transition ${isSelected ? 'border-blue-500 bg-blue-50/30' : isDuplicate ? 'border-amber-300' : 'border-slate-200'}`}
+                  className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 flex items-center justify-between transition-colors ${isSelected ? 'border-blue-500 bg-blue-50/30' : isDuplicate ? 'border-amber-300' : 'hover:border-slate-300'}`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <button onClick={() => toggleSelect(tx.id)} aria-label={isSelected ? 'Deseleziona transazione' : 'Seleziona transazione'} aria-pressed={isSelected} className="shrink-0">
@@ -491,21 +493,21 @@ export default function Transactions() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-slate-800 text-sm truncate">{tx.description || (tx.type === 'income' ? 'Entrata' : tx.type === 'expense' ? 'Uscita' : 'Trasferimento')}</p>
-                        {isDuplicate && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium uppercase">duplicato</span>}
-                        {tx.is_planned && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium uppercase">pianif.</span>}
-                        {tx.is_memo && <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium uppercase">memo</span>}
-                        {tx.recurring_expense_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">spesa ric.</span>}
-                        {tx.recurring_income_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium uppercase">entrata ric.</span>}
-                        {tx.budget_id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium uppercase">budget</span>}
+                        {isDuplicate && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-md font-medium uppercase">duplicato</span>}
+                        {tx.is_planned && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-md font-medium uppercase">pianif.</span>}
+                        {tx.is_memo && <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-medium uppercase">memo</span>}
+                        {tx.recurring_expense_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-medium uppercase">spesa ric.</span>}
+                        {tx.recurring_income_id && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-medium uppercase">entrata ric.</span>}
+                        {tx.budget_id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md font-medium uppercase">budget</span>}
                       </div>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-500">
                         {fmtDate(tx.date)}
                         {tx.planned_date && tx.planned_date !== tx.date && ` · previsto ${fmtDate(tx.planned_date, 'd MMM')}`}
                         {fundName && ` · ${fundName}`}
                         {fundToName && ` → ${fundToName}`}
                         {tx.category !== 'altro' && ` · ${catLabel(tx.category)}`}
                       </p>
-                      {fuelLine && <p className="text-[11px] text-slate-400 mt-0.5">{fuelLine}</p>}
+                      {fuelLine && <p className="text-[11px] text-slate-500 mt-0.5">{fuelLine}</p>}
                       {cons && (
                         <p className="text-[11px] text-emerald-600/90">
                           Pieno prec.: {cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l · {cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
@@ -513,7 +515,7 @@ export default function Transactions() {
                         </p>
                       )}
                       {avg && (
-                        <p className="text-[11px] text-slate-400">
+                        <p className="text-[11px] text-slate-500">
                           Media {FUEL_TYPE_LABEL[txFuelType]}: {avg.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l · {avg.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
                           {avg.costPerKm != null && ` · ${cur(avg.costPerKm)}/km`}
                         </p>
@@ -521,13 +523,13 @@ export default function Transactions() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    <span className={`text-base sm:text-lg font-semibold ${tx.type === 'income' ? 'text-emerald-600' : tx.type === 'expense' ? 'text-red-500' : 'text-blue-600'}`}>
+                    <span className={`text-base sm:text-lg font-semibold tracking-tight ${tx.type === 'income' ? 'text-emerald-600' : tx.type === 'expense' ? 'text-red-500' : 'text-blue-600'}`}>
                       {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}{cur(Number(tx.amount))}
                     </span>
-                    <button onClick={() => openEdit(tx)} aria-label="Modifica transazione" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                    <button onClick={() => openEdit(tx)} aria-label="Modifica transazione" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-[transform,background-color,color] active:scale-90">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => remove(tx)} aria-label="Elimina transazione" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
+                    <button onClick={() => remove(tx)} aria-label="Elimina transazione" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color,color] active:scale-90">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -536,7 +538,7 @@ export default function Transactions() {
             })}
           </div>
           {hasMore && (
-            <button onClick={() => load(false)} className="w-full mt-4 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition">
+            <button onClick={() => load(false)} className="w-full mt-4 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-[transform,background-color] active:scale-[0.98]">
               Carica altre
             </button>
           )}
@@ -552,9 +554,9 @@ export default function Transactions() {
           )}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div role="group" aria-label="Tipo di transazione" className="grid grid-cols-3 gap-2">
               {(['expense', 'income', 'transfer'] as const).map(t => (
-                <button key={t} onClick={() => setForm({ ...form, type: t })} className={`py-2 rounded-lg text-sm font-medium border transition ${form.type === t ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                <button key={t} onClick={() => setForm({ ...form, type: t })} aria-pressed={form.type === t} className={`py-2 rounded-lg text-sm font-medium border transition-[transform,background-color,border-color,color] active:scale-[0.98] ${form.type === t ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                   {t === 'expense' ? 'Uscita' : t === 'income' ? 'Entrata' : 'Trasferimento'}
                 </button>
               ))}
@@ -600,14 +602,15 @@ export default function Transactions() {
             <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dati rifornimento (facoltativi)</p>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Tipo carburante</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label id="tx-fuel-type-label" className="block text-xs font-medium text-slate-600 mb-1">Tipo carburante</label>
+                <div role="group" aria-labelledby="tx-fuel-type-label" className="grid grid-cols-2 gap-2">
                   {(['gpl', 'benzina'] as const).map(ft => (
                     <button
                       key={ft}
                       type="button"
                       onClick={() => setForm({ ...form, fuel_type: ft })}
-                      className={`py-2 rounded-lg text-sm font-medium border transition ${form.fuel_type === ft ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                      aria-pressed={form.fuel_type === ft}
+                      className={`py-2 rounded-lg text-sm font-medium border transition-[transform,background-color,border-color,color] active:scale-[0.98] ${form.fuel_type === ft ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                     >
                       {FUEL_TYPE_LABEL[ft]}
                     </button>
@@ -616,8 +619,9 @@ export default function Transactions() {
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Km percorsi</label>
+                  <label htmlFor="tx-fuel-km" className="block text-xs font-medium text-slate-600 mb-1">Km percorsi</label>
                   <input
+                    id="tx-fuel-km"
                     type="text" inputMode="decimal"
                     value={form.fuel_km}
                     onChange={e => setForm({ ...form, fuel_km: e.target.value })}
@@ -626,8 +630,9 @@ export default function Transactions() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
+                  <label htmlFor="tx-fuel-liters" className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
                   <input
+                    id="tx-fuel-liters"
                     type="text" inputMode="decimal"
                     value={form.fuel_liters}
                     onChange={e => setForm({ ...form, fuel_liters: e.target.value })}
@@ -636,8 +641,9 @@ export default function Transactions() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
+                  <label htmlFor="tx-fuel-ppl" className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
                   <input
+                    id="tx-fuel-ppl"
                     type="text" inputMode="decimal"
                     value={form.fuel_price_per_liter}
                     onChange={e => setForm({ ...form, fuel_price_per_liter: e.target.value })}
@@ -673,10 +679,10 @@ export default function Transactions() {
                   </div>
                 )
               })()}
-              <p className="text-[11px] text-slate-400">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong> dello stesso tipo. Servono solo per i consumi: non modificano l'importo.</p>
+              <p className="text-[11px] text-slate-500">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong> dello stesso tipo. Servono solo per i consumi: non modificano l'importo.</p>
             </div>
           )}
-          <button onClick={save} disabled={form.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
+          <button onClick={save} disabled={form.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98]">
             {saving ? 'Salvataggio...' : editing ? 'Salva Modifiche' : 'Registra Transazione'}
           </button>
         </div>

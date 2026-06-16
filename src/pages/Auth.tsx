@@ -69,7 +69,7 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
           <p className="text-sm text-slate-400">Gestisci le tue finanze personali</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200/60 p-6">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 p-6">
           {(mode === 'login' || mode === 'register') && (
             <div className="flex mb-6 bg-slate-100 rounded-lg p-0.5">
               <button onClick={() => switchMode('login')} className={`flex-1 py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${mode === 'login' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}>
@@ -118,7 +118,7 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
             {error && <p className="text-red-600 text-[13px] bg-red-50 p-2.5 rounded-lg">{error}</p>}
             {success && <p className="text-emerald-600 text-[13px] bg-emerald-50 p-2.5 rounded-lg">{success}</p>}
 
-            <button type="submit" disabled={loading} className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-lg text-[13px] font-medium hover:from-indigo-700 hover:to-violet-700 shadow-sm shadow-indigo-600/25 disabled:opacity-50 transition-all">
+            <button type="submit" disabled={loading} className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-lg text-[13px] font-medium hover:from-indigo-700 hover:to-violet-700 shadow-sm shadow-indigo-600/25 disabled:opacity-50 disabled:pointer-events-none transition-all active:scale-[0.99]">
               {loading ? 'Caricamento...' : mode === 'login' ? 'Accedi' : mode === 'register' ? 'Registrati' : mode === 'recovery' ? 'Aggiorna password' : 'Invia Link'}
             </button>
           </form>

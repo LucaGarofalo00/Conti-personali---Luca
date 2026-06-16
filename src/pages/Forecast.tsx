@@ -276,7 +276,7 @@ export default function Forecast() {
               onChange={e => setTargetDate(e.target.value)}
               className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
             />
-            <span className="text-xs text-slate-400 whitespace-nowrap">({daysToTarget} giorni)</span>
+            <span className="text-xs text-slate-500 whitespace-nowrap">({daysToTarget} giorni)</span>
           </div>
         </div>
       </div>
@@ -318,7 +318,7 @@ export default function Forecast() {
                   <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={Math.max(0, Math.floor(chartData.length / 8))} />
               <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${Number(v).toLocaleString('it-IT')}`} />
               <Tooltip content={<CustomTooltip />} />
@@ -371,18 +371,18 @@ export default function Forecast() {
                 return (
                   <Fragment key={row.month}>
                     <tr
-                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
                       onClick={() => toggleExpand(row.month)}
                     >
                       <td className="px-2 py-3 text-slate-400">
-                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        {isOpen ? <ChevronDown className="w-4 h-4" aria-hidden="true" /> : <ChevronRight className="w-4 h-4" aria-hidden="true" />}
                       </td>
                       <td className="px-4 py-3 font-medium text-slate-700">{row.label}</td>
                       <td className="px-4 py-3 text-right text-emerald-600">{cur(row.income)}</td>
                       <td className="px-4 py-3 text-right text-red-500">{cur(row.expenses)}</td>
                       <td className={`px-4 py-3 text-right font-medium ${row.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{cur(row.net)}</td>
                       <td className={`px-4 py-3 text-right ${row.minBalance < 0 ? 'text-red-600 font-semibold' : 'text-amber-600'}`}>{cur(row.minBalance)}</td>
-                      <td className={`px-4 py-3 text-right font-semibold ${row.endBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{cur(row.endBalance)}</td>
+                      <td className={`px-4 py-3 text-right font-semibold tracking-tight ${row.endBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{cur(row.endBalance)}</td>
                     </tr>
                     {isOpen && (
                       <tr className="bg-slate-50/50">
@@ -410,7 +410,7 @@ export default function Forecast() {
 
       {minPoint.balance < 0 && (
         <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+          <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" aria-hidden="true" />
           <div>
             <p className="font-medium text-red-700">Attenzione: saldo negativo previsto</p>
             <p className="text-sm text-red-600 mt-1">Il saldo potrebbe scendere a {cur(minPoint.balance)} intorno al {minPoint.label}. Considera di ridurre le spese o aumentare le entrate.</p>
@@ -430,7 +430,7 @@ function MetricCard({ icon: Icon, color, label, value, sub, onClick }: { icon: R
   return (
     <Wrapper
       onClick={onClick}
-      className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 text-left w-full ${onClick ? 'hover:shadow-md hover:border-slate-300 transition-all duration-200 cursor-pointer' : ''}`}
+      className={`bg-white rounded-xl border border-slate-200/60 shadow-sm p-4 text-left w-full ${onClick ? 'hover:shadow-md hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer' : ''}`}
     >
       <div className="flex items-center gap-2 mb-2">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
@@ -439,7 +439,7 @@ function MetricCard({ icon: Icon, color, label, value, sub, onClick }: { icon: R
         <span className="text-sm text-slate-500 flex-1 leading-tight">{label}</span>
         {onClick && <HelpCircle className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
       </div>
-      <p className="text-xl font-bold text-slate-800">{value}</p>
+      <p className="text-xl font-bold tracking-tight tabular-nums text-slate-800">{value}</p>
       {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
     </Wrapper>
   )

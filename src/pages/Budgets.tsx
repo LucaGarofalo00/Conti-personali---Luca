@@ -155,7 +155,7 @@ export default function Budgets() {
   return (
     <div>
       <div className="mb-4">
-        <p className="text-sm text-slate-500">Totale budget del periodo ({currentPeriodLabel()}): <span className="font-semibold text-red-500">{cur(totalMonthlyAll)}</span></p>
+        <p className="text-sm text-slate-500">Totale budget del periodo ({currentPeriodLabel()}): <span className="text-base font-semibold text-red-500 tracking-tight tabular-nums">{cur(totalMonthlyAll)}</span></p>
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="blue">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
@@ -169,11 +169,11 @@ export default function Budgets() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-blue-600" />
+            <ShoppingBag className="w-5 h-5 text-blue-600" aria-hidden="true" />
             <h3 className="text-lg font-semibold text-slate-700">Budget Settimanali</h3>
           </div>
-          <button onClick={() => { setEditingBudget(null); setBudgetForm({ name: '', amount: 0, fund_id: '' }); setShowBudgetModal(true) }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-[13px] font-medium">
-            <Plus className="w-4 h-4" /> Nuovo Budget
+          <button onClick={() => { setEditingBudget(null); setBudgetForm({ name: '', amount: 0, fund_id: '' }); setShowBudgetModal(true) }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium">
+            <Plus className="w-4 h-4" aria-hidden="true" /> Nuovo Budget
           </button>
         </div>
 
@@ -197,37 +197,37 @@ export default function Budgets() {
               const fundName = funds.find(f => f.id === b.fund_id)?.name
 
               return (
-                <div key={b.id} className={`bg-white rounded-xl border shadow-sm ${overBudget ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200/60'} p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
+                <div key={b.id} className={`bg-white rounded-xl border shadow-sm transition-shadow ${overBudget ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200/60'} p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <button onClick={() => toggleBudget(b)} aria-label={b.is_active ? 'Disattiva budget' : 'Attiva budget'}>{b.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
+                      <button onClick={() => toggleBudget(b)} aria-label={b.is_active ? 'Disattiva budget' : 'Attiva budget'} aria-pressed={b.is_active} className="transition-transform active:scale-90">{b.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
                       <div>
                         <p className="font-semibold text-slate-800">{b.name}</p>
-                        <p className="text-xs text-slate-400">{cur(limit)}/settimana{fundName ? ` · ${fundName}` : ''}</p>
+                        <p className="text-xs text-slate-500">{cur(limit)}/settimana{fundName ? ` · ${fundName}` : ''}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => { setEditingBudget(b); setBudgetForm({ name: b.name, amount: limit, fund_id: b.fund_id || '' }); setShowBudgetModal(true) }} aria-label="Modifica budget" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => removeBudget(b.id)} aria-label="Elimina budget" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => { setEditingBudget(b); setBudgetForm({ name: b.name, amount: limit, fund_id: b.fund_id || '' }); setShowBudgetModal(true) }} aria-label="Modifica budget" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-[transform,background-color] active:scale-90"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => removeBudget(b.id)} aria-label="Elimina budget" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
 
                   <div className="mb-2">
                     <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-slate-500">Speso questa settimana: <span className="font-medium text-slate-700">{cur(spentThisWeek)}</span> / {cur(effective)}</span>
-                      <span className={`font-medium ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
+                      <span className="text-slate-500">Speso questa settimana: <span className="font-medium text-slate-700 tracking-tight tabular-nums">{cur(spentThisWeek)}</span> / {cur(effective)}</span>
+                      <span className={`font-medium tracking-tight tabular-nums ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
                         {overBudget ? `Sforato di ${cur(Math.abs(remaining))}` : `Rimangono ${cur(remaining)}`}
                       </span>
                     </div>
-                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-label={`Budget ${b.name}: ${Math.round(pct)}% utilizzato`}>
                       <div
-                        className={`h-full rounded-full transition-all ${overBudget ? 'bg-red-500' : pct > 75 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                        className={`h-full rounded-full transition-[width] duration-500 ease-out ${overBudget ? 'bg-red-500' : pct > 75 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                         style={{ width: `${Math.min(pct, 100)}%` }}
                       />
                     </div>
                     {overBudget && (
-                      <div className="mt-2 flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      <div role="status" className="mt-2 flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                         <span>Hai superato il budget. Le spese vengono registrate comunque. Il "debito" NON si scala dal budget della prossima settimana.</span>
                       </div>
                     )}
@@ -239,13 +239,13 @@ export default function Budgets() {
                       {txsThisWeekObjs.map(tx => (
                         <div key={tx.id} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2 min-w-0">
-                            <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
                             <span className="text-slate-600 truncate">{tx.description}</span>
-                            <span className="text-xs text-slate-400 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
+                            <span className="text-xs text-slate-500 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-medium text-red-500">-{cur(Number(tx.amount))}</span>
-                            <button onClick={() => removeTx(tx)} aria-label="Elimina spesa" className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <span className="font-medium text-red-500 tracking-tight tabular-nums">-{cur(Number(tx.amount))}</span>
+                            <button onClick={() => removeTx(tx)} aria-label="Elimina spesa" className="p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
                       ))}
@@ -255,9 +255,9 @@ export default function Budgets() {
                   {b.is_active && (
                     <button
                       onClick={() => { setExpBudgetId({ id: b.id, name: b.name }); setExpForm({ description: '', amount: 0, fund_id: b.fund_id || '', date: todayString() }) }}
-                      className="mt-3 w-full py-2 border-2 border-dashed border-slate-200 rounded-lg text-sm font-medium text-slate-500 transition flex items-center justify-center gap-2 hover:border-blue-300 hover:text-blue-600"
+                      className="mt-3 w-full py-2 border-2 border-dashed border-slate-200 rounded-lg text-sm font-medium text-slate-500 transition-[transform,background-color,border-color,color] active:scale-[0.98] flex items-center justify-center gap-2 hover:border-blue-300 hover:text-blue-600"
                     >
-                      <Plus className="w-4 h-4" /> Aggiungi spesa
+                      <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi spesa
                     </button>
                   )}
 
@@ -271,11 +271,11 @@ export default function Budgets() {
                           const range = `${format(week.weekStart, 'd')}–${format(addDays(week.weekStart, 6), 'd MMM', { locale: it })}`
                           return (
                             <div key={key} className="rounded-lg border border-slate-100">
-                              <button onClick={() => toggleWeek(key)} aria-expanded={open} className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50 rounded-lg">
+                              <button onClick={() => toggleWeek(key)} aria-expanded={open} className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50 rounded-lg transition-colors">
                                 <span className="flex items-center gap-2 min-w-0">
-                                  {open ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+                                  {open ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />}
                                   <span className="text-sm text-slate-600">{range}</span>
-                                  <span className="text-xs text-slate-400 tabular-nums">{cur(week.spent)} / {cur(limit)}</span>
+                                  <span className="text-xs text-slate-500 tabular-nums">{cur(week.spent)} / {cur(limit)}</span>
                                 </span>
                                 {week.over > 0 ? (
                                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700 shrink-0">Sforato {cur(week.over)}</span>
@@ -291,11 +291,11 @@ export default function Budgets() {
                                     week.txs.map(tx => (
                                       <div key={tx.id} className="flex items-center justify-between text-sm">
                                         <span className="flex items-center gap-2 min-w-0">
-                                          <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                          <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
                                           <span className="text-slate-600 truncate">{tx.description}</span>
-                                          <span className="text-xs text-slate-400 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
+                                          <span className="text-xs text-slate-500 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                                         </span>
-                                        <span className="font-medium text-red-500 shrink-0">-{cur(Number(tx.amount))}</span>
+                                        <span className="font-medium text-red-500 shrink-0 tracking-tight tabular-nums">-{cur(Number(tx.amount))}</span>
                                       </div>
                                     ))
                                   )}
@@ -331,7 +331,7 @@ export default function Budgets() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <button onClick={saveBudget} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
+          <button onClick={saveBudget} disabled={saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98]">
             {saving ? 'Salvataggio...' : editingBudget ? 'Salva Modifiche' : 'Aggiungi Budget'}
           </button>
         </div>
@@ -360,7 +360,7 @@ export default function Budgets() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
-          <button onClick={saveExpense} disabled={saving || expForm.amount <= 0 || !expForm.description.trim()} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors">
+          <button onClick={saveExpense} disabled={saving || expForm.amount <= 0 || !expForm.description.trim()} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98]">
             {saving ? 'Registrazione...' : 'Registra Spesa'}
           </button>
         </div>
