@@ -36,21 +36,25 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50/40">
-      {open && <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 lg:hidden" onClick={() => setOpen(false)} />}
+      {open && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden animate-[fadeIn_0.2s_ease-out]" onClick={() => setOpen(false)} />}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-60 bg-white/90 backdrop-blur-xl shadow-[1px_0_0_0_#e8eaed] transform transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-white via-white to-indigo-50/50 backdrop-blur-xl border-r border-slate-200/70 transform transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between px-5 py-5">
-            <div className="flex items-center gap-2.5">
-              <Logo className="w-9 h-9 drop-shadow-sm" />
-              <h1 className="text-lg font-semibold tracking-tight text-slate-800">FinanzApp</h1>
+          <div className="flex items-center justify-between px-5 pt-6 pb-5">
+            <div className="flex items-center gap-3">
+              <Logo className="w-10 h-10 drop-shadow-sm" />
+              <div className="leading-tight">
+                <h1 className="text-[17px] font-bold tracking-tight text-slate-900">FinanzApp</h1>
+                <p className="text-[11px] text-slate-400 font-medium">Finanze personali</p>
+              </div>
             </div>
             <button onClick={() => setOpen(false)} aria-label="Chiudi menu" className="lg:hidden p-1.5 -mr-1 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors active:scale-90">
               <X aria-hidden="true" className="w-5 h-5" />
             </button>
           </div>
 
-          <nav className="flex-1 px-3 space-y-0.5">
+          <p className="px-6 pb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">Menu</p>
+          <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
             {nav.map(item => (
               <NavLink
                 key={item.path}
@@ -58,22 +62,22 @@ export default function Layout({ children }: { children: ReactNode }) {
                 end={item.path === '/'}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98] ${
+                  `group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.98] ${
                     isActive
-                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm shadow-indigo-600/25'
-                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/70'
+                      ? 'bg-brand text-white shadow-md shadow-indigo-600/30'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-sm'
                   }`
                 }
               >
-                <item.icon aria-hidden="true" className="w-[18px] h-[18px]" />
+                <item.icon aria-hidden="true" className="w-[18px] h-[18px] shrink-0" />
                 {item.label}
               </NavLink>
             ))}
           </nav>
 
-          <div className="px-3 py-4">
-            <button onClick={handleSignOut} className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-slate-400 hover:text-slate-600 hover:bg-slate-100/70 transition-colors active:scale-[0.98]">
-              <LogOut className="w-[18px] h-[18px]" />
+          <div className="px-3 py-4 mt-2 border-t border-slate-200/70">
+            <button onClick={handleSignOut} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors active:scale-[0.98]">
+              <LogOut aria-hidden="true" className="w-[18px] h-[18px]" />
               Esci
             </button>
           </div>
@@ -81,26 +85,29 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="sticky top-0 bg-white/80 backdrop-blur-xl z-30 shrink-0 shadow-[0_1px_0_0_#e8eaed]">
-          <div className="flex items-center gap-3 px-4 py-3 lg:px-6">
+        <header className="sticky top-0 bg-white/75 backdrop-blur-xl z-30 shrink-0 border-b border-slate-200/70">
+          <div className="flex items-center gap-3 px-4 py-3.5 lg:px-8">
             <button onClick={() => setOpen(true)} aria-label="Apri menu" className="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-slate-100 transition-colors active:scale-90">
-              <Menu aria-hidden="true" className="w-5 h-5 text-slate-500" />
+              <Menu aria-hidden="true" className="w-5 h-5 text-slate-600" />
             </button>
             <Logo className="w-7 h-7 lg:hidden" />
-            <span className="font-semibold text-slate-800 text-[15px] tracking-tight">{pageTitle}</span>
+            <h2 className="font-bold text-slate-900 text-lg sm:text-xl tracking-tight">{pageTitle}</h2>
             <button
               onClick={toggleAmountsHidden}
               aria-label={amountsHidden ? 'Mostra gli importi' : 'Nascondi gli importi'}
               aria-pressed={amountsHidden}
               title={amountsHidden ? 'Mostra gli importi' : 'Nascondi gli importi'}
-              className="ml-auto p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors active:scale-90"
+              className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 transition-colors active:scale-95 shadow-xs"
             >
-              {amountsHidden ? <EyeOff aria-hidden="true" className="w-5 h-5" /> : <Eye aria-hidden="true" className="w-5 h-5" />}
+              {amountsHidden ? <EyeOff aria-hidden="true" className="w-[18px] h-[18px]" /> : <Eye aria-hidden="true" className="w-[18px] h-[18px]" />}
+              <span className="hidden sm:inline text-[13px] font-medium">{amountsHidden ? 'Mostra' : 'Nascondi'}</span>
             </button>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
-          {children}
+        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto w-full max-w-[1400px]">
+            {children}
+          </div>
         </main>
       </div>
     </div>
