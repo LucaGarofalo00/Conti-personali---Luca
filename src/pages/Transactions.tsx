@@ -367,11 +367,11 @@ export default function Transactions() {
         </div>
         <div className="flex flex-wrap gap-2">
           {duplicateGroups.size > 0 && (
-            <button onClick={selectDuplicates} className="flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-[transform,background-color] active:scale-[0.98] text-sm font-medium">
+            <button onClick={selectDuplicates} className="inline-flex items-center gap-2 px-3 min-h-[40px] bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-[transform,background-color] active:scale-[0.98] text-sm font-medium">
               Seleziona duplicati
             </button>
           )}
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium">
+          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 min-h-[40px] bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium">
             <Plus className="w-4 h-4" aria-hidden="true" /> Nuova
           </button>
         </div>
@@ -381,67 +381,71 @@ export default function Transactions() {
         onClick={() => setShowFilters(s => !s)}
         aria-expanded={showFilters}
         aria-controls="tx-filters-panel"
-        className="sm:hidden flex items-center gap-2 mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 font-medium transition-[transform,background-color] active:scale-[0.98]"
+        className="sm:hidden inline-flex items-center gap-2 mb-3 px-3 min-h-[40px] border border-slate-200 rounded-lg text-sm text-slate-600 font-medium transition-[transform,background-color] active:scale-[0.98]"
       >
         <Filter className="w-4 h-4" aria-hidden="true" /> Filtri
         {filtersActive && <span className="w-2 h-2 rounded-full bg-blue-500" aria-label="filtri attivi" />}
       </button>
-      <div id="tx-filters-panel" className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-wrap gap-3 mb-6 items-center bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4`}>
+      <div id="tx-filters-panel" className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-col sm:flex-row flex-wrap gap-3 mb-6 sm:items-center bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4`}>
         <Filter className="w-4 h-4 text-slate-400 hidden sm:block" aria-hidden="true" />
-        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
           <option value="all">Tutti i tipi</option>
           <option value="income">Entrate</option>
           <option value="expense">Uscite</option>
           <option value="transfer">Trasferimenti</option>
         </select>
-        <select value={filterFund} onChange={e => setFilterFund(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+        <select value={filterFund} onChange={e => setFilterFund(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
           <option value="all">Tutti i fondi</option>
           {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
-        <select value={filterSource} onChange={e => setFilterSource(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+        <select value={filterSource} onChange={e => setFilterSource(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
           <option value="all">Tutte le origini</option>
           <option value="recurring_income">Entrate ricorrenti</option>
           <option value="recurring_expense">Spese ricorrenti</option>
           <option value="budget">Da budget settimanali</option>
           <option value="manual">Solo manuali</option>
         </select>
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-          <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Cerca..." className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+          <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Cerca..." className="w-full sm:w-auto min-w-0 pl-8 pr-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">Da
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
-        </label>
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">A
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
-        </label>
-        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={includePlanned} onChange={e => setIncludePlanned(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
-          Pianificate
-        </label>
-        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={includeMemo} onChange={e => setIncludeMemo(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
-          Memo
-        </label>
-        {filtersActive && (
-          <button onClick={resetFilters} className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-[transform,background-color] active:scale-[0.98]">
-            <X className="w-3.5 h-3.5" aria-hidden="true" /> Azzera
-          </button>
-        )}
+        <div className="flex gap-3">
+          <label className="flex flex-1 sm:flex-none items-center gap-1.5 text-xs text-slate-500">Da
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+          </label>
+          <label className="flex flex-1 sm:flex-none items-center gap-1.5 text-xs text-slate-500">A
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="flex items-center gap-1.5 min-h-[40px] text-xs text-slate-600 cursor-pointer">
+            <input type="checkbox" checked={includePlanned} onChange={e => setIncludePlanned(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
+            Pianificate
+          </label>
+          <label className="flex items-center gap-1.5 min-h-[40px] text-xs text-slate-600 cursor-pointer">
+            <input type="checkbox" checked={includeMemo} onChange={e => setIncludeMemo(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
+            Memo
+          </label>
+          {filtersActive && (
+            <button onClick={resetFilters} className="inline-flex items-center gap-1 px-2 min-h-[40px] text-xs font-medium text-slate-500 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-[transform,background-color] active:scale-[0.98]">
+              <X className="w-3.5 h-3.5" aria-hidden="true" /> Azzera
+            </button>
+          )}
+        </div>
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="sticky top-16 z-20 mb-3 bg-blue-50 border border-blue-200 rounded-2xl p-3 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-blue-700">{selectedIds.size} selezionat{selectedIds.size === 1 ? 'a' : 'e'}</span>
-            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors">
+        <div className="sticky top-2 sm:top-4 z-20 mb-3 bg-blue-50 border border-blue-200 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-sm">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <span className="text-sm font-medium text-blue-700 truncate">{selectedIds.size} selezionat{selectedIds.size === 1 ? 'a' : 'e'}</span>
+            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 hover:text-blue-700 inline-flex items-center justify-center gap-1 min-h-[40px] px-1 shrink-0 transition-colors">
               <X className="w-3 h-3" aria-hidden="true" /> Deseleziona
             </button>
           </div>
           <button
             onClick={bulkDelete}
             disabled={bulkDeleting}
-            className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98] text-sm font-medium"
+            className="flex items-center justify-center gap-2 px-3 min-h-[40px] shrink-0 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98] text-sm font-medium"
           >
             <Trash2 className="w-4 h-4" aria-hidden="true" /> {bulkDeleting ? 'Eliminazione...' : 'Elimina'}
           </button>
@@ -454,8 +458,8 @@ export default function Transactions() {
         </div>
       ) : (
         <>
-          <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm px-4 py-2 mb-2 flex items-center gap-3">
-            <button onClick={toggleSelectAll} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm px-4 py-1 mb-2 flex items-center gap-3">
+            <button onClick={toggleSelectAll} className="inline-flex items-center gap-2 min-h-[40px] text-sm text-slate-600 hover:text-slate-800 transition-colors">
               {allFilteredSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className={`w-4 h-4 ${someFilteredSelected ? 'text-blue-400' : 'text-slate-400'}`} />}
               <span>{allFilteredSelected ? 'Deseleziona tutte' : 'Seleziona tutte'}</span>
             </button>
@@ -484,8 +488,8 @@ export default function Transactions() {
                   key={tx.id}
                   className={`bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 flex items-center justify-between transition-colors ${isSelected ? 'border-blue-500 bg-blue-50/30' : isDuplicate ? 'border-amber-300' : 'hover:border-slate-300'}`}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <button onClick={() => toggleSelect(tx.id)} aria-label={isSelected ? 'Deseleziona transazione' : 'Seleziona transazione'} aria-pressed={isSelected} className="shrink-0">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                    <button onClick={() => toggleSelect(tx.id)} aria-label={isSelected ? 'Deseleziona transazione' : 'Seleziona transazione'} aria-pressed={isSelected} className="inline-flex items-center justify-center w-10 h-10 -m-1 shrink-0">
                       {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-slate-300 hover:text-slate-500" />}
                     </button>
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tx.type === 'income' ? 'bg-emerald-100 text-emerald-600' : tx.type === 'expense' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -523,14 +527,14 @@ export default function Transactions() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    <span className={`text-base sm:text-lg font-semibold tracking-tight tabular-nums ${tx.type === 'income' ? 'text-emerald-600' : tx.type === 'expense' ? 'text-red-500' : 'text-blue-600'}`}>
+                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                    <span className={`text-base sm:text-lg font-semibold tracking-tight tabular-nums whitespace-nowrap ${tx.type === 'income' ? 'text-emerald-600' : tx.type === 'expense' ? 'text-red-500' : 'text-blue-600'}`}>
                       {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}{cur(Number(tx.amount))}
                     </span>
-                    <button onClick={() => openEdit(tx)} aria-label="Modifica transazione" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-[transform,background-color,color] active:scale-90">
+                    <button onClick={() => openEdit(tx)} aria-label="Modifica transazione" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-[transform,background-color,color] active:scale-90">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => remove(tx)} aria-label="Elimina transazione" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color,color] active:scale-90">
+                    <button onClick={() => remove(tx)} aria-label="Elimina transazione" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color,color] active:scale-90">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -557,7 +561,7 @@ export default function Transactions() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
             <div role="group" aria-label="Tipo di transazione" className="grid grid-cols-3 gap-2">
               {(['expense', 'income', 'transfer'] as const).map(t => (
-                <button key={t} onClick={() => setForm({ ...form, type: t })} aria-pressed={form.type === t} className={`py-2 rounded-lg text-sm font-medium border transition-[transform,background-color,border-color,color] active:scale-[0.98] ${form.type === t ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                <button key={t} onClick={() => setForm({ ...form, type: t })} aria-pressed={form.type === t} className={`min-h-[44px] px-1 rounded-lg text-xs sm:text-sm font-medium border transition-[transform,background-color,border-color,color] active:scale-[0.98] ${form.type === t ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                   {t === 'expense' ? 'Uscita' : t === 'income' ? 'Entrata' : 'Trasferimento'}
                 </button>
               ))}
@@ -567,14 +571,14 @@ export default function Transactions() {
             <label htmlFor="tx-desc" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
             <input id="tx-desc" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Spesa supermercato..." />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="min-w-0">
               <label htmlFor="tx-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput id="tx-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput id="tx-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
-            <div>
+            <div className="min-w-0">
               <label htmlFor="tx-date" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-              <input id="tx-date" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="tx-date" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
@@ -611,7 +615,7 @@ export default function Transactions() {
                       type="button"
                       onClick={() => setForm({ ...form, fuel_type: ft })}
                       aria-pressed={form.fuel_type === ft}
-                      className={`py-2 rounded-lg text-sm font-medium border transition-[transform,background-color,border-color,color] active:scale-[0.98] ${form.fuel_type === ft ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                      className={`min-h-[44px] rounded-lg text-sm font-medium border transition-[transform,background-color,border-color,color] active:scale-[0.98] ${form.fuel_type === ft ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                     >
                       {FUEL_TYPE_LABEL[ft]}
                     </button>
@@ -627,7 +631,7 @@ export default function Transactions() {
                     value={form.fuel_km}
                     onChange={e => setForm({ ...form, fuel_km: e.target.value })}
                     placeholder="es. 450"
-                    className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                    className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-base sm:text-sm"
                   />
                 </div>
                 <div>
@@ -638,7 +642,7 @@ export default function Transactions() {
                     value={form.fuel_liters}
                     onChange={e => setForm({ ...form, fuel_liters: e.target.value })}
                     placeholder="es. 30"
-                    className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                    className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-base sm:text-sm"
                   />
                 </div>
                 <div>
@@ -649,7 +653,7 @@ export default function Transactions() {
                     value={form.fuel_price_per_liter}
                     onChange={e => setForm({ ...form, fuel_price_per_liter: e.target.value })}
                     placeholder="es. 1,80"
-                    className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-sm"
+                    className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-base sm:text-sm"
                   />
                 </div>
               </div>

@@ -61,7 +61,7 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-indigo-50 via-slate-50 to-violet-100">
+    <div className="min-h-dvh flex items-center justify-center p-4 pt-safe pb-safe bg-gradient-to-br from-indigo-50 via-slate-50 to-violet-100">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center mb-8">
           <Logo className="w-20 h-20 drop-shadow-md mb-4" />
@@ -69,13 +69,13 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
           <p className="text-sm text-slate-400">Gestisci le tue finanze personali</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200/70 p-7">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200/70 p-6 sm:p-8">
           {(mode === 'login' || mode === 'register') && (
             <div className="flex mb-6 bg-slate-100 rounded-lg p-0.5">
-              <button onClick={() => switchMode('login')} className={`flex-1 py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${mode === 'login' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}>
+              <button onClick={() => switchMode('login')} className={`flex-1 min-h-[44px] py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${mode === 'login' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}>
                 Accedi
               </button>
-              <button onClick={() => switchMode('register')} className={`flex-1 py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${mode === 'register' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}>
+              <button onClick={() => switchMode('register')} className={`flex-1 min-h-[44px] py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${mode === 'register' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}>
                 Registrati
               </button>
             </div>
@@ -99,15 +99,15 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
             {mode !== 'recovery' && (
               <div>
                 <label className="block text-[13px] font-medium text-slate-600 mb-1.5">Email</label>
-                <input type="email" name="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" required />
+                <input type="email" name="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full min-w-0 px-3 py-2.5 border border-slate-200 rounded-lg text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" required />
               </div>
             )}
             {mode !== 'reset' && (
               <div>
                 <label className="block text-[13px] font-medium text-slate-600 mb-1.5">{mode === 'recovery' ? 'Nuova password' : 'Password'}</label>
                 <div className="relative">
-                  <input type={showPassword ? 'text' : 'password'} name="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" required minLength={mode === 'register' || mode === 'recovery' ? 6 : undefined} />
-                  <button type="button" onClick={() => setShowPassword(s => !s)} aria-label={showPassword ? 'Nascondi password' : 'Mostra password'} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <input type={showPassword ? 'text' : 'password'} name="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} className="w-full min-w-0 px-3 py-2.5 pr-12 border border-slate-200 rounded-lg text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" required minLength={mode === 'register' || mode === 'recovery' ? 6 : undefined} />
+                  <button type="button" onClick={() => setShowPassword(s => !s)} aria-label={showPassword ? 'Nascondi password' : 'Mostra password'} className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 text-slate-400 hover:text-slate-600">
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
@@ -118,7 +118,7 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
             {error && <p className="text-red-600 text-[13px] bg-red-50 p-2.5 rounded-lg">{error}</p>}
             {success && <p className="text-emerald-600 text-[13px] bg-emerald-50 p-2.5 rounded-lg">{success}</p>}
 
-            <button type="submit" disabled={loading} className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-lg text-[13px] font-medium hover:from-indigo-700 hover:to-violet-700 shadow-sm shadow-indigo-600/25 disabled:opacity-50 disabled:pointer-events-none transition-all active:scale-[0.99]">
+            <button type="submit" disabled={loading} className="w-full min-h-[44px] py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-lg text-[13px] font-medium hover:from-indigo-700 hover:to-violet-700 shadow-sm shadow-indigo-600/25 disabled:opacity-50 disabled:pointer-events-none transition-all active:scale-[0.99]">
               {loading ? 'Caricamento...' : mode === 'login' ? 'Accedi' : mode === 'register' ? 'Registrati' : mode === 'recovery' ? 'Aggiorna password' : 'Invia Link'}
             </button>
           </form>
@@ -126,11 +126,11 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
           {mode !== 'recovery' && (
             <div className="mt-4 text-center">
               {mode === 'reset' ? (
-                <button onClick={() => switchMode('login')} className="text-[13px] text-blue-600 hover:text-blue-700 font-medium">
+                <button onClick={() => switchMode('login')} className="inline-flex items-center justify-center min-h-[44px] px-2 text-[13px] text-blue-600 hover:text-blue-700 font-medium">
                   Torna al login
                 </button>
               ) : (
-                <button onClick={() => switchMode('reset')} className="text-[13px] text-slate-400 hover:text-slate-600 transition-colors">
+                <button onClick={() => switchMode('reset')} className="inline-flex items-center justify-center min-h-[44px] px-2 text-[13px] text-slate-400 hover:text-slate-600 transition-colors">
                   Password dimenticata?
                 </button>
               )}

@@ -198,12 +198,12 @@ export default function RecurringExpenses() {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 mb-6 bg-red-50 rounded-2xl border border-red-100 shadow-sm p-5">
+      <div className="flex items-start justify-between gap-3 mb-6 bg-red-50 rounded-2xl border border-red-100 shadow-sm p-4 sm:p-5">
         <div className="min-w-0">
-          <p className="text-sm text-red-600/80">Totale spese ricorrenti del periodo ({currentPeriodLabel()})</p>
-          <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums">{cur(totalExpenses)}</p>
+          <p className="text-sm text-red-600/80 break-words">Totale spese ricorrenti del periodo ({currentPeriodLabel()})</p>
+          <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums break-words">{cur(totalExpenses)}</p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium shrink-0">
+        <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 px-4 min-h-[40px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium shrink-0">
           <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi
         </button>
       </div>
@@ -220,9 +220,9 @@ export default function RecurringExpenses() {
       </InfoBox>
 
       {items.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow-sm p-6">
+        <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-6">
           <p className="text-base font-semibold text-slate-900 tracking-tight mb-4">Nessuna spesa ricorrente configurata</p>
-          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium"><Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi la prima voce</button>
+          <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 px-4 min-h-[40px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium"><Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi la prima voce</button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -231,9 +231,9 @@ export default function RecurringExpenses() {
             const fromFund = funds.find(f => f.id === item.fund_id)?.name
             const toFund = funds.find(f => f.id === item.fund_to_id)?.name
             return (
-              <div key={item.id} className={`bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5 flex items-center justify-between gap-3 transition-shadow hover:shadow-md hover:border-slate-300/60 ${!item.is_active ? 'opacity-50' : ''}`}>
-                <div className="flex items-center gap-4 min-w-0">
-                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva voce' : 'Attiva voce'} className="text-slate-400 hover:text-blue-600 active:scale-90 transition-colors shrink-0">
+              <div key={item.id} className={`bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-5 flex items-center justify-between gap-2 sm:gap-3 transition-shadow hover:shadow-md hover:border-slate-300/60 ${!item.is_active ? 'opacity-50' : ''}`}>
+                <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva voce' : 'Attiva voce'} className="inline-flex items-center justify-center w-10 h-10 -m-1 text-slate-400 hover:text-blue-600 active:scale-90 transition-colors shrink-0">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isTransfer ? 'bg-blue-500/15 text-blue-600' : 'bg-red-500/15 text-red-600'}`} aria-hidden="true">
@@ -249,7 +249,7 @@ export default function RecurringExpenses() {
                         <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-1"><Hand className="w-3 h-3" aria-hidden="true" /> Da confermare</span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 break-words">
                       {(() => {
                         const f = item.frequency || 'monthly'
                         if (f === 'weekly') return `Ogni ${DAYS_OF_WEEK[item.day_of_week ?? 1]}`
@@ -264,10 +264,10 @@ export default function RecurringExpenses() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className={`text-xl font-bold tracking-tight tabular-nums ${isTransfer ? 'text-blue-500' : 'text-red-600'}`}>{cur(Number(item.amount))}</span>
-                  <button onClick={() => openEdit(item)} aria-label="Modifica voce" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color]"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color]"><Trash2 className="w-4 h-4" /></button>
+                <div className="flex items-center gap-0.5 sm:gap-3 shrink-0">
+                  <span className={`text-lg sm:text-xl font-bold tracking-tight tabular-nums ${isTransfer ? 'text-blue-500' : 'text-red-600'}`}>{cur(Number(item.amount))}</span>
+                  <button onClick={() => openEdit(item)} aria-label="Modifica voce" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color]"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color]"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
             )
@@ -277,17 +277,17 @@ export default function RecurringExpenses() {
             <>
               <p className="text-base font-semibold tracking-tight text-slate-400 mt-8 mb-3">Terminate</p>
               {expiredItems.map(item => (
-                <div key={item.id} className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5 flex items-center justify-between opacity-40">
-                  <div className="flex items-center gap-4">
-                    <div className="w-6" />
-                    <div>
-                      <p className="font-semibold text-slate-900 tracking-tight line-through">{item.name}</p>
-                      <p className="text-xs text-slate-500">Fino al {fmtDate(item.end_date!)}</p>
+                <div key={item.id} className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-5 flex items-center justify-between gap-2 sm:gap-3 opacity-40">
+                  <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+                    <div className="w-6 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900 tracking-tight line-through break-words">{item.name}</p>
+                      <p className="text-xs text-slate-500 break-words">Fino al {fmtDate(item.end_date!)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl font-bold text-slate-400 tracking-tight tabular-nums">{cur(Number(item.amount))}</span>
-                    <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color]"><Trash2 className="w-4 h-4" /></button>
+                  <div className="flex items-center gap-0.5 sm:gap-3 shrink-0">
+                    <span className="text-lg sm:text-xl font-bold text-slate-400 tracking-tight tabular-nums">{cur(Number(item.amount))}</span>
+                    <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color]"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               ))}
@@ -302,30 +302,30 @@ export default function RecurringExpenses() {
             <button
               onClick={() => setForm({ ...form, type: 'expense', fund_to_id: '' })}
               aria-pressed={form.type === 'expense'}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium active:scale-[0.98] transition-[transform,background-color] ${form.type === 'expense' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium active:scale-[0.98] transition-[transform,background-color] ${form.type === 'expense' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
             >
               Spesa
             </button>
             <button
               onClick={() => setForm({ ...form, type: 'transfer', category: 'trasferimento' })}
               aria-pressed={form.type === 'transfer'}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium active:scale-[0.98] transition-[transform,background-color] flex items-center justify-center gap-1.5 ${form.type === 'transfer' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium active:scale-[0.98] transition-[transform,background-color] flex items-center justify-center gap-1.5 ${form.type === 'transfer' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
             >
               <ArrowRightLeft className="w-3.5 h-3.5" aria-hidden="true" /> Trasferimento
             </button>
           </div>
           <div>
             <label htmlFor="rec-name" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input id="rec-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder={form.type === 'transfer' ? 'es. Risparmio mensile...' : 'es. Affitto, Netflix...'} />
+            <input id="rec-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder={form.type === 'transfer' ? 'es. Risparmio mensile...' : 'es. Affitto, Netflix...'} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label htmlFor="rec-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput id="rec-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput id="rec-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
-            <div>
+            <div className="min-w-0">
               <label htmlFor="rec-frequency" className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
-              <select id="rec-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' | 'yearly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <select id="rec-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' | 'yearly' })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                 <option value="monthly">Mensile</option>
                 <option value="weekly">Settimanale</option>
                 <option value="yearly">Annuale</option>
@@ -335,13 +335,13 @@ export default function RecurringExpenses() {
           {form.frequency === 'monthly' && (
             <div>
               <label htmlFor="rec-day-month" className="block text-sm font-medium text-slate-700 mb-1">Giorno del mese</label>
-              <input id="rec-day-month" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="rec-day-month" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           )}
           {form.frequency === 'weekly' && (
             <div>
               <label htmlFor="rec-day-week" className="block text-sm font-medium text-slate-700 mb-1">Giorno della settimana</label>
-              <select id="rec-day-week" value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <select id="rec-day-week" value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                 {DAYS_OF_WEEK.map((d, i) => <option key={i} value={i}>{d}</option>)}
               </select>
               <p className="text-xs text-slate-500 mt-1">La spesa verrà conteggiata ogni {DAYS_OF_WEEK[form.day_of_week]} (~{form.amount > 0 ? (form.amount * 4.33).toFixed(2) : 0}€/mese stimato).</p>
@@ -349,15 +349,15 @@ export default function RecurringExpenses() {
           )}
           {form.frequency === 'yearly' && (
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="min-w-0">
                 <label htmlFor="rec-month" className="block text-sm font-medium text-slate-700 mb-1">Mese</label>
-                <select id="rec-month" value={form.month_of_year} onChange={e => setForm({ ...form, month_of_year: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="rec-month" value={form.month_of_year} onChange={e => setForm({ ...form, month_of_year: parseInt(e.target.value) })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                   {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                 </select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <label htmlFor="rec-year-day" className="block text-sm font-medium text-slate-700 mb-1">Giorno</label>
-                <input id="rec-year-day" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+                <input id="rec-year-day" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               </div>
               <p className="col-span-2 text-xs text-slate-500">La spesa verrà conteggiata ogni {form.day_of_month} {MONTHS[form.month_of_year - 1]} (~{form.amount > 0 ? (form.amount / 12).toFixed(2) : 0}€/mese stimato).</p>
             </div>
@@ -367,13 +367,13 @@ export default function RecurringExpenses() {
             <>
               <div>
                 <label htmlFor="rec-category" className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
-                <select id="rec-category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
+                <select id="rec-category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
                   {EXPENSE_CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{catLabel(c)}</option>)}
                 </select>
               </div>
               <div>
                 <label htmlFor="rec-fund" className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
-                <select id="rec-fund" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="rec-fund" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                   <option value="">Scegli al momento del pagamento</option>
                   {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
@@ -382,17 +382,17 @@ export default function RecurringExpenses() {
           )}
 
           {form.type === 'transfer' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="min-w-0">
                 <label htmlFor="rec-from" className="block text-sm font-medium text-slate-700 mb-1">Da</label>
-                <select id="rec-from" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="rec-from" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                   <option value="">Seleziona...</option>
                   {funds.filter(f => f.id !== form.fund_to_id).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <label htmlFor="rec-to" className="block text-sm font-medium text-slate-700 mb-1">A</label>
-                <select id="rec-to" value={form.fund_to_id} onChange={e => setForm({ ...form, fund_to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="rec-to" value={form.fund_to_id} onChange={e => setForm({ ...form, fund_to_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                   <option value="">Seleziona...</option>
                   {funds.filter(f => f.id !== form.fund_id).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
@@ -406,11 +406,11 @@ export default function RecurringExpenses() {
               <button
                 onClick={() => setForm({ ...form, auto_deduct: false })}
                 aria-pressed={!form.auto_deduct}
-                className={`p-3 rounded-lg border text-left active:scale-[0.98] transition-[transform,background-color] ${!form.auto_deduct ? 'border-amber-500 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                className={`min-w-0 p-3 rounded-lg border text-left active:scale-[0.98] transition-[transform,background-color] ${!form.auto_deduct ? 'border-amber-500 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'}`}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <Hand className={`w-4 h-4 ${!form.auto_deduct ? 'text-amber-600' : 'text-slate-400'}`} aria-hidden="true" />
-                  <span className={`text-sm font-medium ${!form.auto_deduct ? 'text-amber-700' : 'text-slate-600'}`}>Da confermare</span>
+                <div className="flex items-center gap-2 mb-1 min-w-0">
+                  <Hand className={`w-4 h-4 shrink-0 ${!form.auto_deduct ? 'text-amber-600' : 'text-slate-400'}`} aria-hidden="true" />
+                  <span className={`text-sm font-medium break-words ${!form.auto_deduct ? 'text-amber-700' : 'text-slate-600'}`}>Da confermare</span>
                 </div>
                 <p className="text-xs text-slate-500">Compare nella dashboard, da confermare manualmente</p>
               </button>
@@ -418,12 +418,12 @@ export default function RecurringExpenses() {
                 onClick={() => setForm({ ...form, auto_deduct: true })}
                 disabled={!form.fund_id && form.type !== 'transfer'}
                 aria-pressed={form.auto_deduct}
-                className={`p-3 rounded-lg border text-left active:scale-[0.98] transition-[transform,background-color] disabled:opacity-50 disabled:cursor-not-allowed ${form.auto_deduct ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                className={`min-w-0 p-3 rounded-lg border text-left active:scale-[0.98] transition-[transform,background-color] disabled:opacity-50 disabled:cursor-not-allowed ${form.auto_deduct ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}
                 title={!form.fund_id && form.type !== 'transfer' ? 'Seleziona un fondo per abilitare' : ''}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <Zap className={`w-4 h-4 ${form.auto_deduct ? 'text-emerald-600' : 'text-slate-400'}`} aria-hidden="true" />
-                  <span className={`text-sm font-medium ${form.auto_deduct ? 'text-emerald-700' : 'text-slate-600'}`}>Automatica</span>
+                <div className="flex items-center gap-2 mb-1 min-w-0">
+                  <Zap className={`w-4 h-4 shrink-0 ${form.auto_deduct ? 'text-emerald-600' : 'text-slate-400'}`} aria-hidden="true" />
+                  <span className={`text-sm font-medium break-words ${form.auto_deduct ? 'text-emerald-700' : 'text-slate-600'}`}>Automatica</span>
                 </div>
                 <p className="text-xs text-slate-500">Scalata automaticamente dal fondo nel giorno previsto</p>
               </button>
@@ -436,16 +436,16 @@ export default function RecurringExpenses() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="rec-start" className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
-              <input id="rec-start" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="rec-start" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.start_date && (
-                <button onClick={() => setForm({ ...form, start_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
+                <button onClick={() => setForm({ ...form, start_date: '' })} className="inline-flex items-center min-h-[40px] text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
               )}
             </div>
             <div>
               <label htmlFor="rec-end" className="block text-sm font-medium text-slate-700 mb-1">Data fine (opzionale)</label>
-              <input id="rec-end" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="rec-end" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.end_date && (
-                <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
+                <button onClick={() => setForm({ ...form, end_date: '' })} className="inline-flex items-center min-h-[40px] text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
               )}
             </div>
           </div>

@@ -14,10 +14,10 @@ export default function SchemaBanner({ missingColumns, onDismiss }: Props) {
     <div className="mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4">
       <div className="flex items-start gap-3">
         <AlertTriangle aria-hidden="true" className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <p className="font-semibold text-amber-800 mb-1">API Supabase non riconosce le colonne</p>
           <p className="text-sm text-amber-700 mb-2">
-            L'API REST non trova: <span className="font-mono text-xs">{missingColumns.join(', ')}</span>.
+            L'API REST non trova: <span className="font-mono text-xs break-words">{missingColumns.join(', ')}</span>.
           </p>
           <p className="text-sm text-amber-700 mb-2">
             <strong>Se le colonne esistono già</strong> nel database (verifica con la query in fondo), il problema è la <strong>cache dello schema PostgREST</strong>. Su Supabase: <strong>Settings → API → Reload schema cache</strong>. Oppure esegui questa SQL nell'SQL Editor:
@@ -43,7 +43,7 @@ alter table recurring_expenses add column if not exists end_date date;
 NOTIFY pgrst, 'reload schema';`}</pre>
           </details>
         </div>
-        <button onClick={() => { setOpen(false); onDismiss?.() }} aria-label="Chiudi avviso" className="p-1.5 rounded-lg hover:bg-amber-100 text-amber-600 transition-colors active:scale-90">
+        <button onClick={() => { setOpen(false); onDismiss?.() }} aria-label="Chiudi avviso" className="shrink-0 inline-flex items-center justify-center w-10 h-10 -m-1.5 rounded-lg hover:bg-amber-100 text-amber-600 transition-colors active:scale-90">
           <X aria-hidden="true" className="w-4 h-4" />
         </button>
       </div>

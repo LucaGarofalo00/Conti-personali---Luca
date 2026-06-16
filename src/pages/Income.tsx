@@ -126,19 +126,19 @@ export default function Income() {
 
   return (
     <div>
-      <div className="flex items-end justify-between gap-3 mb-6">
-        <div className="rounded-2xl bg-emerald-50 border border-emerald-100 px-5 py-4">
-          <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+        <div className="rounded-2xl bg-emerald-50 border border-emerald-100 px-4 py-4 sm:px-5 min-w-0 flex-1 sm:flex-initial">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
               <ArrowDownToLine className="w-5 h-5" aria-hidden="true" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-emerald-700/80">Totale entrate ricorrenti del periodo ({currentPeriodLabel()})</p>
-              <p className="text-2xl font-bold tracking-tight tabular-nums text-emerald-700 mt-0.5">{cur(totalMonthly)}</p>
+              <p className="text-2xl font-bold tracking-tight tabular-nums text-emerald-700 mt-0.5 break-words">{cur(totalMonthly)}</p>
             </div>
           </div>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium shrink-0">
+        <button onClick={openAdd} className="flex items-center justify-center gap-2 min-h-[40px] px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium shrink-0">
           <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi
         </button>
       </div>
@@ -164,9 +164,9 @@ export default function Income() {
             const fundName = funds.find(f => f.id === item.fund_id)?.name
             const isExpired = !!item.end_date && item.end_date < today
             return (
-              <div key={item.id} className={`bg-white rounded-2xl border border-slate-200/70 border-l-4 border-l-emerald-400 shadow-sm p-5 flex items-center justify-between gap-3 hover:shadow-md hover:border-slate-300/60 transition-shadow ${!item.is_active || isExpired ? 'opacity-50' : ''}`}>
-                <div className="flex items-center gap-4 min-w-0">
-                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva entrata' : 'Attiva entrata'} aria-pressed={item.is_active} className="text-slate-400 hover:text-blue-600 active:scale-90 transition-[transform,color] shrink-0">
+              <div key={item.id} className={`bg-white rounded-2xl border border-slate-200/70 border-l-4 border-l-emerald-400 shadow-sm p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:shadow-md hover:border-slate-300/60 transition-shadow ${!item.is_active || isExpired ? 'opacity-50' : ''}`}>
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva entrata' : 'Attiva entrata'} aria-pressed={item.is_active} className="inline-flex items-center justify-center w-10 h-10 -m-1.5 text-slate-400 hover:text-blue-600 active:scale-90 transition-[transform,color] shrink-0">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-emerald-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
@@ -187,13 +187,13 @@ export default function Income() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
-                    <span className="text-2xl font-bold text-emerald-600 tracking-tight tabular-nums">{cur(Number(item.amount))}</span>
+                <div className="flex items-center justify-end gap-2 sm:gap-3 shrink-0">
+                  <div className="text-right min-w-0">
+                    <span className="text-2xl font-bold text-emerald-600 tracking-tight tabular-nums break-words">{cur(Number(item.amount))}</span>
                     <p className="text-xs text-slate-500">{item.frequency === 'monthly' ? '/mese' : '/settimana'}</p>
                   </div>
-                  <button onClick={() => openEdit(item)} aria-label="Modifica entrata" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => remove(item.id)} aria-label="Elimina entrata" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => openEdit(item)} aria-label="Modifica entrata" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color] shrink-0"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(item.id)} aria-label="Elimina entrata" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color] shrink-0"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
             )
@@ -210,11 +210,11 @@ export default function Income() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="inc-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput id="inc-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput id="inc-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
             <div>
               <label htmlFor="inc-frequency" className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
-              <select id="inc-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <select id="inc-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                 <option value="monthly">Mensile</option>
                 <option value="weekly">Settimanale</option>
               </select>
@@ -226,16 +226,16 @@ export default function Income() {
               <input id="inc-day-month" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="inc-day-week" className="block text-sm font-medium text-slate-700 mb-1">Giorno della settimana</label>
-                <select id="inc-day-week" value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="inc-day-week" value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
                   {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
                 </select>
               </div>
               <div>
                 <label htmlFor="inc-delay" className="block text-sm font-medium text-slate-700 mb-1">Ritardo pagamento (gg)</label>
-                <input id="inc-delay" type="number" min={0} value={form.delay_days} onChange={e => setForm({ ...form, delay_days: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+                <input id="inc-delay" type="number" min={0} value={form.delay_days} onChange={e => setForm({ ...form, delay_days: parseInt(e.target.value) || 0 })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               </div>
             </div>
           )}
@@ -250,19 +250,19 @@ export default function Income() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="inc-start" className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
               <input id="inc-start" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.start_date && (
-                <button onClick={() => setForm({ ...form, start_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi</button>
+                <button onClick={() => setForm({ ...form, start_date: '' })} className="inline-flex items-center min-h-[40px] text-xs text-blue-600 hover:text-blue-700">Rimuovi</button>
               )}
             </div>
             <div>
               <label htmlFor="inc-end" className="block text-sm font-medium text-slate-700 mb-1">Data fine (opzionale)</label>
               <input id="inc-end" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.end_date && (
-                <button onClick={() => setForm({ ...form, end_date: '' })} className="text-xs text-blue-600 mt-1 hover:text-blue-700">Rimuovi</button>
+                <button onClick={() => setForm({ ...form, end_date: '' })} className="inline-flex items-center min-h-[40px] text-xs text-blue-600 hover:text-blue-700">Rimuovi</button>
               )}
             </div>
           </div>

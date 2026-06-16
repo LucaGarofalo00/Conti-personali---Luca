@@ -35,10 +35,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50/40">
+    <div className="flex h-dvh bg-gradient-to-br from-slate-50 via-white to-violet-50/40">
       {open && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden animate-[fadeIn_0.2s_ease-out]" onClick={() => setOpen(false)} />}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-white via-white to-indigo-50/50 backdrop-blur-xl border-r border-slate-200/70 transform transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-[min(17rem,82vw)] pt-safe pb-safe pl-safe bg-gradient-to-b from-white via-white to-indigo-50/50 backdrop-blur-xl border-r border-slate-200/70 transform transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between px-5 pt-6 pb-5">
             <div className="flex items-center gap-3">
@@ -48,7 +48,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <p className="text-[11px] text-slate-400 font-medium">Finanze personali</p>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Chiudi menu" className="lg:hidden p-1.5 -mr-1 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors active:scale-90">
+            <button onClick={() => setOpen(false)} aria-label="Chiudi menu" className="lg:hidden -mr-1.5 inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors active:scale-90">
               <X aria-hidden="true" className="w-5 h-5" />
             </button>
           </div>
@@ -85,27 +85,27 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="sticky top-0 bg-white/75 backdrop-blur-xl z-30 shrink-0 border-b border-slate-200/70">
-          <div className="flex items-center gap-3 px-4 py-3.5 lg:px-8">
-            <button onClick={() => setOpen(true)} aria-label="Apri menu" className="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-slate-100 transition-colors active:scale-90">
+        <header className="sticky top-0 bg-white/75 backdrop-blur-xl z-30 shrink-0 border-b border-slate-200/70 pt-safe pl-safe pr-safe">
+          <div className="flex items-center gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3.5 lg:px-8">
+            <button onClick={() => setOpen(true)} aria-label="Apri menu" className="lg:hidden -ml-1 inline-flex items-center justify-center w-10 h-10 shrink-0 rounded-lg hover:bg-slate-100 transition-colors active:scale-90">
               <Menu aria-hidden="true" className="w-5 h-5 text-slate-600" />
             </button>
-            <Logo className="w-7 h-7 lg:hidden" />
-            <h2 className="font-bold text-slate-900 text-lg sm:text-xl tracking-tight">{pageTitle}</h2>
+            <Logo className="w-7 h-7 shrink-0 lg:hidden" />
+            <h2 className="min-w-0 truncate font-bold text-slate-900 text-lg sm:text-xl tracking-tight">{pageTitle}</h2>
             <button
               onClick={toggleAmountsHidden}
               aria-label={amountsHidden ? 'Mostra gli importi' : 'Nascondi gli importi'}
               aria-pressed={amountsHidden}
               title={amountsHidden ? 'Mostra gli importi' : 'Nascondi gli importi'}
-              className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 transition-colors active:scale-95 shadow-xs"
+              className="ml-auto shrink-0 inline-flex items-center justify-center gap-2 h-10 w-10 sm:w-auto sm:px-3 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 transition-colors active:scale-95 shadow-xs"
             >
               {amountsHidden ? <EyeOff aria-hidden="true" className="w-[18px] h-[18px]" /> : <Eye aria-hidden="true" className="w-[18px] h-[18px]" />}
               <span className="hidden sm:inline text-[13px] font-medium">{amountsHidden ? 'Mostra' : 'Nascondi'}</span>
             </button>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-          <div className="mx-auto w-full max-w-[1400px]">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto w-full max-w-[1400px] pb-[env(safe-area-inset-bottom)]">
             {children}
           </div>
         </main>

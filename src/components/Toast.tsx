@@ -37,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={ctx}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] space-y-2 max-w-sm" role="status" aria-live="polite" aria-atomic="false">
+      <div className="fixed inset-x-0 bottom-0 z-[100] space-y-2 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:px-0 sm:pb-4 sm:max-w-sm" role="status" aria-live="polite" aria-atomic="false">
         {toasts.map(t => (
           <div
             key={t.id}
@@ -49,8 +49,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             }`}
           >
             {t.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" /> : <XCircle className="w-4 h-4 shrink-0" />}
-            <span className="flex-1">{t.message}</span>
-            <button onClick={() => remove(t.id)} aria-label="Chiudi notifica" className="p-0.5 hover:opacity-75">
+            <span className="flex-1 min-w-0 break-words">{t.message}</span>
+            <button onClick={() => remove(t.id)} aria-label="Chiudi notifica" className="-mr-2 -my-1 inline-flex items-center justify-center w-10 h-10 shrink-0 hover:opacity-75">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>

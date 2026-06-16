@@ -274,7 +274,7 @@ export default function Forecast() {
               value={targetDate}
               min={toDateString(new Date())}
               onChange={e => setTargetDate(e.target.value)}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+              className="min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
             />
             <span className="text-xs text-slate-500 whitespace-nowrap">({daysToTarget} giorni)</span>
           </div>
@@ -307,7 +307,7 @@ export default function Forecast() {
           </>) })} />
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-6 mb-8">
+      <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-6 mb-6 sm:mb-8">
         <h3 className="text-lg font-semibold tracking-tight text-slate-900 mb-4">Proiezione Saldo</h3>
         {chartData.length > 1 ? (
           <ResponsiveContainer width="100%" height={350}>
@@ -335,7 +335,85 @@ export default function Forecast() {
           <h3 className="text-lg font-semibold tracking-tight text-slate-900">Riepilogo per Periodo</h3>
           <p className="text-xs text-slate-500 mt-1">Clicca su una riga per vedere quali entrate e uscite la compongono.</p>
         </div>
-        <div className="overflow-x-auto">
+        {/* Lista a card verticale: solo su mobile (< sm). Stessa logica di toggle/espansione della tabella. */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {monthlyData.map(row => {
+            const isOpen = expandedPeriods.has(row.month)
+            // Riusa la stessa fine-effettiva già calcolata per la riga, invece di ricalcolarla
+            // con una variabile diversa (evita divergenze sul giorno di confine).
+            const effectiveEnd = row.effectiveEnd
+            const breakdown = isOpen ? [
+              ...getPeriodBreakdown({
+                startDate: row.startDate,
+                endDate: effectiveEnd,
+                recurringExpenses: expenses,
+                recurringIncome: income,
+                weeklyBudgets: budgets,
+                planned,
+                excludedFundIds,
+                fromToday: true,
+                actualTx, excludeRealized: true,
+              }),
+              ...buildActualItems(actualTx, excludedFundIds, row.startDate, effectiveEnd),
+            ].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0) : []
+            return (
+              <div key={row.month}>
+                <button
+                  type="button"
+                  className="w-full flex items-start gap-2 px-4 py-3 text-left hover:bg-slate-50 transition-colors min-h-[40px]"
+                  onClick={() => toggleExpand(row.month)}
+                  aria-expanded={isOpen}
+                >
+                  <span className="text-slate-400 shrink-0 mt-0.5">
+                    {isOpen ? <ChevronDown className="w-4 h-4" aria-hidden="true" /> : <ChevronRight className="w-4 h-4" aria-hidden="true" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-slate-700 break-words">{row.label}</p>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <dt className="text-slate-500 shrink-0">Entrate</dt>
+                        <dd className="text-emerald-600 tabular-nums text-right min-w-0 truncate">{cur(row.income)}</dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <dt className="text-slate-500 shrink-0">Uscite</dt>
+                        <dd className="text-red-500 tabular-nums text-right min-w-0 truncate">{cur(row.expenses)}</dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <dt className="text-slate-500 shrink-0">Netto</dt>
+                        <dd className={`tabular-nums text-right min-w-0 truncate font-medium ${row.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{cur(row.net)}</dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <dt className="text-slate-500 shrink-0">Minimo</dt>
+                        <dd className={`tabular-nums text-right min-w-0 truncate ${row.minBalance < 0 ? 'text-red-600 font-semibold' : 'text-amber-600'}`}>{cur(row.minBalance)}</dd>
+                      </div>
+                      <div className="col-span-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-1.5">
+                        <dt className="text-slate-500 shrink-0">Saldo a fine periodo</dt>
+                        <dd className={`tabular-nums text-right min-w-0 truncate font-semibold tracking-tight ${row.endBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{cur(row.endBalance)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </button>
+                {isOpen && (
+                  <div className="px-4 pb-4 bg-slate-50/50">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="bg-white rounded-lg border border-emerald-100 p-3">
+                        <p className="text-xs font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Entrate previste</p>
+                        <BreakdownList items={breakdown} kind="income" emptyText="Nessuna entrata in questo periodo" compact />
+                      </div>
+                      <div className="bg-white rounded-lg border border-red-100 p-3">
+                        <p className="text-xs font-semibold text-red-700 mb-2 uppercase tracking-wide">Uscite previste</p>
+                        <BreakdownList items={breakdown} kind="expense" emptyText="Nessuna uscita in questo periodo" compact />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Tabella completa: solo da sm in su. */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
@@ -409,9 +487,9 @@ export default function Forecast() {
       </div>
 
       {minPoint.balance < 0 && (
-        <div className="mt-6 p-5 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
+        <div className="mt-6 p-4 sm:p-5 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" aria-hidden="true" />
-          <div>
+          <div className="min-w-0">
             <p className="font-semibold tracking-tight text-red-700">Attenzione: saldo negativo previsto</p>
             <p className="text-sm text-red-600 mt-1">Il saldo potrebbe scendere a {cur(minPoint.balance)} intorno al {minPoint.label}. Considera di ridurre le spese o aumentare le entrate.</p>
           </div>

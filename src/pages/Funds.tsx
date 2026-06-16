@@ -128,14 +128,13 @@ export default function Funds() {
         <p><strong>Trasferisci</strong>: sposta denaro da un fondo a un altro. Crea una transazione di tipo trasferimento.</p>
         <p>Nel filtro globale puoi <strong>escludere</strong> fondi dalle previsioni e dalle stime mensili (utile per simulare scenari "se non avessi accesso ai risparmi").</p>
       </InfoBox>
-      <div className="flex items-center justify-between mb-6">
-        <span />
-        <div className="flex gap-2">
-          <button onClick={() => { setTransfer(emptyTransfer); setShowTransfer(true) }} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium">
-            <ArrowLeftRight className="w-4 h-4" aria-hidden="true" /> Trasferisci
+      <div className="flex items-center justify-end mb-6">
+        <div className="flex flex-wrap gap-2 justify-end">
+          <button onClick={() => { setTransfer(emptyTransfer); setShowTransfer(true) }} className="flex items-center justify-center gap-2 min-h-[40px] px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium">
+            <ArrowLeftRight className="w-4 h-4 shrink-0" aria-hidden="true" /> Trasferisci
           </button>
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium">
-            <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi
+          <button onClick={openAdd} className="flex items-center justify-center gap-2 min-h-[40px] px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-[13px] font-medium">
+            <Plus className="w-4 h-4 shrink-0" aria-hidden="true" /> Aggiungi
           </button>
         </div>
       </div>
@@ -157,37 +156,37 @@ export default function Funds() {
           const subs = subFunds.filter(s => s.parent_id === fund.id)
           return (
             <div key={fund.id} className="rounded-2xl border border-slate-200/70 shadow-sm p-5" style={{ background: `linear-gradient(135deg, ${fund.color}1A 0%, #ffffff 60%)` }}>
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm" style={{ backgroundColor: fund.color }}>
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm shrink-0" style={{ backgroundColor: fund.color }}>
                     <Icon className="w-5 h-5 text-white" aria-hidden="true" />
                   </div>
-                  <div>
-                    <p className="text-base font-semibold tracking-tight text-slate-900">{fund.name}</p>
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold tracking-tight text-slate-900 truncate">{fund.name}</p>
                     <p className="text-xs text-slate-400">Fondo principale</p>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => openEdit(fund)} aria-label="Modifica fondo" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => remove(fund.id)} aria-label="Elimina fondo" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-4 h-4" /></button>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => openEdit(fund)} aria-label="Modifica fondo" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => remove(fund.id)} aria-label="Elimina fondo" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900 mb-1 tracking-tight tabular-nums">{cur(Number(fund.balance))}</p>
+              <p className="text-3xl font-bold text-slate-900 mb-1 tracking-tight tabular-nums break-words">{cur(Number(fund.balance))}</p>
 
               {subs.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                   {subs.map(sub => (
-                    <div key={sub.id} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600 flex items-center gap-2">
+                    <div key={sub.id} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-slate-600 flex items-center gap-2 min-w-0">
                         <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: sub.color + '1F' }}>
                           <PiggyBank className="w-3.5 h-3.5" style={{ color: sub.color }} aria-hidden="true" />
                         </span>
-                        {sub.name}
+                        <span className="truncate">{sub.name}</span>
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 shrink-0">
                         <span className="text-[15px] font-semibold text-slate-800 tabular-nums">{cur(Number(sub.balance))}</span>
-                        <button onClick={() => openEdit(sub)} aria-label="Modifica salvadanaio" className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-3 h-3" /></button>
-                        <button onClick={() => remove(sub.id)} aria-label="Elimina salvadanaio" className="p-1 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-3 h-3" /></button>
+                        <button onClick={() => openEdit(sub)} aria-label="Modifica salvadanaio" className="inline-flex items-center justify-center w-10 h-10 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => remove(sub.id)} aria-label="Elimina salvadanaio" className="inline-flex items-center justify-center w-10 h-10 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                   ))}

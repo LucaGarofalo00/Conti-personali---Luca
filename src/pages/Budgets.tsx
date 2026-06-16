@@ -154,9 +154,9 @@ export default function Budgets() {
 
   return (
     <div>
-      <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 shadow-sm p-5">
+      <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 shadow-sm p-4 sm:p-5">
         <p className="text-sm font-medium text-red-600/80">Totale budget del periodo ({currentPeriodLabel()})</p>
-        <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums">{cur(totalMonthlyAll)}</p>
+        <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums break-words">{cur(totalMonthlyAll)}</p>
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="blue">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
@@ -168,14 +168,14 @@ export default function Budgets() {
       </InfoBox>
 
       <div className="mt-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
+          <div className="flex items-center gap-2.5 min-w-0">
             <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 text-blue-600 shrink-0" aria-hidden="true">
               <ShoppingBag className="w-5 h-5" />
             </span>
             <h3 className="text-lg font-semibold text-slate-900 tracking-tight">Budget Settimanali</h3>
           </div>
-          <button onClick={() => { setEditingBudget(null); setBudgetForm({ name: '', amount: 0, fund_id: '' }); setShowBudgetModal(true) }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium">
+          <button onClick={() => { setEditingBudget(null); setBudgetForm({ name: '', amount: 0, fund_id: '' }); setShowBudgetModal(true) }} className="flex items-center justify-center gap-2 px-3 min-h-[40px] sm:min-h-0 sm:py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium shrink-0">
             <Plus className="w-4 h-4" aria-hidden="true" /> Nuovo Budget
           </button>
         </div>
@@ -200,28 +200,28 @@ export default function Budgets() {
               const fundName = funds.find(f => f.id === b.fund_id)?.name
 
               return (
-                <div key={b.id} className={`bg-white rounded-2xl border shadow-sm transition-shadow ${overBudget ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200/70'} p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => toggleBudget(b)} aria-label={b.is_active ? 'Disattiva budget' : 'Attiva budget'} aria-pressed={b.is_active} className="transition-transform active:scale-90">{b.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
+                <div key={b.id} className={`bg-white rounded-2xl border shadow-sm transition-shadow ${overBudget ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200/70'} p-4 sm:p-5 ${!b.is_active ? 'opacity-50' : ''}`}>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                      <button onClick={() => toggleBudget(b)} aria-label={b.is_active ? 'Disattiva budget' : 'Attiva budget'} aria-pressed={b.is_active} className="inline-flex items-center justify-center w-10 h-10 shrink-0 transition-transform active:scale-90">{b.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-slate-400" />}</button>
                       <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 text-blue-600 shrink-0" aria-hidden="true">
                         <ShoppingBag className="w-5 h-5" />
                       </span>
-                      <div>
-                        <p className="text-base font-semibold text-slate-900 tracking-tight">{b.name}</p>
-                        <p className="text-xs text-slate-500">{cur(limit)}/settimana{fundName ? ` · ${fundName}` : ''}</p>
+                      <div className="min-w-0">
+                        <p className="text-base font-semibold text-slate-900 tracking-tight truncate">{b.name}</p>
+                        <p className="text-xs text-slate-500 truncate">{cur(limit)}/settimana{fundName ? ` · ${fundName}` : ''}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => { setEditingBudget(b); setBudgetForm({ name: b.name, amount: limit, fund_id: b.fund_id || '' }); setShowBudgetModal(true) }} aria-label="Modifica budget" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-[transform,background-color] active:scale-90"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => removeBudget(b.id)} aria-label="Elimina budget" className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-4 h-4" /></button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => { setEditingBudget(b); setBudgetForm({ name: b.name, amount: limit, fund_id: b.fund_id || '' }); setShowBudgetModal(true) }} aria-label="Modifica budget" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 transition-[transform,background-color] active:scale-90"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => removeBudget(b.id)} aria-label="Elimina budget" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
 
                   <div className="mb-2">
-                    <div className="flex items-end justify-between gap-3 mb-2">
-                      <span className="text-sm text-slate-500">Speso questa settimana: <span className="block text-xl font-bold text-slate-900 tracking-tight tabular-nums">{cur(spentThisWeek)}</span> <span className="text-xs text-slate-400">/ {cur(effective)}</span></span>
-                      <span className={`text-xl font-bold tracking-tight tabular-nums text-right ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
+                    <div className="flex items-end justify-between gap-2 sm:gap-3 mb-2">
+                      <span className="text-sm text-slate-500 min-w-0">Speso questa settimana: <span className="block text-xl font-bold text-slate-900 tracking-tight tabular-nums break-words">{cur(spentThisWeek)}</span> <span className="text-xs text-slate-400">/ {cur(effective)}</span></span>
+                      <span className={`text-base sm:text-xl font-bold tracking-tight tabular-nums text-right shrink-0 ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
                         {overBudget ? `Sforato di ${cur(Math.abs(remaining))}` : `Rimangono ${cur(remaining)}`}
                       </span>
                     </div>
@@ -243,7 +243,7 @@ export default function Budgets() {
                     <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                       <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Spese questa settimana</p>
                       {txsThisWeekObjs.map(tx => (
-                        <div key={tx.id} className="flex items-center justify-between text-sm">
+                        <div key={tx.id} className="flex items-center justify-between gap-2 text-sm">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-red-100 text-red-600 shrink-0" aria-hidden="true">
                               <Receipt className="w-4 h-4" />
@@ -251,9 +251,9 @@ export default function Budgets() {
                             <span className="text-slate-600 truncate">{tx.description}</span>
                             <span className="text-xs text-slate-500 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-1 shrink-0">
                             <span className="font-medium text-red-500 tracking-tight tabular-nums">-{cur(Number(tx.amount))}</span>
-                            <button onClick={() => removeTx(tx)} aria-label="Elimina spesa" className="p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => removeTx(tx)} aria-label="Elimina spesa" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
                       ))}
@@ -279,11 +279,11 @@ export default function Budgets() {
                           const range = `${format(week.weekStart, 'd')}–${format(addDays(week.weekStart, 6), 'd MMM', { locale: it })}`
                           return (
                             <div key={key} className="rounded-lg border border-slate-100">
-                              <button onClick={() => toggleWeek(key)} aria-expanded={open} className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50 rounded-lg transition-colors">
+                              <button onClick={() => toggleWeek(key)} aria-expanded={open} className="w-full flex items-center justify-between gap-2 px-3 min-h-[40px] py-2 text-left hover:bg-slate-50 rounded-lg transition-colors">
                                 <span className="flex items-center gap-2 min-w-0">
                                   {open ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />}
-                                  <span className="text-sm text-slate-600">{range}</span>
-                                  <span className="text-xs text-slate-500 tabular-nums">{cur(week.spent)} / {cur(limit)}</span>
+                                  <span className="text-sm text-slate-600 truncate">{range}</span>
+                                  <span className="text-xs text-slate-500 tabular-nums shrink-0">{cur(week.spent)} / {cur(limit)}</span>
                                 </span>
                                 {week.over > 0 ? (
                                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700 shrink-0">Sforato {cur(week.over)}</span>
@@ -297,7 +297,7 @@ export default function Budgets() {
                                     <p className="text-xs text-slate-400 italic">Nessuna spesa in questa settimana</p>
                                   ) : (
                                     week.txs.map(tx => (
-                                      <div key={tx.id} className="flex items-center justify-between text-sm">
+                                      <div key={tx.id} className="flex items-center justify-between gap-2 text-sm">
                                         <span className="flex items-center gap-2.5 min-w-0">
                                           <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-red-100 text-red-600 shrink-0" aria-hidden="true">
                                             <Receipt className="w-3.5 h-3.5" />
@@ -328,15 +328,15 @@ export default function Budgets() {
         <div className="space-y-4">
           <div>
             <label htmlFor="bud-name" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input id="bud-name" type="text" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Sfizi, Mangiare fuori..." />
+            <input id="bud-name" type="text" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Sfizi, Mangiare fuori..." />
           </div>
           <div>
             <label htmlFor="bud-amount" className="block text-sm font-medium text-slate-700 mb-1">Budget settimanale (€)</label>
-            <DecimalInput id="bud-amount" value={budgetForm.amount} onChange={n => setBudgetForm({ ...budgetForm, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <DecimalInput id="bud-amount" value={budgetForm.amount} onChange={n => setBudgetForm({ ...budgetForm, amount: n })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
           </div>
           <div>
             <label htmlFor="bud-fund" className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
-            <select id="bud-fund" value={budgetForm.fund_id} onChange={e => setBudgetForm({ ...budgetForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <select id="bud-fund" value={budgetForm.fund_id} onChange={e => setBudgetForm({ ...budgetForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Scegli al momento della spesa</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
@@ -351,21 +351,21 @@ export default function Budgets() {
         <div className="space-y-4">
           <div>
             <label htmlFor="bexp-desc" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input id="bexp-desc" type="text" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Pizza, Gelato..." />
+            <input id="bexp-desc" type="text" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Pizza, Gelato..." />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="min-w-0">
               <label htmlFor="bexp-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput id="bexp-amount" value={expForm.amount} onChange={n => setExpForm({ ...expForm, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput id="bexp-amount" value={expForm.amount} onChange={n => setExpForm({ ...expForm, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
-            <div>
+            <div className="min-w-0">
               <label htmlFor="bexp-date" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-              <input id="bexp-date" type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="bexp-date" type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
             <label htmlFor="bexp-fund" className="block text-sm font-medium text-slate-700 mb-1">Paga con</label>
-            <select id="bexp-fund" value={expForm.fund_id} onChange={e => setExpForm({ ...expForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <select id="bexp-fund" value={expForm.fund_id} onChange={e => setExpForm({ ...expForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
               <option value="">Nessun fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>

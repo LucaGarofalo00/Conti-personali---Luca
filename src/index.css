@@ -55,6 +55,12 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+/* Bottom-sheet: i modali salgono dal basso su mobile (feel nativo iOS/Android). */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ----------------------------------------------------------------------------
    Base
    ---------------------------------------------------------------------------- */
@@ -75,6 +81,36 @@ body {
   /* Cifre tabulari ovunque: in un'app finanziaria gli importi si allineano in colonna. */
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.006em;
+  /* Mobile: nessuno scroll orizzontale accidentale e nessun "rubber-band" elastico
+     che faccia sbucare lo sfondo ai bordi quando si scorre dentro l'app. */
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  /* Niente flash grigio al tap su Android/iOS: il feedback è gestito da active:scale-*. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ----------------------------------------------------------------------------
+   Mobile foundation
+   ---------------------------------------------------------------------------- */
+/* Su schermi piccoli i campi devono avere ≥16px: sotto questa soglia iOS Safari
+   zooma automaticamente al focus, spostando il layout. Selettore di elemento
+   (specificità bassa): qualsiasi utility .text-* esplicita lo sovrascrive. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Helper safe-area: rispettano notch e home-indicator su iPhone/Android moderni
+   (richiede viewport-fit=cover, già impostato nell'index.html). max(...) garantisce
+   un padding minimo anche dove l'inset di sistema è 0. */
+@supports (padding: max(0px)) {
+  .pt-safe { padding-top: max(env(safe-area-inset-top), 0px); }
+  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+  .pl-safe { padding-left: max(env(safe-area-inset-left), 0px); }
+  .pr-safe { padding-right: max(env(safe-area-inset-right), 0px); }
 }
 
 /* Controlli nativi (date picker, checkbox, range) col colore del brand */

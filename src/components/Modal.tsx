@@ -68,16 +68,20 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]" onClick={onClose} />
-      <div ref={panelRef} tabIndex={-1} className="relative bg-white rounded-2xl shadow-2xl ring-1 ring-slate-900/5 w-full max-w-md max-h-[90vh] overflow-y-auto animate-[scaleIn_0.22s_cubic-bezier(0.16,1,0.3,1)] outline-none">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 id={titleId} className="text-[15px] font-semibold tracking-tight text-slate-800">{title}</h3>
-          <button onClick={onClose} aria-label="Chiudi" className="p-1.5 -mr-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors active:scale-90">
+      {/* Bottom-sheet su mobile (sale dal basso, angoli alti arrotondati), card centrata da sm in su.
+          Colonna flex: header fisso, corpo scrollabile → su schermi bassi la testata resta sempre visibile. */}
+      <div ref={panelRef} tabIndex={-1} className="relative flex flex-col w-full max-h-[92dvh] bg-white rounded-t-2xl shadow-2xl ring-1 ring-slate-900/5 overflow-hidden outline-none animate-[slideUp_0.28s_cubic-bezier(0.16,1,0.3,1)] sm:max-w-md sm:max-h-[90vh] sm:rounded-2xl sm:animate-[scaleIn_0.22s_cubic-bezier(0.16,1,0.3,1)]">
+        {/* Maniglia di trascinamento: affordance "sheet" nativo, solo su mobile. */}
+        <div aria-hidden="true" className="sm:hidden mx-auto mt-2.5 mb-0.5 h-1.5 w-10 shrink-0 rounded-full bg-slate-300" />
+        <div className="flex items-center justify-between gap-2 px-5 py-3.5 sm:py-4 border-b border-slate-100 shrink-0">
+          <h3 id={titleId} className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-slate-800">{title}</h3>
+          <button onClick={onClose} aria-label="Chiudi" className="-mr-1.5 inline-flex items-center justify-center w-10 h-10 shrink-0 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors active:scale-90">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-5 overflow-x-hidden">{children}</div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">{children}</div>
       </div>
     </div>
   )

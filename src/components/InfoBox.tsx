@@ -29,7 +29,7 @@ export default function InfoBox({ title, children, variant = 'default', defaultO
     return (
       <div className="text-xs text-slate-500 flex items-start gap-1.5">
         <HelpCircle aria-hidden="true" className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${t.icon}`} />
-        <div className="flex-1">{children}</div>
+        <div className="flex-1 min-w-0 break-words">{children}</div>
       </div>
     )
   }
@@ -40,16 +40,16 @@ export default function InfoBox({ title, children, variant = 'default', defaultO
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-left rounded-lg"
+        className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 min-h-[40px] text-left rounded-lg"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <HelpCircle aria-hidden="true" className={`w-3.5 h-3.5 shrink-0 ${t.icon}`} />
-          <span className={`text-[13px] font-medium tracking-tight ${t.title}`}>{title || 'Come funziona'}</span>
+          <span className={`text-[13px] font-medium tracking-tight break-words ${t.title}`}>{title || 'Come funziona'}</span>
         </div>
-        <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 transition-transform duration-200 ${t.icon} ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${t.icon} ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="px-3.5 pb-3 text-xs text-slate-500 space-y-1.5 leading-relaxed border-t border-slate-100 pt-2.5">
+        <div className="px-3.5 pb-3 text-xs text-slate-500 space-y-1.5 leading-relaxed break-words border-t border-slate-100 pt-2.5">
           {children}
         </div>
       )}

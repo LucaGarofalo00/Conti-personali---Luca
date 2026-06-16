@@ -71,7 +71,7 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
         onClick={() => setOpen(o => !o)}
         aria-haspopup="true"
         aria-expanded={open}
-        className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98] ${excludedCount > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-white hover:border-slate-300'}`}
+        className={`flex items-center gap-2 px-3 py-1.5 min-h-[40px] sm:min-h-0 border rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98] ${excludedCount > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-white hover:border-slate-300'}`}
       >
         <Filter aria-hidden="true" className="w-3.5 h-3.5" />
         {compact ? (
@@ -87,10 +87,10 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
           ref={dropdownRef}
           className={`absolute mt-1.5 w-70 max-w-[calc(100vw-1rem)] bg-white border border-slate-200 rounded-lg shadow-xl z-40 overflow-hidden animate-[scaleIn_0.1s_ease-out] ${alignRight ? 'right-0' : 'left-0'}`}
         >
-          <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between">
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Escludi dai calcoli</p>
+          <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate text-xs font-medium text-slate-400 uppercase tracking-wider">Escludi dai calcoli</p>
             {excludedCount > 0 && (
-              <button onClick={onClear} className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+              <button onClick={onClear} className="shrink-0 inline-flex items-center min-h-[40px] sm:min-h-0 -my-2.5 sm:my-0 px-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
                 Reset
               </button>
             )}
@@ -102,9 +102,9 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
                 <button
                   key={f.id}
                   onClick={() => onToggle(f.id)}
-                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2 text-left text-[13px] hover:bg-slate-50 transition-colors ${excluded ? 'text-slate-400' : 'text-slate-700'}`}
+                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2 min-h-[40px] text-left text-[13px] hover:bg-slate-50 transition-colors ${excluded ? 'text-slate-400' : 'text-slate-700'}`}
                 >
-                  <span className="flex items-center gap-2.5 truncate">
+                  <span className="flex items-center gap-2.5 min-w-0 truncate">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: f.color }} />
                     <span className={`truncate ${excluded ? 'line-through' : ''}`}>{f.name}</span>
                   </span>

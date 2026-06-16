@@ -106,11 +106,11 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
               type="button"
               onClick={() => toggleGroup(g.source)}
               aria-expanded={isOpen}
-              className={`w-full flex items-center justify-between gap-2 ${compact ? 'px-2.5 py-2' : 'px-3 py-3'} ${headerColor} hover:opacity-90 transition-opacity`}
+              className={`w-full flex items-center justify-between gap-2 min-h-[44px] ${compact ? 'px-2.5 py-2' : 'px-3 py-3'} ${headerColor} hover:opacity-90 transition-opacity`}
             >
-              <span className="flex items-center gap-2 min-w-0">
+              <span className="flex items-center gap-2 min-w-0 flex-1">
                 {isOpen ? <ChevronDown aria-hidden="true" className="w-4 h-4 shrink-0" /> : <ChevronRight aria-hidden="true" className="w-4 h-4 shrink-0" />}
-                <span className={`font-bold uppercase tracking-wide truncate ${compact ? 'text-xs' : 'text-sm'}`}>{g.label}</span>
+                <span className={`font-bold uppercase tracking-wide truncate min-w-0 ${compact ? 'text-xs' : 'text-sm'}`}>{g.label}</span>
                 <span className="text-[11px] font-semibold opacity-60 shrink-0">{g.items.length}</span>
               </span>
               {g.source !== 'actual' && (
@@ -125,14 +125,14 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
           </div>
         )
       })}
-      <div className="border-t-2 border-slate-200 pt-2.5 mt-1 flex items-center justify-between text-[13px] text-slate-600">
+      <div className="border-t-2 border-slate-200 pt-2.5 mt-1 flex items-center justify-between flex-wrap gap-x-3 gap-y-1 text-[13px] text-slate-600">
         {kind === 'both' ? (
           <>
-            <span>Tot: <span className="text-emerald-600 font-medium">+{cur(incomeTotal)}</span> · <span className="text-red-500 font-medium">-{cur(expenseTotal)}</span></span>
-            <span className="font-semibold">Netto: <span className={incomeTotal - expenseTotal >= 0 ? 'text-emerald-600' : 'text-red-500'}>{cur(incomeTotal - expenseTotal)}</span></span>
+            <span className="tabular-nums">Tot: <span className="text-emerald-600 font-medium">+{cur(incomeTotal)}</span> · <span className="text-red-500 font-medium">-{cur(expenseTotal)}</span></span>
+            <span className="font-semibold tabular-nums">Netto: <span className={incomeTotal - expenseTotal >= 0 ? 'text-emerald-600' : 'text-red-500'}>{cur(incomeTotal - expenseTotal)}</span></span>
           </>
         ) : (
-          <span className="ml-auto font-semibold">Totale del periodo: <span className={`text-[15px] ${kind === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>{cur(total)}</span></span>
+          <span className="ml-auto font-semibold tabular-nums">Totale del periodo: <span className={`text-[15px] ${kind === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>{cur(total)}</span></span>
         )}
       </div>
     </div>

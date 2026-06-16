@@ -97,18 +97,18 @@ export default function Settings() {
   const monthlyIncomes = incomes.filter(i => i.frequency === 'monthly')
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-2xl space-y-6 sm:space-y-8">
       {/* PERIODO */}
-      <section className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-6">
+      <section className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-6">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-xl bg-blue-500/15 text-blue-600 flex items-center justify-center shrink-0">
             <CalendarRange className="w-5 h-5" aria-hidden="true" />
           </div>
-          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Periodo dello stipendio</h2>
+          <h2 className="min-w-0 text-lg font-semibold text-slate-900 tracking-tight">Periodo dello stipendio</h2>
         </div>
         <div className="mb-6">
           <p className="text-sm text-slate-500 mb-1">Periodo (anteprima)</p>
-          <p className="text-2xl font-bold tracking-tight tabular-nums text-blue-700">{formatPeriodRange(period.startDate, period.endDate)}</p>
+          <p className="text-2xl font-bold tracking-tight tabular-nums text-blue-700 break-words">{formatPeriodRange(period.startDate, period.endDate)}</p>
         </div>
 
         <InfoBox title="Come funziona il periodo" tone="blue">
@@ -144,7 +144,7 @@ export default function Settings() {
                 onChange={e => setPeriodStart(e.target.value)}
                 className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
               />
-              <button onClick={() => setPeriodStart(todayString())} className="text-xs text-blue-600 mt-1 hover:text-blue-700 active:scale-95 transition-[transform,color]">Imposta a oggi</button>
+              <button onClick={() => setPeriodStart(todayString())} className="inline-flex items-center min-h-[40px] sm:min-h-0 text-xs text-blue-600 mt-1 hover:text-blue-700 active:scale-95 transition-[transform,color]">Imposta a oggi</button>
             </div>
             <div>
               <label htmlFor="set-anchor" className="block text-sm font-medium text-slate-700 mb-1">Giorno tipico (stima)</label>
@@ -153,7 +153,7 @@ export default function Settings() {
                 type="number" min={1} max={28}
                 value={anchorDay}
                 onChange={e => setAnchorDay(Math.min(28, Math.max(1, parseInt(e.target.value) || 1)))}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
               />
             </div>
           </div>
@@ -169,12 +169,12 @@ export default function Settings() {
       </section>
 
       {/* RICOMINCIA DA OGGI */}
-      <section className="rounded-2xl border border-red-200 shadow-sm p-6" style={{ background: 'linear-gradient(135deg, #ef44441A 0%, #ffffff 60%)' }}>
+      <section className="rounded-2xl border border-red-200 shadow-sm p-4 sm:p-6" style={{ background: 'linear-gradient(135deg, #ef44441A 0%, #ffffff 60%)' }}>
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-xl bg-red-500/15 text-red-600 flex items-center justify-center shrink-0">
             <RotateCcw className="w-5 h-5" aria-hidden="true" />
           </div>
-          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Ricomincia da oggi</h2>
+          <h2 className="min-w-0 text-lg font-semibold text-slate-900 tracking-tight">Ricomincia da oggi</h2>
         </div>
         <p className="text-sm text-slate-500 mb-4">Azzera lo storico e riparti pulito dal periodo corrente.</p>
 
