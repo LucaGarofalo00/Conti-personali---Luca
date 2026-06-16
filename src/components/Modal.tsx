@@ -69,11 +69,11 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.15s_ease-out]" onClick={onClose} />
-      <div ref={panelRef} tabIndex={-1} className="relative bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-[scaleIn_0.15s_ease-out] outline-none">
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]" onClick={onClose} />
+      <div ref={panelRef} tabIndex={-1} className="relative bg-white rounded-2xl shadow-2xl ring-1 ring-slate-900/5 w-full max-w-md max-h-[90vh] overflow-y-auto animate-[scaleIn_0.22s_cubic-bezier(0.16,1,0.3,1)] outline-none">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 id={titleId} className="text-[15px] font-semibold text-slate-800">{title}</h3>
-          <button onClick={onClose} aria-label="Chiudi" className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+          <h3 id={titleId} className="text-[15px] font-semibold tracking-tight text-slate-800">{title}</h3>
+          <button onClick={onClose} aria-label="Chiudi" className="p-1.5 -mr-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors active:scale-90">
             <X className="w-4 h-4" />
           </button>
         </div>

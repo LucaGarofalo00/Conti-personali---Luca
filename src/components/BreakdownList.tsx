@@ -66,8 +66,8 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
       <div key={key} className={`flex items-start justify-between gap-2 py-1.5 px-2 rounded hover:bg-slate-50 ${isActual ? 'opacity-60' : ''}`}>
         <div className="flex items-start gap-2 min-w-0 flex-1">
           {item.kind === 'income'
-            ? <ArrowDownRight className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-            : <ArrowUpRight className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />}
+            ? <ArrowDownRight aria-hidden="true" className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+            : <ArrowUpRight aria-hidden="true" className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />}
           <div className="min-w-0">
             <p className="text-slate-700 break-words leading-snug">{item.description}</p>
             <p className="flex items-center gap-1.5 flex-wrap mt-0.5">
@@ -106,10 +106,10 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
               type="button"
               onClick={() => toggleGroup(g.source)}
               aria-expanded={isOpen}
-              className={`w-full flex items-center justify-between gap-2 ${compact ? 'px-2.5 py-2' : 'px-3 py-3'} ${headerColor} hover:opacity-90 transition`}
+              className={`w-full flex items-center justify-between gap-2 ${compact ? 'px-2.5 py-2' : 'px-3 py-3'} ${headerColor} hover:opacity-90 transition-opacity`}
             >
               <span className="flex items-center gap-2 min-w-0">
-                {isOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
+                {isOpen ? <ChevronDown aria-hidden="true" className="w-4 h-4 shrink-0" /> : <ChevronRight aria-hidden="true" className="w-4 h-4 shrink-0" />}
                 <span className={`font-bold uppercase tracking-wide truncate ${compact ? 'text-xs' : 'text-sm'}`}>{g.label}</span>
                 <span className="text-[11px] font-semibold opacity-60 shrink-0">{g.items.length}</span>
               </span>

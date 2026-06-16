@@ -71,15 +71,15 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
         onClick={() => setOpen(o => !o)}
         aria-haspopup="true"
         aria-expanded={open}
-        className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-[13px] font-medium transition-all duration-150 ${excludedCount > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-white hover:border-slate-300'}`}
+        className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98] ${excludedCount > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-white hover:border-slate-300'}`}
       >
-        <Filter className="w-3.5 h-3.5" />
+        <Filter aria-hidden="true" className="w-3.5 h-3.5" />
         {compact ? (
           excludedCount > 0 ? `${excludedCount} esclus${excludedCount === 1 ? 'o' : 'i'}` : 'Filtra fondi'
         ) : (
           excludedCount > 0 ? `${excludedCount} fond${excludedCount === 1 ? 'o' : 'i'} esclus${excludedCount === 1 ? 'o' : 'i'}` : 'Tutti i fondi'
         )}
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (

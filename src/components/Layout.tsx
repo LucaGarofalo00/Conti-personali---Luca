@@ -45,8 +45,8 @@ export default function Layout({ children }: { children: ReactNode }) {
               <Logo className="w-9 h-9 drop-shadow-sm" />
               <h1 className="text-lg font-semibold tracking-tight text-slate-800">FinanzApp</h1>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Chiudi menu" className="lg:hidden p-1 rounded-md hover:bg-slate-100 text-slate-400">
-              <X className="w-5 h-5" />
+            <button onClick={() => setOpen(false)} aria-label="Chiudi menu" className="lg:hidden p-1.5 -mr-1 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors active:scale-90">
+              <X aria-hidden="true" className="w-5 h-5" />
             </button>
           </div>
 
@@ -58,21 +58,21 @@ export default function Layout({ children }: { children: ReactNode }) {
                 end={item.path === '/'}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98] ${
                     isActive
                       ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm shadow-indigo-600/25'
                       : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/70'
                   }`
                 }
               >
-                <item.icon className="w-[18px] h-[18px]" />
+                <item.icon aria-hidden="true" className="w-[18px] h-[18px]" />
                 {item.label}
               </NavLink>
             ))}
           </nav>
 
           <div className="px-3 py-4">
-            <button onClick={handleSignOut} className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors">
+            <button onClick={handleSignOut} className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-slate-400 hover:text-slate-600 hover:bg-slate-100/70 transition-colors active:scale-[0.98]">
               <LogOut className="w-[18px] h-[18px]" />
               Esci
             </button>
@@ -83,8 +83,8 @@ export default function Layout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="sticky top-0 bg-white/80 backdrop-blur-xl z-30 shrink-0 shadow-[0_1px_0_0_#e8eaed]">
           <div className="flex items-center gap-3 px-4 py-3 lg:px-6">
-            <button onClick={() => setOpen(true)} aria-label="Apri menu" className="lg:hidden p-1 rounded-md hover:bg-slate-100">
-              <Menu className="w-5 h-5 text-slate-500" />
+            <button onClick={() => setOpen(true)} aria-label="Apri menu" className="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-slate-100 transition-colors active:scale-90">
+              <Menu aria-hidden="true" className="w-5 h-5 text-slate-500" />
             </button>
             <Logo className="w-7 h-7 lg:hidden" />
             <span className="font-semibold text-slate-800 text-[15px] tracking-tight">{pageTitle}</span>
@@ -93,9 +93,9 @@ export default function Layout({ children }: { children: ReactNode }) {
               aria-label={amountsHidden ? 'Mostra gli importi' : 'Nascondi gli importi'}
               aria-pressed={amountsHidden}
               title={amountsHidden ? 'Mostra gli importi' : 'Nascondi gli importi'}
-              className="ml-auto p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+              className="ml-auto p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors active:scale-90"
             >
-              {amountsHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              {amountsHidden ? <EyeOff aria-hidden="true" className="w-5 h-5" /> : <Eye aria-hidden="true" className="w-5 h-5" />}
             </button>
           </div>
         </header>

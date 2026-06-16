@@ -42,10 +42,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role={t.type === 'error' ? 'alert' : undefined}
-            className={`flex items-center gap-2.5 px-4 py-3 rounded-lg shadow-lg text-[13px] font-medium animate-[slideIn_0.2s_ease-out] ${
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg ring-1 text-[13px] font-medium animate-[slideIn_0.22s_cubic-bezier(0.16,1,0.3,1)] ${
               t.type === 'success'
-                ? 'bg-slate-900 text-white'
-                : 'bg-red-600 text-white'
+                ? 'bg-slate-900 text-white ring-white/10'
+                : 'bg-red-600 text-white ring-black/10'
             }`}
           >
             {t.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" /> : <XCircle className="w-4 h-4 shrink-0" />}
