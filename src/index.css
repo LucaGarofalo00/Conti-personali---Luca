@@ -1,14 +1,39 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   Design tokens — ispirati a Stripe (ombre stratificate, hairline, nitidezza)
+   e Apple HIG (raggi continui ampi, profondità sobria, deferenza).
+   Ridefinendo i token Tailwind v4, ogni utility esistente (shadow-sm, rounded-xl…)
+   eredita automaticamente i nuovi valori: l'intera app migliora senza toccare il markup.
+   ============================================================================ */
 @theme {
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Accent "blurple" (Stripe/indigo) coerente col logo e con la sidebar attiva */
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;
+  --color-primary-700: #4338ca;
+
+  /* Ombre stratificate, morbide, con tinta fredda (slate-900) invece del nero puro.
+     Più layer a bassa opacità = profondità "Stripe" anziché un drop-shadow piatto. */
+  --shadow-2xs: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  --shadow-xs:  0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-sm:  0 1px 2px 0 rgb(15 23 42 / 0.04), 0 2px 5px -1px rgb(15 23 42 / 0.06);
+  --shadow-md:  0 2px 4px -1px rgb(15 23 42 / 0.05), 0 6px 14px -2px rgb(15 23 42 / 0.08);
+  --shadow-lg:  0 4px 8px -2px rgb(15 23 42 / 0.06), 0 12px 28px -4px rgb(15 23 42 / 0.10);
+  --shadow-xl:  0 8px 16px -4px rgb(15 23 42 / 0.08), 0 20px 44px -8px rgb(15 23 42 / 0.14);
+  --shadow-2xl: 0 12px 24px -6px rgb(15 23 42 / 0.10), 0 32px 64px -12px rgb(15 23 42 / 0.18);
+
+  /* Raggi un filo più ampi sulle superfici grandi: curva più "continua", aria Apple. */
+  --radius-xl: 0.875rem;   /* 14px — card */
+  --radius-2xl: 1.125rem;  /* 18px — pannelli e card auth */
 }
 
+/* ----------------------------------------------------------------------------
+   Animazioni
+   ---------------------------------------------------------------------------- */
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -24,6 +49,9 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+/* ----------------------------------------------------------------------------
+   Base
+   ---------------------------------------------------------------------------- */
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -31,11 +59,37 @@
 
 html {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background-color: #f7f8fa;
+  background-color: #f6f7f9;
   color: #1e293b;
+  /* Cifre tabulari ovunque: in un'app finanziaria gli importi si allineano in colonna. */
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.006em;
+}
+
+/* Controlli nativi (date picker, checkbox, range) col colore del brand */
+:root {
+  accent-color: var(--color-primary-600);
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+/* Titoli: tracking leggermente stretto, alla Apple, sulle dimensioni grandi */
+h1, h2 {
+  letter-spacing: -0.02em;
+}
+
+/* Focus visibile e coerente SOLO per navigazione da tastiera (non al click del mouse).
+   Gli input mantengono il loro ring dedicato (.focus:ring-*); qui copriamo bottoni,
+   link e select che altrimenti non avrebbero alcun indicatore di focus.
+   Nessun border-radius qui: l'outline segue da solo il raggio dell'elemento. */
+:where(a, button, select, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: 2px;
 }
 
 input[type="number"]::-webkit-inner-spin-button,
@@ -43,9 +97,19 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 1;
 }
 
+/* L'icona del date picker eredita un grigio coerente */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+input[type="date"]:hover::-webkit-calendar-picker-indicator {
+  opacity: 0.9;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -54,14 +118,29 @@ input[type="number"]::-webkit-outer-spin-button {
 
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
-  border-radius: 3px;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+  background-clip: padding-box;
 }
 
 ::selection {
-  background-color: #dbeafe;
-  color: #1e40af;
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+/* Rispetta chi ha ridotto le animazioni di sistema (Apple HIG / accessibilità) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
