@@ -318,19 +318,20 @@ export default function Dashboard() {
         (isTransfer ? tx.type === 'transfer' : tx.type === 'expense')
       ).sort(byDate)
       const consumed = new Set<string>()
-      const isOccurrencePaid = (dateStr: string): boolean => {
-        // Preferisce la data prevista (planned_date) per agganciare l'occorrenza giusta anche
-        // se la spesa è stata segnata giorni prima/dopo; in assenza, ricade sulla finestra.
+      // Restituisce la transazione reale che copre l'occorrenza (o null). Preferisce la data
+      // prevista (planned_date) per agganciare l'occorrenza giusta anche se la spesa è stata
+      // segnata giorni prima/dopo; in assenza, ricade sulla finestra.
+      const matchOccurrence = (dateStr: string): Transaction | null => {
         const matches = (t: Transaction) => t.planned_date ? t.planned_date === dateStr : inSameRecurrenceWindow(t.date, dateStr, freq)
         const pick = (arr: Transaction[]) => arr.find(t => !consumed.has(t.id) && matches(t))
         const tx = pick(linkedTx) || pick(namedTx)
-        if (!tx) return false
+        if (!tx) return null
         consumed.add(tx.id)
-        return true
+        return tx
       }
 
       return filteredOccs.map(o => {
-        const confirmed = isOccurrencePaid(o.dateStr)
+        const paidTx = matchOccurrence(o.dateStr)
         const dateLabel = freq === 'weekly'
           ? format(o.date, 'EEE d MMM', { locale: it })
           : format(o.date, 'd MMM', { locale: it })
@@ -338,12 +339,14 @@ export default function Dashboard() {
           id: 'rec-' + exp.id + '-' + o.dateStr,
           kind: isTransfer ? 'transfer' as const : 'expense' as const,
           name: exp.name,
-          amount: Number(exp.amount),
+          // Già pagata → mostra l'importo REALE registrato (può differire dal previsto, es.
+          // benzina pagata 25€ invece di 30€); ancora da pagare → la stima della ricorrente.
+          amount: paidTx ? Number(paidTx.amount) : Number(exp.amount),
           fund_id: exp.fund_id,
           fund_to_id: exp.fund_to_id || null,
           category: exp.category,
           label: `${dateLabel} · ${baseLabel}`,
-          confirmed,
+          confirmed: !!paidTx,
           auto: !!exp.auto_deduct,
           recurring_expense_id: exp.id,
           occurrence_date: o.dateStr,
