@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { round2 } from './utils'
 
 // Aggiornamento ATOMICO del saldo di un fondo tramite la RPC `increment_fund_balance`
 // (vedi supabase-rpc-balances.sql): un singolo UPDATE lato DB, niente read-modify-write.
@@ -11,7 +12,7 @@ export async function incrementFundBalance(fundId: string | null, delta: number)
   if (await rpcIncrement(fundId, delta)) return true
   const { data: fund, error } = await supabase.from('funds').select('balance').eq('id', fundId).single()
   if (error || !fund) return false
-  const { error: upErr } = await supabase.from('funds').update({ balance: Number(fund.balance) + delta }).eq('id', fundId)
+  const { error: upErr } = await supabase.from('funds').update({ balance: round2(Number(fund.balance) + delta) }).eq('id', fundId)
   return !upErr
 }
 

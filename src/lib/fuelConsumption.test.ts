@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fuelConsumption, previousFuelFill, averageFuelConsumption } from './fuelConsumption'
+import { fuelConsumption, previousFuelFill, averageFuelConsumption, fuelStatsOdometer, lifetimeCostPerKmOdometer, lifetimePerFuelStima, previousOdometerFill } from './fuelConsumption'
 import type { Transaction } from '../types'
 
 function mkFuelTx(opts: {
@@ -8,6 +8,7 @@ function mkFuelTx(opts: {
   created_at?: string
   liters?: number | null
   km?: number | null
+  odo?: number | null
   amount?: number
   category?: string
   is_planned?: boolean
@@ -20,7 +21,7 @@ function mkFuelTx(opts: {
     budget_id: null, recurring_expense_id: null, recurring_income_id: null,
     is_memo: false, is_planned: opts.is_planned ?? false,
     fuel_km: opts.km ?? null, fuel_liters: opts.liters ?? null, fuel_price_per_liter: null,
-    fuel_type: opts.fuel_type ?? null,
+    fuel_type: opts.fuel_type ?? null, fuel_odometer: opts.odo ?? null,
     date: opts.date, created_at: opts.created_at ?? opts.date,
   }
 }
@@ -135,5 +136,62 @@ describe('averageFuelConsumption', () => {
     const f2 = mkFuelTx({ id: 'f2', date: '2026-01-15', km: 300, fuel_type: 'benzina' })
     const avg = averageFuelConsumption([f1, f2], 'benzina')
     expect(avg!.costPerKm).toBeNull()
+  })
+})
+
+// Scenario bifuel col contachilometri:
+//  GPL @100000 (40 L, 30€) -> benzina @100250 (15 L, 20€) -> GPL @100600 (38 L, 28€)
+const g1 = mkFuelTx({ id: 'g1', date: '2026-01-01', odo: 100000, liters: 40, amount: 30, fuel_type: 'gpl' })
+const b1 = mkFuelTx({ id: 'b1', date: '2026-01-08', odo: 100250, liters: 15, amount: 20, fuel_type: 'benzina' })
+const g2 = mkFuelTx({ id: 'g2', date: '2026-01-15', odo: 100600, liters: 38, amount: 28, fuel_type: 'gpl' })
+const ALL = [g1, b1, g2]
+
+describe('previousOdometerFill', () => {
+  it('precedente qualsiasi carburante = lettura più alta sotto quella di ref', () => {
+    expect(previousOdometerFill(g2, ALL, false)?.id).toBe('b1')
+  })
+  it('precedente stesso tipo salta gli altri carburanti', () => {
+    expect(previousOdometerFill(g2, ALL, true)?.id).toBe('g1')
+  })
+  it('senza contachilometri su ref restituisce null', () => {
+    const noOdo = mkFuelTx({ id: 'x', date: '2026-02-01', fuel_type: 'gpl' })
+    expect(previousOdometerFill(noOdo, ALL, false)).toBeNull()
+  })
+})
+
+describe('fuelStatsOdometer', () => {
+  it('€/km reale dal pieno precedente (qualsiasi carburante)', () => {
+    const s = fuelStatsOdometer(g2, ALL)!
+    // benzina@100250 (20€) ha portato 100250->100600 = 350 km
+    expect(s.costPerKm).toBeCloseTo(20 / 350, 5)
+  })
+  it('km/l per carburante = STIMA su km da contachilometri (sovrastima)', () => {
+    const s = fuelStatsOdometer(g2, ALL)!
+    // GPL: 100600-100000 = 600 km / 40 L (pieno GPL precedente)
+    expect(s.kmPerLiter).toBeCloseTo(15, 5)
+    expect(s.litersPer100Km).toBeCloseTo((40 / 600) * 100, 5)
+  })
+  it('senza contachilometri restituisce null', () => {
+    expect(fuelStatsOdometer(mkFuelTx({ id: 'z', date: '2026-01-20', fuel_type: 'gpl' }), ALL)).toBeNull()
+  })
+})
+
+describe('lifetimeCostPerKmOdometer', () => {
+  it('€/km accurato su tutto lo storico (qualsiasi carburante)', () => {
+    // coppie: 100000->100250 (30€,250km), 100250->100600 (20€,350km) => 50€/600km
+    expect(lifetimeCostPerKmOdometer(ALL)).toBeCloseTo(50 / 600, 5)
+  })
+  it('null se meno di due rifornimenti col contachilometri', () => {
+    expect(lifetimeCostPerKmOdometer([g1])).toBeNull()
+  })
+})
+
+describe('lifetimePerFuelStima', () => {
+  it('stima media km/l per carburante su km da contachilometri', () => {
+    // GPL: 100000->100600 = 600 km / 40 L
+    expect(lifetimePerFuelStima(ALL, 'gpl')!.kmPerLiter).toBeCloseTo(15, 5)
+  })
+  it('null con un solo pieno di quel tipo', () => {
+    expect(lifetimePerFuelStima(ALL, 'benzina')).toBeNull()
   })
 })

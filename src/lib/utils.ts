@@ -10,6 +10,11 @@ const HIDDEN_MASK = '••••• €'
 export const cur = (n: number) =>
   isAmountsHidden() ? HIDDEN_MASK : n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
+// Arrotonda a 2 decimali in modo stabile: la somma di float in JS produce artefatti
+// (0.1 + 0.2 = 0.30000000000000004). Da usare prima di scrivere un saldo nel DB o di
+// presentare un totale aggregato, così i centesimi non "derivano" operazione dopo operazione.
+export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+
 export function toDateString(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
