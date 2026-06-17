@@ -93,13 +93,15 @@ body {
    Mobile foundation
    ---------------------------------------------------------------------------- */
 /* Su schermi piccoli i campi devono avere ≥16px: sotto questa soglia iOS Safari
-   zooma automaticamente al focus, spostando il layout. Selettore di elemento
-   (specificità bassa): qualsiasi utility .text-* esplicita lo sovrascrive. */
+   zooma automaticamente al focus, spostando il layout. `!important` blinda la regola
+   anche dove un input porta per errore una utility text-sm/text-xs (che altrimenti
+   vincerebbe la cascata e riattiverebbe lo zoom). Su desktop la media query non si
+   applica, quindi gli eventuali sm:text-sm restano validi. */
 @media (max-width: 640px) {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 
