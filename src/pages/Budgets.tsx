@@ -156,7 +156,7 @@ export default function Budgets() {
     <div>
       <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 shadow-sm p-4 sm:p-5">
         <p className="text-sm font-medium text-red-600/80">Totale budget del periodo ({currentPeriodLabel()})</p>
-        <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums break-words">{cur(totalMonthlyAll)}</p>
+        <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums whitespace-nowrap">{cur(totalMonthlyAll)}</p>
       </div>
       <InfoBox title="Come funzionano i budget settimanali" tone="blue">
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
@@ -219,9 +219,9 @@ export default function Budgets() {
                   </div>
 
                   <div className="mb-2">
-                    <div className="flex items-end justify-between gap-2 sm:gap-3 mb-2">
-                      <span className="text-sm text-slate-500 min-w-0">Speso questa settimana: <span className="block text-xl font-bold text-slate-900 tracking-tight tabular-nums break-words">{cur(spentThisWeek)}</span> <span className="text-xs text-slate-400">/ {cur(effective)}</span></span>
-                      <span className={`text-base sm:text-xl font-bold tracking-tight tabular-nums text-right shrink-0 ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 sm:gap-3 mb-2">
+                      <span className="text-sm text-slate-500 min-w-0">Speso questa settimana: <span className="block text-xl font-bold text-slate-900 tracking-tight tabular-nums whitespace-nowrap">{cur(spentThisWeek)}</span> <span className="text-xs text-slate-400">/ {cur(effective)}</span></span>
+                      <span className={`text-base sm:text-xl font-bold tracking-tight tabular-nums sm:text-right shrink-0 ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
                         {overBudget ? `Sforato di ${cur(Math.abs(remaining))}` : `Rimangono ${cur(remaining)}`}
                       </span>
                     </div>
@@ -252,7 +252,7 @@ export default function Budgets() {
                             <span className="text-xs text-slate-500 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            <span className="font-medium text-red-500 tracking-tight tabular-nums">-{cur(Number(tx.amount))}</span>
+                            <span className="font-medium text-red-500 tracking-tight tabular-nums shrink-0 whitespace-nowrap">-{cur(Number(tx.amount))}</span>
                             <button onClick={() => removeTx(tx)} aria-label="Elimina spesa" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
@@ -305,7 +305,7 @@ export default function Budgets() {
                                           <span className="text-slate-600 truncate">{tx.description}</span>
                                           <span className="text-xs text-slate-500 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                                         </span>
-                                        <span className="font-medium text-red-500 shrink-0 tracking-tight tabular-nums">-{cur(Number(tx.amount))}</span>
+                                        <span className="font-medium text-red-500 shrink-0 whitespace-nowrap tracking-tight tabular-nums">-{cur(Number(tx.amount))}</span>
                                       </div>
                                     ))
                                   )}

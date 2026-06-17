@@ -201,7 +201,7 @@ export default function RecurringExpenses() {
       <div className="flex items-start justify-between gap-3 mb-6 bg-red-50 rounded-2xl border border-red-100 shadow-sm p-4 sm:p-5">
         <div className="min-w-0">
           <p className="text-sm text-red-600/80 break-words">Totale spese ricorrenti del periodo ({currentPeriodLabel()})</p>
-          <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums break-words">{cur(totalExpenses)}</p>
+          <p className="mt-1 text-2xl font-bold text-red-700 tracking-tight tabular-nums whitespace-nowrap">{cur(totalExpenses)}</p>
         </div>
         <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 px-4 min-h-[40px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium shrink-0">
           <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi
@@ -231,9 +231,9 @@ export default function RecurringExpenses() {
             const fromFund = funds.find(f => f.id === item.fund_id)?.name
             const toFund = funds.find(f => f.id === item.fund_to_id)?.name
             return (
-              <div key={item.id} className={`bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-5 flex items-center justify-between gap-2 sm:gap-3 transition-shadow hover:shadow-md hover:border-slate-300/60 ${!item.is_active ? 'opacity-50' : ''}`}>
+              <div key={item.id} className={`bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 transition-shadow hover:shadow-md hover:border-slate-300/60 ${!item.is_active ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
-                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva voce' : 'Attiva voce'} className="inline-flex items-center justify-center w-10 h-10 -m-1 text-slate-400 hover:text-blue-600 active:scale-90 transition-colors shrink-0">
+                  <button onClick={() => toggle(item)} aria-label={item.is_active ? 'Disattiva voce' : 'Attiva voce'} className="inline-flex items-center justify-center w-10 h-10 -ml-1 text-slate-400 hover:text-blue-600 active:scale-90 transition-colors shrink-0">
                     {item.is_active ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6" />}
                   </button>
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isTransfer ? 'bg-blue-500/15 text-blue-600' : 'bg-red-500/15 text-red-600'}`} aria-hidden="true">
@@ -242,7 +242,7 @@ export default function RecurringExpenses() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-slate-900 tracking-tight break-words">{item.name}</p>
-                      {isTransfer && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md font-medium">Trasferimento</span>}
+                      {isTransfer && <span className="hidden sm:inline-flex text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md font-medium">Trasferimento</span>}
                       {item.auto_deduct ? (
                         <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-1"><Zap className="w-3 h-3" aria-hidden="true" /> Automatica</span>
                       ) : (
@@ -264,8 +264,8 @@ export default function RecurringExpenses() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-0.5 sm:gap-3 shrink-0">
-                  <span className={`text-lg sm:text-xl font-bold tracking-tight tabular-nums ${isTransfer ? 'text-blue-500' : 'text-red-600'}`}>{cur(Number(item.amount))}</span>
+                <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto shrink-0">
+                  <span className={`mr-auto sm:mr-0 text-base sm:text-xl font-bold tracking-tight tabular-nums whitespace-nowrap ${isTransfer ? 'text-blue-500' : 'text-red-600'}`}>{cur(Number(item.amount))}</span>
                   <button onClick={() => openEdit(item)} aria-label="Modifica voce" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color]"><Pencil className="w-4 h-4" /></button>
                   <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color]"><Trash2 className="w-4 h-4" /></button>
                 </div>
@@ -286,7 +286,7 @@ export default function RecurringExpenses() {
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5 sm:gap-3 shrink-0">
-                    <span className="text-lg sm:text-xl font-bold text-slate-400 tracking-tight tabular-nums">{cur(Number(item.amount))}</span>
+                    <span className="text-base sm:text-xl font-bold text-slate-400 tracking-tight tabular-nums whitespace-nowrap shrink-0">{cur(Number(item.amount))}</span>
                     <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color]"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
@@ -438,14 +438,14 @@ export default function RecurringExpenses() {
               <label htmlFor="rec-start" className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
               <input id="rec-start" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.start_date && (
-                <button onClick={() => setForm({ ...form, start_date: '' })} className="inline-flex items-center min-h-[40px] text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
+                <button onClick={() => setForm({ ...form, start_date: '' })} className="inline-flex items-center min-h-[40px] px-2 -mx-2 text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
               )}
             </div>
             <div>
               <label htmlFor="rec-end" className="block text-sm font-medium text-slate-700 mb-1">Data fine (opzionale)</label>
               <input id="rec-end" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.end_date && (
-                <button onClick={() => setForm({ ...form, end_date: '' })} className="inline-flex items-center min-h-[40px] text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
+                <button onClick={() => setForm({ ...form, end_date: '' })} className="inline-flex items-center min-h-[40px] px-2 -mx-2 text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
               )}
             </div>
           </div>

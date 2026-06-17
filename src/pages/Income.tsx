@@ -134,7 +134,7 @@ export default function Income() {
             </div>
             <div className="min-w-0">
               <p className="text-sm text-emerald-700/80">Totale entrate ricorrenti del periodo ({currentPeriodLabel()})</p>
-              <p className="text-2xl font-bold tracking-tight tabular-nums text-emerald-700 mt-0.5 break-words">{cur(totalMonthly)}</p>
+              <p className="text-2xl font-bold tracking-tight tabular-nums text-emerald-700 mt-0.5 whitespace-nowrap">{cur(totalMonthly)}</p>
             </div>
           </div>
         </div>
@@ -187,9 +187,9 @@ export default function Income() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center justify-end gap-2 sm:gap-3 shrink-0">
-                  <div className="text-right min-w-0">
-                    <span className="text-2xl font-bold text-emerald-600 tracking-tight tabular-nums break-words">{cur(Number(item.amount))}</span>
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 shrink-0">
+                  <div className="text-left sm:text-right min-w-0 flex-1 sm:flex-initial">
+                    <span className="text-xl sm:text-2xl font-bold text-emerald-600 tracking-tight tabular-nums whitespace-nowrap">{cur(Number(item.amount))}</span>
                     <p className="text-xs text-slate-500">{item.frequency === 'monthly' ? '/mese' : '/settimana'}</p>
                   </div>
                   <button onClick={() => openEdit(item)} aria-label="Modifica entrata" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color] shrink-0"><Pencil className="w-4 h-4" /></button>
@@ -255,14 +255,14 @@ export default function Income() {
               <label htmlFor="inc-start" className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
               <input id="inc-start" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.start_date && (
-                <button onClick={() => setForm({ ...form, start_date: '' })} className="inline-flex items-center min-h-[40px] text-xs text-blue-600 hover:text-blue-700">Rimuovi</button>
+                <button onClick={() => setForm({ ...form, start_date: '' })} className="inline-flex items-center min-h-[40px] px-2 -mx-2 text-xs text-blue-600 hover:text-blue-700">Rimuovi</button>
               )}
             </div>
             <div>
               <label htmlFor="inc-end" className="block text-sm font-medium text-slate-700 mb-1">Data fine (opzionale)</label>
               <input id="inc-end" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
               {form.end_date && (
-                <button onClick={() => setForm({ ...form, end_date: '' })} className="inline-flex items-center min-h-[40px] text-xs text-blue-600 hover:text-blue-700">Rimuovi</button>
+                <button onClick={() => setForm({ ...form, end_date: '' })} className="inline-flex items-center min-h-[40px] px-2 -mx-2 text-xs text-blue-600 hover:text-blue-700">Rimuovi</button>
               )}
             </div>
           </div>

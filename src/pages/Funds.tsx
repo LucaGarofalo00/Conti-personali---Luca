@@ -171,7 +171,7 @@ export default function Funds() {
                   <button onClick={() => remove(fund.id)} aria-label="Elimina fondo" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900 mb-1 tracking-tight tabular-nums break-words">{cur(Number(fund.balance))}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 tracking-tight tabular-nums whitespace-nowrap">{cur(Number(fund.balance))}</p>
 
               {subs.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
@@ -183,8 +183,8 @@ export default function Funds() {
                         </span>
                         <span className="truncate">{sub.name}</span>
                       </span>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <span className="text-[15px] font-semibold text-slate-800 tabular-nums">{cur(Number(sub.balance))}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[15px] font-semibold text-slate-800 tabular-nums whitespace-nowrap">{cur(Number(sub.balance))}</span>
                         <button onClick={() => openEdit(sub)} aria-label="Modifica salvadanaio" className="inline-flex items-center justify-center w-10 h-10 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]"><Pencil className="w-3.5 h-3.5" /></button>
                         <button onClick={() => remove(sub.id)} aria-label="Elimina salvadanaio" className="inline-flex items-center justify-center w-10 h-10 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color,color]"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
@@ -232,7 +232,7 @@ export default function Funds() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Colore</label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {COLORS.map(c => (
                     <button key={c} onClick={() => setForm({ ...form, color: c })} aria-label={`Colore ${c}`} className={`w-8 h-8 rounded-full border-2 active:scale-95 transition-[transform,border-color] ${form.color === c ? 'border-slate-800 scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
                   ))}

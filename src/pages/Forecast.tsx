@@ -17,6 +17,15 @@ import { cur, getBillingPeriodFor, toDateString, parseLocalDate } from '../lib/u
 import { isAmountsHidden } from '../lib/privacy'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction, ForecastPoint } from '../types'
 
+// Etichette asse Y compatte: su mobile un valore intero in euro (€1.234.567) mangia la larghezza
+// del grafico. Abbreviamo in k/M così l'asse resta stretto e leggibile a 360px.
+function fmtAxisEur(v: number): string {
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000) return `€${(v / 1_000_000).toLocaleString('it-IT', { maximumFractionDigits: 1 })}M`
+  if (abs >= 1_000) return `€${(v / 1_000).toLocaleString('it-IT', { maximumFractionDigits: 1 })}k`
+  return `€${Number(v).toLocaleString('it-IT')}`
+}
+
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint }> }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
@@ -319,8 +328,8 @@ export default function Forecast() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={Math.max(0, Math.floor(chartData.length / 8))} />
-              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${Number(v).toLocaleString('it-IT')}`} />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={28} />
+              <YAxis width={46} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : fmtAxisEur(v)} />
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#forecastGrad)" strokeWidth={2} dot={false} />
             </AreaChart>
@@ -369,7 +378,7 @@ export default function Forecast() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-slate-700 break-words">{row.label}</p>
-                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                    <dl className="mt-2 grid grid-cols-1 gap-x-3 gap-y-1.5 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <dt className="text-slate-500 shrink-0">Entrate</dt>
                         <dd className="text-emerald-600 tabular-nums text-right min-w-0 truncate">{cur(row.income)}</dd>
@@ -388,7 +397,7 @@ export default function Forecast() {
                       </div>
                       <div className="col-span-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-1.5">
                         <dt className="text-slate-500 shrink-0">Saldo a fine periodo</dt>
-                        <dd className={`tabular-nums text-right min-w-0 truncate font-semibold tracking-tight ${row.endBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{cur(row.endBalance)}</dd>
+                        <dd className={`tabular-nums text-right whitespace-nowrap font-semibold tracking-tight ${row.endBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>{cur(row.endBalance)}</dd>
                       </div>
                     </dl>
                   </div>

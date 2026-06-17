@@ -106,12 +106,12 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
               <div>
                 <label className="block text-[13px] font-medium text-slate-600 mb-1.5">{mode === 'recovery' ? 'Nuova password' : 'Password'}</label>
                 <div className="relative">
-                  <input type={showPassword ? 'text' : 'password'} name="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} className="w-full min-w-0 px-3 py-2.5 pr-12 border border-slate-200 rounded-lg text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" required minLength={mode === 'register' || mode === 'recovery' ? 6 : undefined} />
+                  <input type={showPassword ? 'text' : 'password'} name="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} className="w-full min-w-0 px-3 py-2.5 pr-14 min-h-[44px] border border-slate-200 rounded-lg text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" required minLength={mode === 'register' || mode === 'recovery' ? 6 : undefined} />
                   <button type="button" onClick={() => setShowPassword(s => !s)} aria-label={showPassword ? 'Nascondi password' : 'Mostra password'} className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 text-slate-400 hover:text-slate-600">
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                {(mode === 'register' || mode === 'recovery') && <p className="text-[11px] text-slate-400 mt-1">Almeno 6 caratteri.</p>}
+                {(mode === 'register' || mode === 'recovery') && <p className="text-xs text-slate-400 mt-1">Almeno 6 caratteri.</p>}
               </div>
             )}
 

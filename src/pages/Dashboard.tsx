@@ -61,6 +61,15 @@ function formatItalianDayMonth(d: Date): string {
   return format(d, 'EEE d MMM', { locale: it })
 }
 
+// Etichette asse Y compatte (€1,2k / €1,2M): un valore intero in euro mangia la larghezza del
+// grafico su mobile. Coerente con la stessa formattazione nella pagina Previsione.
+function fmtAxisEur(v: number): string {
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000) return `€${(v / 1_000_000).toLocaleString('it-IT', { maximumFractionDigits: 1 })}M`
+  if (abs >= 1_000) return `€${(v / 1_000).toLocaleString('it-IT', { maximumFractionDigits: 1 })}k`
+  return `€${Number(v).toLocaleString('it-IT')}`
+}
+
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { label: string; balance: number; income: number; expenses: number } }> }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
@@ -711,19 +720,19 @@ export default function Dashboard() {
               <div className="mt-6 grid grid-cols-4 gap-1.5 sm:gap-3">
                 <button onClick={openAddPlanned} className="flex flex-col items-center gap-1.5 px-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95 min-w-0">
                   <CalendarClock className="w-5 h-5 shrink-0" aria-hidden="true" />
-                  <span className="text-[11px] font-medium text-white/90 leading-tight text-center w-full truncate">Pianifica</span>
+                  <span className="text-[11px] font-medium text-white/90 leading-tight text-center w-full">Pianifica</span>
                 </button>
                 <Link to="/transazioni" className="flex flex-col items-center gap-1.5 px-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95 min-w-0">
                   <ArrowLeftRight className="w-5 h-5 shrink-0" aria-hidden="true" />
-                  <span className="text-[11px] font-medium text-white/90 leading-tight text-center w-full truncate">Transazioni</span>
+                  <span className="text-[11px] font-medium text-white/90 leading-tight text-center w-full">Transazioni</span>
                 </Link>
                 <Link to="/budget" className="flex flex-col items-center gap-1.5 px-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95 min-w-0">
                   <PiggyBank className="w-5 h-5 shrink-0" aria-hidden="true" />
-                  <span className="text-[11px] font-medium text-white/90 leading-tight text-center w-full truncate">Budget</span>
+                  <span className="text-[11px] font-medium text-white/90 leading-tight text-center w-full">Budget</span>
                 </Link>
                 <Link to="/previsione" className="flex flex-col items-center gap-1.5 px-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95 min-w-0">
                   <LineChart className="w-5 h-5 shrink-0" aria-hidden="true" />
-                  <span className="text-[11px] font-medium text-white/90 leading-tight text-center w-full truncate">Previsione</span>
+                  <span className="text-[11px] font-medium text-white/90 leading-tight text-center w-full">Previsione</span>
                 </Link>
               </div>
             </div>
@@ -939,7 +948,7 @@ export default function Dashboard() {
                   // Solo-data in locale: una pianificata in scadenza OGGI non è "scaduta".
                   const isPast = p.date < today
                   return (
-                    <div key={p.id} className={`bg-white rounded-xl border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-4 flex items-center justify-between gap-3`}>
+                    <div key={p.id} className={`bg-white rounded-xl border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-medium text-slate-800 break-words">{p.description}</p>
@@ -951,7 +960,7 @@ export default function Dashboard() {
                           {' · '}{p.type === 'income' ? '+' : '-'}{cur(Number(p.amount))}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center justify-end gap-1 shrink-0 w-full sm:w-auto">
                         <button onClick={() => openCompletePlanned(p)} className="inline-flex items-center justify-center min-h-[40px] px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-100 active:scale-[0.98] transition-[transform,background-color]">
                           Fatto
                         </button>
@@ -1030,8 +1039,8 @@ export default function Dashboard() {
                     <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : `€${Number(v).toLocaleString('it-IT')}`} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={24} />
+                <YAxis width={46} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : fmtAxisEur(v)} />
                 <Tooltip content={<CustomTooltip />} />
                 <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#grad)" strokeWidth={2} />
               </AreaChart>
