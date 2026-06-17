@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Wallet, CreditCard, TrendingUp,
-  PiggyBank, ArrowLeftRight, LineChart, LogOut, Menu, X, Eye, EyeOff, Settings,
+  PiggyBank, ArrowLeftRight, LineChart, BarChart3, LogOut, Menu, X, Eye, EyeOff, Settings,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useAmountsHidden, toggleAmountsHidden } from '../lib/privacy'
@@ -16,6 +16,7 @@ const nav = [
   { path: '/budget', label: 'Budget', icon: PiggyBank },
   { path: '/transazioni', label: 'Transazioni', icon: ArrowLeftRight },
   { path: '/previsione', label: 'Previsione', icon: LineChart },
+  { path: '/statistiche', label: 'Statistiche', icon: BarChart3 },
   { path: '/impostazioni', label: 'Impostazioni', icon: Settings },
 ]
 
