@@ -80,7 +80,7 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
             </p>
           </div>
         </div>
-        <span className={`font-medium tabular-nums shrink-0 ${item.kind === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
+        <span className={`font-medium tabular-nums shrink-0 whitespace-nowrap ${item.kind === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
           {item.kind === 'income' ? '+' : '-'}{cur(item.amount)}
         </span>
       </div>
@@ -128,11 +128,11 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
       <div className="border-t-2 border-slate-200 pt-2.5 mt-1 flex items-center justify-between flex-wrap gap-x-3 gap-y-1 text-[13px] text-slate-600">
         {kind === 'both' ? (
           <>
-            <span className="tabular-nums">Tot: <span className="text-emerald-600 font-medium">+{cur(incomeTotal)}</span> · <span className="text-red-500 font-medium">-{cur(expenseTotal)}</span></span>
-            <span className="font-semibold tabular-nums">Netto: <span className={incomeTotal - expenseTotal >= 0 ? 'text-emerald-600' : 'text-red-500'}>{cur(incomeTotal - expenseTotal)}</span></span>
+            <span className="tabular-nums min-w-0">Tot: <span className="text-emerald-600 font-medium whitespace-nowrap">+{cur(incomeTotal)}</span> · <span className="text-red-500 font-medium whitespace-nowrap">-{cur(expenseTotal)}</span></span>
+            <span className="font-semibold tabular-nums min-w-0">Netto: <span className={`whitespace-nowrap ${incomeTotal - expenseTotal >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{cur(incomeTotal - expenseTotal)}</span></span>
           </>
         ) : (
-          <span className="ml-auto font-semibold tabular-nums">Totale del periodo: <span className={`text-[15px] ${kind === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>{cur(total)}</span></span>
+          <span className="ml-auto font-semibold tabular-nums min-w-0">Totale del periodo: <span className={`text-[15px] whitespace-nowrap ${kind === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>{cur(total)}</span></span>
         )}
       </div>
     </div>
