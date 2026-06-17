@@ -10,6 +10,7 @@ import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
 import { cur, todayString, getBillingPeriod, currentPeriodLabel, parseLocalDate, fmtDate } from '../lib/utils'
 import { incrementFundBalance } from '../lib/fundBalances'
+import { postTransaction } from '../lib/postTransaction'
 import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import { computeBudgetRollover } from '../lib/budgetRollover'
@@ -32,6 +33,8 @@ export default function Budgets() {
 
   const [expBudgetId, setExpBudgetId] = useState<{ id: string; name: string } | null>(null)
   const [expForm, setExpForm] = useState({ description: '', amount: 0, fund_id: '', date: todayString() })
+  const [editingExp, setEditingExp] = useState<Transaction | null>(null)
+  const [editExpForm, setEditExpForm] = useState({ description: '', amount: 0, fund_id: '', date: '' })
   const [openWeeks, setOpenWeeks] = useState<Set<string>>(new Set())
 
   const toggleWeek = (key: string) => setOpenWeeks(prev => {
@@ -87,26 +90,21 @@ export default function Budgets() {
     if (!expForm.description.trim()) { toast.error('Inserisci una descrizione'); return }
     if (expForm.amount <= 0) { toast.error('Inserisci un importo valido'); return }
     setSaving(true)
-    const fundId = expForm.fund_id || null
 
-    const { error } = await supabase.from('transactions').insert({
-      user_id: user!.id,
+    // Insert + saldo atomici via post_transaction (con fallback al percorso storico).
+    const { error } = await postTransaction(user!.id, {
       type: 'expense',
       amount: expForm.amount,
       description: expForm.description,
-      fund_id: fundId,
+      fund_id: expForm.fund_id || null,
       fund_to_id: null,
       category: 'budget',
       budget_id: expBudgetId.id,
       date: expForm.date || todayString(),
     })
 
-    if (!error && fundId) {
-      await incrementFundBalance(fundId, -expForm.amount)
-    }
-
     setSaving(false)
-    if (error) { toast.error('Errore nel salvataggio: ' + error.message); return }
+    if (error) { toast.error('Errore nel salvataggio: ' + error); return }
     toast.success('Spesa registrata')
     setExpBudgetId(null)
     load()
@@ -134,6 +132,35 @@ export default function Budgets() {
       await incrementFundBalance(tx.fund_id, Number(tx.amount))
     }
     toast.success('Spesa eliminata')
+    load()
+  }
+
+  const openEditExp = (tx: Transaction) => {
+    setEditingExp(tx)
+    setEditExpForm({ description: tx.description, amount: Number(tx.amount), fund_id: tx.fund_id || '', date: tx.date })
+  }
+
+  const saveEditExp = async () => {
+    if (!editingExp) return
+    if (!editExpForm.description.trim()) { toast.error('Inserisci una descrizione'); return }
+    if (editExpForm.amount <= 0) { toast.error('Inserisci un importo valido'); return }
+    setSaving(true)
+    const newFund = editExpForm.fund_id || null
+    const { error } = await supabase.from('transactions').update({
+      description: editExpForm.description,
+      amount: editExpForm.amount,
+      fund_id: newFund,
+      date: editExpForm.date || todayString(),
+    }).eq('id', editingExp.id)
+    if (error) { setSaving(false); toast.error('Errore: ' + error.message); return }
+    // Riconcilia i saldi: storna il vecchio addebito e applica il nuovo (le spese di budget sono
+    // sempre uscite). Gestisce anche il cambio di fondo. Cambiare la data può spostare la spesa
+    // in un'altra settimana: il rollover la ri-colloca automaticamente.
+    if (editingExp.fund_id) await incrementFundBalance(editingExp.fund_id, Number(editingExp.amount))
+    if (newFund) await incrementFundBalance(newFund, -editExpForm.amount)
+    setSaving(false)
+    toast.success('Spesa aggiornata')
+    setEditingExp(null)
     load()
   }
 
@@ -253,6 +280,7 @@ export default function Budgets() {
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
                             <span className="font-medium text-red-500 tracking-tight tabular-nums shrink-0 whitespace-nowrap">-{cur(Number(tx.amount))}</span>
+                            <button onClick={() => openEditExp(tx)} aria-label="Modifica spesa" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-[transform,background-color] active:scale-90"><Pencil className="w-3.5 h-3.5" /></button>
                             <button onClick={() => removeTx(tx)} aria-label="Elimina spesa" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
@@ -305,7 +333,11 @@ export default function Budgets() {
                                           <span className="text-slate-600 truncate">{tx.description}</span>
                                           <span className="text-xs text-slate-500 shrink-0">{fmtDate(tx.date, 'd MMM')}</span>
                                         </span>
-                                        <span className="font-medium text-red-500 shrink-0 whitespace-nowrap tracking-tight tabular-nums">-{cur(Number(tx.amount))}</span>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <span className="font-medium text-red-500 whitespace-nowrap tracking-tight tabular-nums">-{cur(Number(tx.amount))}</span>
+                                          <button onClick={() => openEditExp(tx)} aria-label="Modifica spesa" className="inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-[transform,background-color] active:scale-90"><Pencil className="w-3.5 h-3.5" /></button>
+                                          <button onClick={() => removeTx(tx)} aria-label="Elimina spesa" className="inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-[transform,background-color] active:scale-90"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        </div>
                                       </div>
                                     ))
                                   )}
@@ -372,6 +404,38 @@ export default function Budgets() {
           </div>
           <button onClick={saveExpense} disabled={saving || expForm.amount <= 0 || !expForm.description.trim()} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98]">
             {saving ? 'Registrazione...' : 'Registra Spesa'}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!editingExp} onClose={() => setEditingExp(null)} title="Modifica spesa">
+        <div className="space-y-4">
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+            Modificando importo o fondo, il saldo dei fondi viene aggiornato di conseguenza. Cambiando la data, la spesa può spostarsi in un'altra settimana.
+          </div>
+          <div>
+            <label htmlFor="bedit-desc" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
+            <input id="bedit-desc" type="text" value={editExpForm.description} onChange={e => setEditExpForm({ ...editExpForm, description: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <label htmlFor="bedit-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+              <DecimalInput id="bedit-amount" value={editExpForm.amount} onChange={n => setEditExpForm({ ...editExpForm, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="bedit-date" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+              <input id="bedit-date" type="date" value={editExpForm.date} onChange={e => setEditExpForm({ ...editExpForm, date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="bedit-fund" className="block text-sm font-medium text-slate-700 mb-1">Pagato con</label>
+            <select id="bedit-fund" value={editExpForm.fund_id} onChange={e => setEditExpForm({ ...editExpForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <option value="">Nessun fondo</option>
+              {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
+            </select>
+          </div>
+          <button onClick={saveEditExp} disabled={saving || editExpForm.amount <= 0 || !editExpForm.description.trim()} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98]">
+            {saving ? 'Salvataggio...' : 'Salva Modifiche'}
           </button>
         </div>
       </Modal>

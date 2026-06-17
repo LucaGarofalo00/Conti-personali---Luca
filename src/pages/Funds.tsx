@@ -7,7 +7,7 @@ import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
 import { cur, iconMap, ICONS, COLORS, todayString } from '../lib/utils'
-import { transferFunds } from '../lib/fundBalances'
+import { postTransaction } from '../lib/postTransaction'
 import { logSupabaseError } from '../lib/logError'
 import InfoBox from '../components/InfoBox'
 import type { Fund } from '../types'
@@ -96,14 +96,14 @@ export default function Funds() {
     transferring.current = true
     setSaving(true)
     try {
-      // Registra prima la transazione: se fallisce, i saldi NON vengono toccati.
-      const { error } = await supabase.from('transactions').insert({
-        user_id: user!.id, type: 'transfer', amount: transfer.amount,
+      // Insert del movimento + spostamento saldi atomici via post_transaction (con fallback
+      // al percorso storico se la RPC non è deployata).
+      const { error } = await postTransaction(user!.id, {
+        type: 'transfer', amount: transfer.amount,
         description: `Trasferimento: ${from.name} → ${to.name}`,
         fund_id: from.id, fund_to_id: to.id, category: 'trasferimento', date: todayString(),
       })
-      if (error) { toast.error('Errore nel trasferimento: ' + (error.message || '')); return }
-      await transferFunds(from.id, to.id, transfer.amount)
+      if (error) { toast.error('Errore nel trasferimento: ' + error); return }
       toast.success('Trasferimento completato')
       setShowTransfer(false)
       setTransfer(emptyTransfer)

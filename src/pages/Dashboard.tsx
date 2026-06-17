@@ -19,17 +19,18 @@ import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } fro
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
 import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, monthlyOccurrencesInCurrentPeriod, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel, parseLocalDate, fmtDate } from '../lib/utils'
+import CategorySelect from '../components/CategorySelect'
 import { isAmountsHidden } from '../lib/privacy'
 import { getSalaryIncomeId } from '../lib/periodSettings'
 import { savePeriodSettings } from '../lib/periodSettingsDb'
 import { probePlannedDateSupport, withPlannedDate } from '../lib/schemaSupport'
-import { incrementFundBalance, transferFunds } from '../lib/fundBalances'
+import { postTransaction } from '../lib/postTransaction'
 import { logSupabaseError } from '../lib/logError'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
 import { generateIncomeOccurrences, type IncomeOccurrence } from '../lib/incomeOccurrences'
-import { fuelConsumption, previousFuelFill, averageFuelConsumption, FUEL_TYPE_LABEL, type FuelType } from '../lib/fuelConsumption'
+import { FUEL_TYPE_LABEL, fuelStatsOdometer, lifetimeCostPerKmOdometer, lifetimePerFuelStima, type FuelType } from '../lib/fuelConsumption'
 import { inSameRecurrenceWindow } from '../lib/recurrenceMatch'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
@@ -50,7 +51,7 @@ interface PendingItem {
   occurrence_date?: string
 }
 
-const FUEL_COLUMNS = ['transactions.fuel_km', 'transactions.fuel_liters', 'transactions.fuel_price_per_liter', 'transactions.fuel_type']
+const FUEL_COLUMNS = ['transactions.fuel_km', 'transactions.fuel_liters', 'transactions.fuel_price_per_liter', 'transactions.fuel_type', 'transactions.fuel_odometer']
 
 function isFuelColumnError(msg?: string | null): boolean {
   if (!msg) return false
@@ -103,7 +104,7 @@ export default function Dashboard() {
   const [confirmDate, setConfirmDate] = useState(todayString())
   const [confirmFundId, setConfirmFundId] = useState('')
   const [confirmSaving, setConfirmSaving] = useState(false)
-  const [confirmFuelKm, setConfirmFuelKm] = useState('')
+  const [confirmFuelOdometer, setConfirmFuelOdometer] = useState('')
   const [confirmFuelLiters, setConfirmFuelLiters] = useState('')
   const [confirmFuelPrice, setConfirmFuelPrice] = useState('')
   const [confirmFuelType, setConfirmFuelType] = useState<FuelType>('gpl')
@@ -392,7 +393,7 @@ export default function Dashboard() {
     // dell'occorrenza viene comunque salvata a parte in planned_date.
     setConfirmDate(todayString())
     setConfirmFundId(item.fund_id || '')
-    setConfirmFuelKm('')
+    setConfirmFuelOdometer('')
     setConfirmFuelLiters('')
     setConfirmFuelPrice('')
     setConfirmFuelType('gpl')
@@ -425,14 +426,15 @@ export default function Dashboard() {
     const plannedDate = confirmItem.occurrence_date || effectiveDate
     const isFuel = confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY
     const fuelFields = isFuel ? {
-      fuel_km: parseDecimal(confirmFuelKm) || null,
+      fuel_km: null,
       fuel_liters: parseDecimal(confirmFuelLiters) || null,
       fuel_price_per_liter: parseDecimal(confirmFuelPrice) || null,
       fuel_type: confirmFuelType,
+      ...(parseDecimal(confirmFuelOdometer) > 0 ? { fuel_odometer: parseDecimal(confirmFuelOdometer) } : {}),
     } : {}
 
-    const { error: insertError } = await supabase.from('transactions').insert(withPlannedDate({
-      user_id: user!.id,
+    // Insert + saldo atomici via post_transaction (con fallback al percorso storico).
+    const { error } = await postTransaction(user!.id, {
       type: txType,
       amount: confirmAmount,
       description: confirmItem.name,
@@ -442,24 +444,19 @@ export default function Dashboard() {
       recurring_income_id: confirmItem.recurring_income_id || null,
       recurring_expense_id: confirmItem.recurring_expense_id || null,
       date: effectiveDate,
+      planned_date: plannedDate,
       ...fuelFields,
-    }, plannedDate))
+    })
 
-    if (insertError) {
+    if (error) {
       setConfirmSaving(false)
-      if (isFuelColumnError(insertError.message)) {
+      if (isFuelColumnError(error)) {
         setMissingColumns(prev => Array.from(new Set([...prev, ...FUEL_COLUMNS])))
         toast.error('Colonne benzina mancanti: esegui la SQL indicata nel banner in alto')
       } else {
-        toast.error('Errore nel salvataggio: ' + (insertError.message || ''))
+        toast.error('Errore nel salvataggio: ' + error)
       }
       return
-    }
-
-    if (confirmItem.kind === 'transfer' && fundId && fundToId) {
-      await transferFunds(fundId, fundToId, confirmAmount)
-    } else if (fundId) {
-      await incrementFundBalance(fundId, confirmItem.kind === 'income' ? confirmAmount : -confirmAmount)
     }
 
     setConfirmSaving(false)
@@ -570,10 +567,11 @@ export default function Dashboard() {
 
     const isFuel = confirmItem.kind === 'expense' && confirmItem.category === FUEL_CATEGORY
     const fuelFields = isFuel ? {
-      fuel_km: parseDecimal(confirmFuelKm) || null,
+      fuel_km: null,
       fuel_liters: parseDecimal(confirmFuelLiters) || null,
       fuel_price_per_liter: parseDecimal(confirmFuelPrice) || null,
       fuel_type: confirmFuelType,
+      ...(parseDecimal(confirmFuelOdometer) > 0 ? { fuel_odometer: parseDecimal(confirmFuelOdometer) } : {}),
     } : {}
 
     const effectiveDate = confirmDate || todayString()
@@ -1149,67 +1147,58 @@ export default function Dashboard() {
                     ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="min-w-0">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Km percorsi</label>
-                    <input
-                      type="text" inputMode="decimal"
-                      value={confirmFuelKm}
-                      onChange={e => setConfirmFuelKm(e.target.value)}
-                      placeholder="es. 450"
-                      className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Contachilometri (km totali)</label>
+                  <input
+                    type="text" inputMode="decimal"
+                    value={confirmFuelOdometer}
+                    onChange={e => setConfirmFuelOdometer(e.target.value)}
+                    placeholder="es. 124500"
+                    className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
                   <div className="min-w-0">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
-                    <input
-                      type="text" inputMode="decimal"
-                      value={confirmFuelLiters}
-                      onChange={e => setConfirmFuelLiters(e.target.value)}
-                      placeholder="es. 30"
-                      className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
-                    />
+                    <input type="text" inputMode="decimal" value={confirmFuelLiters} onChange={e => setConfirmFuelLiters(e.target.value)} placeholder="es. 30" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
                   </div>
                   <div className="min-w-0">
                     <label className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
-                    <input
-                      type="text" inputMode="decimal"
-                      value={confirmFuelPrice}
-                      onChange={e => setConfirmFuelPrice(e.target.value)}
-                      placeholder="es. 1,80"
-                      className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
-                    />
+                    <input type="text" inputMode="decimal" value={confirmFuelPrice} onChange={e => setConfirmFuelPrice(e.target.value)} placeholder="es. 1,80" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
                   </div>
                 </div>
                 {(() => {
-                  const avg = averageFuelConsumption(confirmFuelFills, confirmFuelType)
-                  const km = parseDecimal(confirmFuelKm)
+                  const odo = parseDecimal(confirmFuelOdometer)
                   const beforeDate = confirmDate || todayString()
-                  const ref = { id: '', date: beforeDate, created_at: new Date().toISOString(), fuel_type: confirmFuelType }
-                  const prev = km > 0 ? previousFuelFill(ref, confirmFuelFills) : null
-                  const cons = prev && prev.fuel_liters != null ? fuelConsumption(km, Number(prev.fuel_liters), Number(prev.amount)) : null
+                  const ref = { id: '', date: beforeDate, created_at: new Date().toISOString(), fuel_type: confirmFuelType, fuel_odometer: odo > 0 ? odo : null }
+                  const stats = odo > 0 ? fuelStatsOdometer(ref, confirmFuelFills) : null
+                  const lifeCost = lifetimeCostPerKmOdometer(confirmFuelFills)
+                  const stima = lifetimePerFuelStima(confirmFuelFills, confirmFuelType)
                   return (
                     <div className="space-y-1">
-                      {km > 0 && (cons ? (
+                      {odo > 0 && (
+                        stats && (stats.costPerKm != null || stats.kmPerLiter != null) ? (
+                          <p className="text-xs text-slate-600">
+                            {stats.costPerKm != null && <><span className="font-semibold text-slate-800">{cur(stats.costPerKm)}/km</span> reale</>}
+                            {stats.costPerKm != null && stats.kmPerLiter != null && ' · '}
+                            {stats.kmPerLiter != null && <>{FUEL_TYPE_LABEL[confirmFuelType]} <span className="font-semibold text-slate-800">~{stats.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span> (stima)</>}
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-amber-600">Serve un rifornimento precedente col contachilometri per calcolare €/km e la stima.</p>
+                        )
+                      )}
+                      {(lifeCost != null || stima) && (
                         <p className="text-xs text-slate-600">
-                          Consumo pieno precedente ({FUEL_TYPE_LABEL[confirmFuelType]}): <span className="font-semibold text-slate-800">{cons.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
-                          {' · '}{cons.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
-                          {cons.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(cons.costPerKm)}/km</span></>}
-                        </p>
-                      ) : (
-                        <p className="text-[11px] text-amber-600">Nessun rifornimento {FUEL_TYPE_LABEL[confirmFuelType]} precedente con i litri: il consumo del pieno non è calcolabile.</p>
-                      ))}
-                      {avg && (
-                        <p className="text-xs text-slate-600">
-                          Media totale {FUEL_TYPE_LABEL[confirmFuelType]}: <span className="font-semibold text-slate-800">{avg.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span>
-                          {' · '}{avg.litersPer100Km.toLocaleString('it-IT', { maximumFractionDigits: 1 })} l/100km
-                          {avg.costPerKm != null && <> · <span className="font-semibold text-slate-800">{cur(avg.costPerKm)}/km</span></>}
+                          Media:
+                          {lifeCost != null && <> <span className="font-semibold text-slate-800">{cur(lifeCost)}/km</span> reale</>}
+                          {lifeCost != null && stima && ' ·'}
+                          {stima && <> {FUEL_TYPE_LABEL[confirmFuelType]} <span className="font-semibold text-slate-800">~{stima.kmPerLiter.toLocaleString('it-IT', { maximumFractionDigits: 1 })} km/l</span> (stima)</>}
                         </p>
                       )}
                     </div>
                   )
                 })()}
-                <p className="text-[11px] text-slate-400">I «Km percorsi» sono quelli fatti col pieno <strong>precedente</strong> dello stesso tipo. Servono solo per i consumi: non modificano l'importo pagato qui sopra.</p>
+                <p className="text-[11px] text-slate-400">Inserisci la lettura del <strong>contachilometri</strong> (km totali). Per le auto bifuel il <strong>€/km è reale</strong>; il km/l per carburante è una <strong>stima</strong>. Dati solo per i consumi: non modificano l'importo pagato qui sopra.</p>
               </div>
             )}
             {confirmItem.kind !== 'transfer' && (
@@ -1407,9 +1396,7 @@ export default function Dashboard() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
-            <select value={plannedForm.category} onChange={e => setPlannedForm({ ...plannedForm, category: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
-              {TRANSACTION_CATEGORIES.map(c => <option key={c} value={c}>{catLabel(c)}</option>)}
-            </select>
+            <CategorySelect value={plannedForm.category} onChange={c => setPlannedForm({ ...plannedForm, category: c })} baseCategories={TRANSACTION_CATEGORIES} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize" />
           </div>
           <button onClick={savePlanned} disabled={plannedSaving || plannedForm.amount <= 0 || !plannedForm.description.trim()} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 active:scale-[0.98] transition-[transform,background-color]">
             {plannedSaving ? 'Salvataggio...' : editingPlanned ? 'Salva modifiche' : 'Aggiungi pianificazione'}

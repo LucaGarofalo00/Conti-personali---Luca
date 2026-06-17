@@ -7,6 +7,7 @@ import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
 import { cur, EXPENSE_CATEGORIES, todayString, getBillingPeriod, currentPeriodLabel, catLabel, parseLocalDate, fmtDate } from '../lib/utils'
+import CategorySelect from '../components/CategorySelect'
 import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import InfoBox from '../components/InfoBox'
@@ -367,9 +368,7 @@ export default function RecurringExpenses() {
             <>
               <div>
                 <label htmlFor="rec-category" className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
-                <select id="rec-category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize">
-                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{catLabel(c)}</option>)}
-                </select>
+                <CategorySelect id="rec-category" value={form.category} onChange={c => setForm({ ...form, category: c })} baseCategories={EXPENSE_CATEGORIES} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize" />
               </div>
               <div>
                 <label htmlFor="rec-fund" className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
