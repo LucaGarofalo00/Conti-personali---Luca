@@ -83,6 +83,20 @@ create table if not exists user_settings (
   updated_at timestamptz default now()
 );
 
+-- Spese variabili (LEGACY): tabella storica, oggi non più usata dall'app ma ancora
+-- referenziata da `transactions.variable_expense_id`, dalle RLS e da un indice. Va creata
+-- PRIMA di `transactions` (che la referenzia con una foreign key), altrimenti su un DB nuovo
+-- lo schema fallisce. Puoi eliminarla in sicurezza in futuro se non ti serve.
+create table if not exists variable_expenses (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  name text not null default '',
+  amount numeric(12,2) not null default 0,
+  category text not null default 'altro',
+  needs_confirmation boolean not null default false,
+  created_at timestamptz default now()
+);
+
 -- Transazioni effettive + pianificate (is_planned = true)
 create table if not exists transactions (
   id uuid default gen_random_uuid() primary key,
@@ -102,6 +116,8 @@ create table if not exists transactions (
   fuel_km numeric(10,2),
   fuel_liters numeric(10,2),
   fuel_price_per_liter numeric(10,3),
+  fuel_type text,
+  fuel_odometer numeric(10,1),
   date date not null default current_date,
   planned_date date,
   created_at timestamptz default now()
@@ -133,6 +149,8 @@ alter table transactions add column if not exists is_planned boolean not null de
 alter table transactions add column if not exists fuel_km numeric(10,2);
 alter table transactions add column if not exists fuel_liters numeric(10,2);
 alter table transactions add column if not exists fuel_price_per_liter numeric(10,3);
+alter table transactions add column if not exists fuel_type text;
+alter table transactions add column if not exists fuel_odometer numeric(10,1);
 -- Data prevista dell'occorrenza saldata (la `date` resta quella effettiva, che conta nei saldi)
 alter table transactions add column if not exists planned_date date;
 
