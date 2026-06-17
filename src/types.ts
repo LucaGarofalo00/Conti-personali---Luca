@@ -76,6 +76,10 @@ export interface Transaction {
   fuel_liters: number | null
   fuel_price_per_liter: number | null
   fuel_type: 'benzina' | 'gpl' | null
+  // Lettura del contachilometri (km totali) al rifornimento. Per le auto bifuel i km tra due
+  // rifornimenti = differenza delle letture, così i €/km sono accurati a prescindere dal
+  // carburante. Opzionale: assente sui rifornimenti vecchi (che usano fuel_km) e sui DB non migrati.
+  fuel_odometer?: number | null
   date: string
   // Data prevista dell'occorrenza che questa transazione salda (es. il giorno di scadenza
   // della spesa ricorrente). `date` resta la data EFFETTIVA in cui è stata registrata e che

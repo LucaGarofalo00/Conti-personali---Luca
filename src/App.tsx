@@ -19,6 +19,7 @@ const Income = lazy(() => import('./pages/Income'))
 const Budgets = lazy(() => import('./pages/Budgets'))
 const Transactions = lazy(() => import('./pages/Transactions'))
 const Forecast = lazy(() => import('./pages/Forecast'))
+const Stats = lazy(() => import('./pages/Stats'))
 const Settings = lazy(() => import('./pages/Settings'))
 
 function SetupPage() {
@@ -98,6 +99,7 @@ function AppRoutes() {
       <Route path="/budget" element={<ProtectedRoute><Budgets /></ProtectedRoute>} />
       <Route path="/transazioni" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
       <Route path="/previsione" element={<ProtectedRoute><Forecast /></ProtectedRoute>} />
+      <Route path="/statistiche" element={<ProtectedRoute><Stats /></ProtectedRoute>} />
       <Route path="/impostazioni" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       {/* Rotta catch-all: un hash sconosciuto (bookmark stale, refuso) torna alla Dashboard
           invece di lasciare una pagina bianca senza via d'uscita. */}
