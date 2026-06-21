@@ -155,29 +155,34 @@ describe('getCurrentPeriod with salary-anchored override', () => {
   afterAll(() => { vi.useRealTimers() })
   afterEach(() => { __resetPeriodSettingsForTest() })
 
-  it('override 10 giu, today 20 giu → period 10 giu - 9 lug (same day next month minus 1)', () => {
+  it('override 10 giu (anchor 15), today 20 giu → fine ancorata al 14 lug (giorno prima del 15), non al 9', () => {
     vi.setSystemTime(new Date(2026, 5, 20))
     setLocalPeriodSettings({ periodStart: '2026-06-10' })
-    expect(getBillingPeriod()).toEqual({ start: '2026-06-10', end: '2026-07-09' })
+    expect(getBillingPeriod()).toEqual({ start: '2026-06-10', end: '2026-07-14' })
   })
 
-  it('open period: today is past the provisional end → end extends to today', () => {
-    vi.setSystemTime(new Date(2026, 6, 15)) // 15 lug, oltre il 9 lug provvisorio
+  it('accredito in ritardo: stipendio il 18 giu (anchor 15) → 18 giu – 14 lug', () => {
+    vi.setSystemTime(new Date(2026, 5, 21))
+    setLocalPeriodSettings({ periodStart: '2026-06-18' })
+    expect(getBillingPeriod()).toEqual({ start: '2026-06-18', end: '2026-07-14' })
+  })
+
+  it('open period: oggi ha superato la fine provvisoria (14 lug) → si estende a oggi', () => {
+    vi.setSystemTime(new Date(2026, 6, 20)) // 20 lug, oltre il 14 lug provvisorio
     setLocalPeriodSettings({ periodStart: '2026-06-10' })
-    expect(getBillingPeriod()).toEqual({ start: '2026-06-10', end: '2026-07-15' })
+    expect(getBillingPeriod()).toEqual({ start: '2026-06-10', end: '2026-07-20' })
   })
 
-  it('handles end-of-month start: 31 gen → 28 feb (addMonths clamps)', () => {
+  it('la data d\'inizio sposta solo l\'inizio: 31 gen (anchor 15) → 31 gen – 14 feb', () => {
     vi.setSystemTime(new Date(2026, 1, 10)) // 10 feb
     setLocalPeriodSettings({ periodStart: '2026-01-31' })
-    // addMonths(31 gen, 1) = 28 feb; -1 giorno = 27 feb
-    expect(getBillingPeriod()).toEqual({ start: '2026-01-31', end: '2026-02-27' })
+    expect(getBillingPeriod()).toEqual({ start: '2026-01-31', end: '2026-02-14' })
   })
 
   it('currentPeriodLabel reflects the override range', () => {
     vi.setSystemTime(new Date(2026, 5, 20))
     setLocalPeriodSettings({ periodStart: '2026-06-10' })
-    expect(currentPeriodLabel()).toBe('10 giu – 9 lug')
+    expect(currentPeriodLabel()).toBe('10 giu – 14 lug')
   })
 })
 
@@ -225,11 +230,12 @@ describe('monthlyOccurrencesInCurrentPeriod', () => {
   afterAll(() => { vi.useRealTimers() })
   afterEach(() => { __resetPeriodSettingsForTest() })
 
-  it('normal ~1-month period: exactly one occurrence (start month)', () => {
+  it('un giorno dopo l\'inizio occorre una volta sola nel periodo 10 giu – 14 lug', () => {
     vi.setSystemTime(new Date(2026, 5, 20))
-    setLocalPeriodSettings({ periodStart: '2026-06-10' }) // period 10 giu - 9 lug
-    const occ = monthlyOccurrencesInCurrentPeriod(12).map(toDateString)
-    expect(occ).toEqual(['2026-06-12'])
+    setLocalPeriodSettings({ periodStart: '2026-06-10' }) // period 10 giu - 14 lug
+    // Il 20 cade nel mese d'inizio (20 giu); il 20 lug è oltre la fine (14 lug) → una sola.
+    const occ = monthlyOccurrencesInCurrentPeriod(20).map(toDateString)
+    expect(occ).toEqual(['2026-06-20'])
   })
 
   it('normal period: day before start day lands in the next month, still one occurrence', () => {

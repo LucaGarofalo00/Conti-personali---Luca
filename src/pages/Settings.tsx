@@ -187,9 +187,9 @@ export default function Settings() {
         </div>
 
         <InfoBox title="Come funziona il periodo" tone="blue">
-          <p>Il periodo va <strong>dal giorno in cui arriva lo stipendio</strong> al giorno prima dello stipendio successivo (es. stipendio il 15 → periodo 15→14; stipendio il 12 → 12→11).</p>
+          <p>Il periodo <strong>inizia dal giorno in cui arriva davvero lo stipendio</strong> e <strong>finisce il giorno prima del «giorno tipico»</strong> del mese successivo (il giorno tipico è il primo giorno del periodo dopo) — non sposta la fine se l’accredito è in ritardo o in anticipo. Es. con giorno tipico 15: stipendio il 18 → periodo <strong>18 → 14</strong>; stipendio il 12 → <strong>12 → 14</strong>; stipendio il 20 → <strong>20 → 14</strong>.</p>
           <p>Siccome il giorno cambia ogni mese, scegli quale entrata è <strong>lo stipendio</strong>: quando la registri nella dashboard, l’app ti propone di far partire il nuovo periodo da quella data reale (con conferma).</p>
-          <p>Il <strong>giorno tipico</strong> serve solo come stima per le previsioni finché il prossimo stipendio non arriva davvero.</p>
+          <p>Il <strong>giorno tipico</strong> definisce la fine prevista del periodo (il giorno atteso del prossimo stipendio). Se al suo arrivo il prossimo stipendio non è ancora stato registrato, il periodo resta aperto fino a oggi.</p>
         </InfoBox>
 
         <div className="space-y-4 mt-2">

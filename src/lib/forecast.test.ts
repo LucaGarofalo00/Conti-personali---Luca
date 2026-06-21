@@ -323,6 +323,7 @@ describe('generateForecast - transfers NOT counted as expenses (user choice)', (
 function mkActual(opts: {
   recurring_income_id?: string
   recurring_expense_id?: string
+  budget_id?: string
   amount: number
   date: string
   is_memo?: boolean
@@ -332,7 +333,7 @@ function mkActual(opts: {
     id: 'a-' + Math.random(), user_id: 'u1',
     type: opts.recurring_income_id ? 'income' : 'expense',
     amount: opts.amount, description: 'actual',
-    fund_id: null, fund_to_id: null, category: 'altro', budget_id: null,
+    fund_id: null, fund_to_id: null, category: 'altro', budget_id: opts.budget_id ?? null,
     recurring_expense_id: opts.recurring_expense_id ?? null,
     recurring_income_id: opts.recurring_income_id ?? null,
     is_memo: opts.is_memo ?? false, is_planned: false,
@@ -560,5 +561,23 @@ describe('projectBalanceAtDate', () => {
     const sfizi = mkBudget('sfizi', 'Sfizi', 50)
     const proj = projectBalanceAtDate(new Date(2026, 5, 26), 1000, [], [], [sfizi], [], [])
     expect(proj.totalExpenses).toBeGreaterThanOrEqual(50 * 4)
+  })
+
+  it('con dati reali: budget settimana in corso proiettato al solo residuo (oggi = mar 19 mag)', () => {
+    // Settimana corrente lun 18 – dom 24; speso 20 su quota 50 → residuo 30 (lo speso 20 è già nel
+    // saldo di partenza, non va riproiettato). Target nella stessa settimana per isolare il budget.
+    const sfizi = mkBudget('sfizi', 'Sfizi', 50)
+    const spent = mkActual({ amount: 20, date: '2026-05-19', budget_id: 'sfizi' })
+    const proj = projectBalanceAtDate(new Date(2026, 4, 23), 1000, [], [], [sfizi], [], [], [spent])
+    expect(proj.totalExpenses).toBe(30)
+    expect(proj.balance).toBe(970)
+  })
+
+  it('con dati reali: budget in sforamento → nessun residuo, niente doppio conteggio', () => {
+    const sfizi = mkBudget('sfizi', 'Sfizi', 50)
+    const spent = mkActual({ amount: 70, date: '2026-05-19', budget_id: 'sfizi' })
+    const proj = projectBalanceAtDate(new Date(2026, 4, 23), 1000, [], [], [sfizi], [], [], [spent])
+    expect(proj.totalExpenses).toBe(0)
+    expect(proj.balance).toBe(1000)
   })
 })

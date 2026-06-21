@@ -1,4 +1,4 @@
-import { addDays, getDate, getDay, getDaysInMonth, startOfDay, isBefore, isAfter, isSameDay, format } from 'date-fns'
+import { addDays, getDate, getDay, getDaysInMonth, startOfDay, startOfWeek, isBefore, isAfter, isSameDay, format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { toDateString, parseLocalDate } from './utils'
 import { inSameRecurrenceWindow } from './recurrenceMatch'
@@ -79,6 +79,11 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
   // vengono conteggiate per la spesa reale effettiva (vedi sotto), non per la quota fissa.
   // Altrimenti (default) il budget conta sempre come quota stimata, come nel previsionale.
   const reconcileBudgetWithActuals = reconcileBudgets && !!actualTx
+  // Modalità previsionale (excludeRealized) coi dati reali: lo speso della settimana in corso è
+  // già scontato dal saldo di partenza, quindi il budget della settimana in corso non si proietta
+  // alla quota piena ma solo al RESIDUO (vedi blocco dedicato in fondo). Le settimane future
+  // restano alla quota.
+  const excludeRealizedWithActuals = excludeRealized && !!actualTx
 
   // Transazioni reali collegate, raggruppate per ricorrente. La riconciliazione non avviene
   // più per data identica ma per "finestra" (settimana per le settimanali, mese per le
@@ -104,6 +109,17 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
     for (const arr of expenseByRec.values()) arr.sort(byDate)
   }
   const consumedTxIds = new Set<string>()
+
+  // Spese reali imputate a un budget settimanale (no memo, no pianificate): servono sia alla
+  // riconciliazione delle settimane CONCLUSE (più sotto) sia a far emergere SUBITO un eventuale
+  // sforamento della settimana IN CORSO nel loop principale (max tra quota e speso).
+  const budgetTx = actualTx ? actualTx.filter(t => !t.is_planned && !t.is_memo && t.budget_id) : []
+
+  // Id delle ricorrenti per cui ALMENO un'occorrenza è stata emessa (proiettata o riconciliata) nel
+  // periodo. Serve al blocco "una tantum": un accredito/addebito reale legato a una ricorrente che
+  // ha COMUNQUE una voce nel periodo NON va ricontato come one-off (evita il doppio conteggio nel
+  // periodo aperto che scavalca il giorno tipico, dove l'occorrenza del mese dopo rientra).
+  const emittedRecIds = new Set<string>()
 
   // null  → nessuna riconciliazione (usa l'importo previsto)
   // 'skip' → occorrenza gestita ma senza movimento reale (memo / "non lavorato"): non contare
@@ -153,6 +169,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
           const r = reconcile(incomeByRec, inc.id, dateStr, d => inSameRecurrenceWindow(d, dateStr, 'monthly'))
           const amt = resolveAmount(r, Number(inc.amount))
           if (amt !== null) {
+            emittedRecIds.add(inc.id)
             items.push({
               date: dateStr, description: inc.name, amount: amt,
               kind: 'income', source: 'recurring_income', sourceLabel: SOURCE_LABELS.recurring_income,
@@ -169,6 +186,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
           const r = reconcile(incomeByRec, inc.id, dateStr, d => d >= workStr && d <= dateStr)
           const amt = resolveAmount(r, Number(inc.amount))
           if (amt !== null) {
+            emittedRecIds.add(inc.id)
             items.push({
               date: dateStr, description: inc.name, amount: amt,
               kind: 'income', source: 'recurring_income', sourceLabel: SOURCE_LABELS.recurring_income,
@@ -200,6 +218,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         const r = reconcile(expenseByRec, exp.id, dateStr, d => inSameRecurrenceWindow(d, dateStr, freq))
         const amt = resolveAmount(r, Number(exp.amount))
         if (amt !== null) {
+          emittedRecIds.add(exp.id)
           items.push({
             date: dateStr,
             description: exp.name + (freq === 'yearly' ? ' (annuale)' : ''),
@@ -233,14 +252,16 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       }
     }
 
-    if (getDay(cursor) === 1 && !isBefore(cursor, startDate)) {
+    // Budget settimanali NON in modalità consuntivo: pura proiezione (nessun flag) e previsionale
+    // (excludeRealized) emettono la quota PIENA sul lunedì. La modalità consuntivo (reconcileBudgets)
+    // — con proration per giorni sui confini di periodo — è gestita dal blocco unificato dopo il loop.
+    if (!reconcileBudgetWithActuals && getDay(cursor) === 1 && !isBefore(cursor, startDate)) {
       for (const b of weeklyBudgets) {
         if (!b.is_active) continue
         if (b.fund_id && excluded.has(b.fund_id)) continue
-        // Settimana già CONCLUSA (domenica passata) + dati reali: la conteggia la riconciliazione
-        // sotto con la spesa reale effettiva. Qui emetti la quota stimata (la previsione) per la
-        // settimana IN CORSO e per quelle future, finché non sono concluse.
-        if (reconcileBudgetWithActuals && isBefore(addDays(cursor, 6), today)) continue
+        // Previsionale: la settimana IN CORSO è gestita dal blocco "residuo" in fondo (il suo speso
+        // è già nel saldo di partenza); qui il loop proietta solo le settimane FUTURE alla quota.
+        if (excludeRealizedWithActuals && !isAfter(cursor, today) && isAfter(addDays(cursor, 7), today)) continue
         const range = `${format(cursor, 'd')}–${format(addDays(cursor, 6), 'd MMM', { locale: it })}`
         items.push({
           date: dateStr, description: `${b.name} (settimana ${range})`, amount: Number(b.amount),
@@ -253,16 +274,29 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
   }
 
   // Transazioni "una tantum" davvero registrate nel periodo: spese/entrate manuali che non
-  // sono già rappresentate dalle regole proiettate. Escluse: memo, trasferimenti, quelle
-  // legate a ricorrenti (già riconciliate sopra) e quelle dentro un budget (già coperte
-  // dalla quota settimanale) — così non si conta due volte.
+  // sono già rappresentate dalle regole proiettate. Escluse: trasferimenti e quelle dentro un
+  // budget (già coperte dalla quota settimanale) — così non si conta due volte.
+  // Le transazioni legate a una ricorrente sono escluse SOLO se già AGGANCIATE a un'occorrenza
+  // (consumedTxIds) o se la loro ricorrente ha COMUNQUE emesso un'occorrenza nel periodo
+  // (emittedRecIds → evita il doppio conteggio nel periodo aperto che scavalca il giorno tipico).
+  // Se invece il movimento reale NON è agganciato a nessuna occorrenza e la sua ricorrente non
+  // ricorre affatto nel periodo (es. lo STIPENDIO che avvia il periodo: la sua occorrenza tipica —
+  // il 15 — cade fuori dal periodo 18 giu – 14 lug), va contato qui, altrimenti sparirebbe pur
+  // essendo un movimento reale del periodo. Per questi vale anche il MEMO con importo>0 ("segnato
+  // senza scalare"): conta nei totali (come la riconciliazione delle occorrenze in-periodo).
   if (includeActualOneOffs && actualTx) {
     const lowerStr = toDateString(lowerBound)
     const endStr = toDateString(endDate)
     for (const tx of actualTx) {
-      if (tx.is_planned || tx.is_memo) continue
+      if (tx.is_planned) continue
       if (tx.type === 'transfer') continue
-      if (tx.recurring_income_id || tx.recurring_expense_id || tx.budget_id) continue
+      if (tx.budget_id) continue
+      const recId = tx.recurring_income_id || tx.recurring_expense_id || null
+      if (recId && (consumedTxIds.has(tx.id) || emittedRecIds.has(recId))) continue
+      // Memo: contano solo quelli CON importo (>0) legati a una ricorrente non proiettata (es.
+      // stipendio "segnato senza scalare" con occorrenza fuori periodo). Gli altri memo (manuali o
+      // a importo 0 = "non avvenuto") non contano nei totali.
+      if (tx.is_memo && !(recId && Number(tx.amount) !== 0)) continue
       if (tx.fund_id && excluded.has(tx.fund_id)) continue
       if (tx.date < lowerStr || tx.date > endStr) continue
       const kind = tx.type === 'income' ? 'income' : 'expense'
@@ -278,37 +312,77 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
     }
   }
 
-  // Budget: solo con reconcileBudgets, per ogni settimana GIÀ CONCLUSA (domenica passata)
-  // conta la spesa reale effettiva al posto della quota stimata. La settimana in corso e quelle
-  // future restano alla quota (gestita nel loop sopra). Non esistono più voci "Residuo" (entrata)
-  // né "Sforamento" (uscita): il budget riflette semplicemente i movimenti reali registrati.
-  // L'avanzo non speso non viene conteggiato come entrata (resta già nel saldo del fondo).
-  if (reconcileBudgetWithActuals && actualTx) {
-    const budgetTx = actualTx.filter(t => !t.is_planned && !t.is_memo && t.budget_id)
+  // Budget settimanali — modalità CONSUNTIVO del periodo (reconcileBudgets). Ogni settimana (lun–dom)
+  // che si sovrappone al periodo conta la quota PROPORZIONALE ai suoi giorni dentro il periodo
+  // (giorni/7), così una settimana tagliata dal confine del periodo si divide correttamente tra i
+  // due periodi (es. settimana 13–19 con confine al 15 → 2/7 nel periodo che finisce il 14, 5/7 in
+  // quello che inizia il 15). Con i dati reali: porzione-in-periodo già CONCLUSA → spesa reale nella
+  // porzione; porzione IN CORSO/FUTURA → max(quota proporzionale, speso) (lo sforamento emerge
+  // subito; il sotto-speso resta alla quota proporzionale). Le spese col budget_id sono escluse
+  // dalle voci "una tantum" (sopra), quindi qui non c'è doppio conteggio.
+  if (reconcileBudgetWithActuals) {
+    const periodEndExcl = addDays(endDate, 1)
     for (const b of weeklyBudgets) {
       if (!b.is_active) continue
       if (b.fund_id && excluded.has(b.fund_id)) continue
-      const wcur = new Date(lowerBound)
-      while (!isAfter(wcur, endDate)) {
-        if (getDay(wcur) === 1 && !isBefore(wcur, startDate) && isBefore(addDays(wcur, 6), today)) {
-          const weekStart = new Date(wcur)
-          const weekEnd = addDays(weekStart, 7)
-          const wsStr = toDateString(weekStart)
-          const weStr = toDateString(weekEnd)
+      const quota = Number(b.amount)
+      let wMon = startOfWeek(lowerBound, { weekStartsOn: 1 })
+      while (!isAfter(wMon, endDate)) {
+        const wEndExcl = addDays(wMon, 7)
+        // Sovrapposizione settimana ∩ periodo [lowerBound, endDate].
+        const ovStart = isBefore(wMon, lowerBound) ? lowerBound : wMon
+        const ovEndExcl = isBefore(wEndExcl, periodEndExcl) ? wEndExcl : periodEndExcl
+        const ovDays = Math.round((ovEndExcl.getTime() - ovStart.getTime()) / 86_400_000)
+        if (ovDays > 0) {
+          const proratedQuota = Math.round(quota * ovDays / 7 * 100) / 100
+          const ovStartStr = toDateString(ovStart)
+          const ovEndStr = toDateString(ovEndExcl)
           let spent = 0
           for (const t of budgetTx) {
-            if (t.budget_id === b.id && t.date >= wsStr && t.date < weStr) spent += Number(t.amount)
+            if (t.budget_id === b.id && t.date >= ovStartStr && t.date < ovEndStr) spent += Number(t.amount)
           }
           spent = Math.round(spent * 100) / 100
-          if (spent > 0) {
-            const range = `${format(weekStart, 'd')}–${format(addDays(weekStart, 6), 'd MMM', { locale: it })}`
+          // Porzione-in-periodo interamente conclusa (ultimo giorno < oggi) → spesa reale; altrimenti
+          // (in corso/futura) max tra quota proporzionale e speso.
+          const concluded = !isAfter(ovEndExcl, today)
+          const amount = concluded ? spent : Math.max(proratedQuota, spent)
+          if (amount > 0) {
+            const range = `${format(ovStart, 'd')}–${format(addDays(ovEndExcl, -1), 'd MMM', { locale: it })}`
             items.push({
-              date: wsStr, description: `${b.name} (speso ${range})`, amount: spent,
+              date: ovStartStr, description: `${b.name} (${range})`, amount,
               kind: 'expense', source: 'weekly_budget', sourceLabel: SOURCE_LABELS.weekly_budget,
             })
           }
         }
-        wcur.setDate(wcur.getDate() + 1)
+        wMon = addDays(wMon, 7)
+      }
+    }
+  }
+
+  // Previsionale (excludeRealized): la settimana IN CORSO ha lo speso reale già scontato dal saldo
+  // di partenza, quindi qui si proietta solo il RESIDUO della quota: max(0, quota − speso). Se ho
+  // speso MENO della quota assumo di arrivare alla quota (proiezione conservativa); se ho già
+  // SFORATO il residuo è 0 (lo sforamento è già nel saldo → niente da aggiungere, niente doppio
+  // conteggio). Emesso una sola volta, sul segmento che contiene "oggi" (datato a oggi).
+  if (excludeRealizedWithActuals && actualTx && !isBefore(today, lowerBound) && !isAfter(today, endDate)) {
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 })
+    const wsStr = toDateString(weekStart)
+    const weStr = toDateString(addDays(weekStart, 7))
+    const todayStr = toDateString(today)
+    for (const b of weeklyBudgets) {
+      if (!b.is_active) continue
+      if (b.fund_id && excluded.has(b.fund_id)) continue
+      let spent = 0
+      for (const t of budgetTx) {
+        if (t.budget_id === b.id && t.date >= wsStr && t.date < weStr) spent += Number(t.amount)
+      }
+      const residual = Math.round((Number(b.amount) - spent) * 100) / 100
+      if (residual > 0) {
+        const range = `${format(weekStart, 'd')}–${format(addDays(weekStart, 6), 'd MMM', { locale: it })}`
+        items.push({
+          date: todayStr, description: `${b.name} (resto settimana ${range})`, amount: residual,
+          kind: 'expense', source: 'weekly_budget', sourceLabel: SOURCE_LABELS.weekly_budget,
+        })
       }
     }
   }

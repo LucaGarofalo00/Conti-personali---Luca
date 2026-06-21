@@ -187,7 +187,12 @@ export function projectBalanceAtDate(
   recurringIncome: RecurringIncome[],
   weeklyBudgets: WeeklyBudget[],
   planned: Transaction[],
-  excludedFundIds: string[]
+  excludedFundIds: string[],
+  // Transazioni reali del periodo: se presenti, la proiezione riconcilia col reale (le occorrenze
+  // ricorrenti già realizzate non vengono riproiettate; il budget della settimana in corso conta
+  // solo il RESIDUO della quota, perché lo speso è già nel saldo di partenza). Se omesso → pura
+  // proiezione (comportamento storico).
+  actualTx: Transaction[] = []
 ): BalanceProjection {
   const today = startOfDay(new Date())
   const target = startOfDay(targetDate)
@@ -195,6 +200,7 @@ export function projectBalanceAtDate(
     return { balance: currentBalance, targetDate: target, totalIncome: 0, totalExpenses: 0 }
   }
 
+  const reconcileWithReal = actualTx.length > 0
   let balance = currentBalance
   let totalIncome = 0
   let totalExpenses = 0
@@ -210,6 +216,7 @@ export function projectBalanceAtDate(
       recurringExpenses, recurringIncome, weeklyBudgets, planned,
       excludedFundIds,
       fromToday: false,
+      ...(reconcileWithReal ? { actualTx, excludeRealized: true } : {}),
     })
     const totals = totalsFromBreakdown(items)
     balance += totals.income - totals.expenses

@@ -176,6 +176,11 @@ export default function Budgets() {
     planned: [],
     excludedFundIds: [],
     fromToday: false,
+    // Riconcilia col reale: settimane concluse → speso effettivo; settimana in corso → max(quota,
+    // speso) così uno sforamento si riflette subito nel totale, coerentemente con le card per-budget
+    // sotto (che mostrano già lo sforamento). Settimane future → quota.
+    actualTx: budgetTx,
+    reconcileBudgets: true,
   })
   const totalMonthlyAll = totalsFromBreakdown(budgetBreakdown).expenses
 
@@ -189,7 +194,7 @@ export default function Budgets() {
         <p>Un <strong>budget settimanale</strong> è un limite di spesa per la settimana corrente (es. sfizi 50€, mangiare fuori 80€).</p>
         <p><strong>Reset settimanale</strong>: ogni <strong>lunedì 00:00</strong> il contatore riparte da zero, sempre dal valore <strong>base</strong>. L'avanzo della settimana precedente <strong>NON si accumula</strong> e <strong>NON viene conteggiato come entrata</strong>: i soldi non spesi restano semplicemente nel saldo del fondo.</p>
         <p><strong>Sforamento</strong>: se spendi più del budget, la barra diventa rossa e compare un alert, MA le spese sono comunque registrate normalmente nel fondo. Il "debito" <strong>NON si scala</strong> dalla settimana successiva.</p>
-        <p><strong>Nei totali e nelle previsioni</strong>: per le settimane <strong>già iniziate</strong> il budget conta per quanto hai <strong>speso davvero</strong>; per le settimane <strong>future</strong> conta il valore base come stima.</p>
+        <p><strong>Nei totali</strong>: per le settimane <strong>concluse</strong> conta quanto hai <strong>speso davvero</strong>; per la settimana <strong>in corso</strong> il <strong>maggiore tra quota e speso</strong> (uno sforamento si vede subito, sotto la quota resta la stima); per le settimane <strong>future</strong>, il valore base come stima. Nelle <strong>previsioni</strong> di saldo lo speso reale è già scontato dal saldo dei fondi.</p>
         <p>Lo storico "Settimane passate" qui sotto mostra avanzo/sforo di ogni settimana solo a titolo informativo.</p>
         <p>Per spese fisse mensili (affitto, abbonamenti, ecc.) usa la sezione <strong>Spese Ricorrenti</strong>.</p>
       </InfoBox>

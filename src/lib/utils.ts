@@ -1,5 +1,5 @@
 import { CreditCard, Smartphone, Globe, Banknote, BookOpen, PiggyBank, Wallet } from 'lucide-react'
-import { format, addMonths, addDays, startOfDay } from 'date-fns'
+import { format, addDays, startOfDay } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { isAmountsHidden } from './privacy'
 import { getAnchorDay, getPeriodStartOverride } from './periodSettings'
@@ -80,7 +80,16 @@ function periodForAnchor(date: Date, anchor: number): Period {
 export function computePeriod(override: string | null, anchor: number): Period {
   if (override) {
     const startDate = parseLocalDate(override)
-    const provisionalEnd = addDays(addMonths(startDate, 1), -1)
+    // L'inizio è la data REALE dello stipendio (override). La fine PROVVISORIA è ancorata al giorno
+    // fisso `anchor` (giorno atteso del prossimo stipendio) del mese SUCCESSIVO: il periodo finisce
+    // il giorno PRIMA dell'anchor (l'anchor è il primo giorno del periodo dopo). NON è ancorata alla
+    // data d'inizio: un accredito in ritardo/anticipo sposta solo l'inizio, la fine resta al 14 (es.
+    // stipendio il 18 giu, anchor 15 → 18 giu – 14 lug, non – 17 lug). Se oggi ha superato la fine
+    // provvisoria (nuovo stipendio non ancora arrivato/confermato), il periodo resta aperto fino a
+    // OGGI, così i soldi "devono bastare" finché non arriva l'accredito.
+    const sy = startDate.getFullYear()
+    const sm = startDate.getMonth()
+    const provisionalEnd = addDays(new Date(sy, sm + 1, clampDay(sy, sm + 1, anchor)), -1)
     const today = startOfDay(new Date())
     const endDate = today > provisionalEnd ? today : provisionalEnd
     return toPeriod(startDate, endDate)
