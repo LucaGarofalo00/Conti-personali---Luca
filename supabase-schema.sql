@@ -184,7 +184,7 @@ drop policy if exists "funds_update" on funds;
 drop policy if exists "funds_delete" on funds;
 create policy "funds_select" on funds for select using (auth.uid() = user_id);
 create policy "funds_insert" on funds for insert with check (auth.uid() = user_id);
-create policy "funds_update" on funds for update using (auth.uid() = user_id);
+create policy "funds_update" on funds for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "funds_delete" on funds for delete using (auth.uid() = user_id);
 
 drop policy if exists "recurring_expenses_select" on recurring_expenses;
@@ -193,7 +193,7 @@ drop policy if exists "recurring_expenses_update" on recurring_expenses;
 drop policy if exists "recurring_expenses_delete" on recurring_expenses;
 create policy "recurring_expenses_select" on recurring_expenses for select using (auth.uid() = user_id);
 create policy "recurring_expenses_insert" on recurring_expenses for insert with check (auth.uid() = user_id);
-create policy "recurring_expenses_update" on recurring_expenses for update using (auth.uid() = user_id);
+create policy "recurring_expenses_update" on recurring_expenses for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "recurring_expenses_delete" on recurring_expenses for delete using (auth.uid() = user_id);
 
 drop policy if exists "recurring_income_select" on recurring_income;
@@ -202,7 +202,7 @@ drop policy if exists "recurring_income_update" on recurring_income;
 drop policy if exists "recurring_income_delete" on recurring_income;
 create policy "recurring_income_select" on recurring_income for select using (auth.uid() = user_id);
 create policy "recurring_income_insert" on recurring_income for insert with check (auth.uid() = user_id);
-create policy "recurring_income_update" on recurring_income for update using (auth.uid() = user_id);
+create policy "recurring_income_update" on recurring_income for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "recurring_income_delete" on recurring_income for delete using (auth.uid() = user_id);
 
 drop policy if exists "weekly_budgets_select" on weekly_budgets;
@@ -211,7 +211,7 @@ drop policy if exists "weekly_budgets_update" on weekly_budgets;
 drop policy if exists "weekly_budgets_delete" on weekly_budgets;
 create policy "weekly_budgets_select" on weekly_budgets for select using (auth.uid() = user_id);
 create policy "weekly_budgets_insert" on weekly_budgets for insert with check (auth.uid() = user_id);
-create policy "weekly_budgets_update" on weekly_budgets for update using (auth.uid() = user_id);
+create policy "weekly_budgets_update" on weekly_budgets for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "weekly_budgets_delete" on weekly_budgets for delete using (auth.uid() = user_id);
 
 drop policy if exists "variable_expenses_select" on variable_expenses;
@@ -220,7 +220,7 @@ drop policy if exists "variable_expenses_update" on variable_expenses;
 drop policy if exists "variable_expenses_delete" on variable_expenses;
 create policy "variable_expenses_select" on variable_expenses for select using (auth.uid() = user_id);
 create policy "variable_expenses_insert" on variable_expenses for insert with check (auth.uid() = user_id);
-create policy "variable_expenses_update" on variable_expenses for update using (auth.uid() = user_id);
+create policy "variable_expenses_update" on variable_expenses for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "variable_expenses_delete" on variable_expenses for delete using (auth.uid() = user_id);
 
 drop policy if exists "transactions_select" on transactions;
@@ -229,7 +229,7 @@ drop policy if exists "transactions_update" on transactions;
 drop policy if exists "transactions_delete" on transactions;
 create policy "transactions_select" on transactions for select using (auth.uid() = user_id);
 create policy "transactions_insert" on transactions for insert with check (auth.uid() = user_id);
-create policy "transactions_update" on transactions for update using (auth.uid() = user_id);
+create policy "transactions_update" on transactions for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "transactions_delete" on transactions for delete using (auth.uid() = user_id);
 
 drop policy if exists "user_settings_select" on user_settings;
@@ -238,7 +238,7 @@ drop policy if exists "user_settings_update" on user_settings;
 drop policy if exists "user_settings_delete" on user_settings;
 create policy "user_settings_select" on user_settings for select using (auth.uid() = user_id);
 create policy "user_settings_insert" on user_settings for insert with check (auth.uid() = user_id);
-create policy "user_settings_update" on user_settings for update using (auth.uid() = user_id);
+create policy "user_settings_update" on user_settings for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "user_settings_delete" on user_settings for delete using (auth.uid() = user_id);
 
 -- ---------------------------------------------

@@ -50,7 +50,15 @@ export default function Auth({ recovery = false }: { recovery?: boolean }) {
 
     if (mode === 'login') {
       const { error: err } = await signIn(email, password)
-      if (err) setError((err as Error).message)
+      if (err) {
+        // Messaggio generico per non rivelare se l'email è registrata (anti user-enumeration).
+        // Si distingue solo il caso "email non confermata", che non rivela l'esistenza dell'account
+        // più di quanto già faccia il flusso di registrazione.
+        const m = (err as Error).message || ''
+        setError(/not confirmed|confirm|conferma/i.test(m)
+          ? 'Devi confermare l\'email prima di accedere. Controlla la tua casella di posta.'
+          : 'Email o password non corretti.')
+      }
       else navigate('/')
     } else {
       const { error: err } = await signUp(email, password)

@@ -40,7 +40,7 @@ drop policy if exists "user_settings_update" on user_settings;
 drop policy if exists "user_settings_delete" on user_settings;
 create policy "user_settings_select" on user_settings for select using (auth.uid() = user_id);
 create policy "user_settings_insert" on user_settings for insert with check (auth.uid() = user_id);
-create policy "user_settings_update" on user_settings for update using (auth.uid() = user_id);
+create policy "user_settings_update" on user_settings for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "user_settings_delete" on user_settings for delete using (auth.uid() = user_id);
 
 -- Ricarica la cache dello schema dell'API REST (PostgREST) così la tabella è subito disponibile.

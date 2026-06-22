@@ -24,7 +24,7 @@ drop policy if exists "custom_categories_update" on custom_categories;
 drop policy if exists "custom_categories_delete" on custom_categories;
 create policy "custom_categories_select" on custom_categories for select using (auth.uid() = user_id);
 create policy "custom_categories_insert" on custom_categories for insert with check (auth.uid() = user_id);
-create policy "custom_categories_update" on custom_categories for update using (auth.uid() = user_id);
+create policy "custom_categories_update" on custom_categories for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "custom_categories_delete" on custom_categories for delete using (auth.uid() = user_id);
 
 NOTIFY pgrst, 'reload schema';

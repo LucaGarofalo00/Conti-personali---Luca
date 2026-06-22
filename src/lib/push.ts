@@ -75,7 +75,12 @@ export async function disableNotifications(): Promise<{ ok: boolean; error?: str
   try {
     const sub = await currentSubscription()
     if (sub) {
-      await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+      // Difesa in profondità: cancella solo la PROPRIA sottoscrizione (oltre alle RLS), così un
+      // endpoint altrui non può essere rimosso anche se la RLS della tabella fosse assente/debole.
+      const { data: { user } } = await supabase.auth.getUser()
+      let del = supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+      if (user?.id) del = del.eq('user_id', user.id)
+      await del
       await sub.unsubscribe()
     }
     return { ok: true }

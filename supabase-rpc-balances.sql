@@ -15,10 +15,14 @@
 create or replace function public.increment_fund_balance(p_fund_id uuid, p_delta numeric)
 returns void
 language sql
+-- search_path fissato: difesa da name-hijack se la funzione venisse ricreata SECURITY DEFINER.
+set search_path = public, pg_temp
 as $$
+  -- Filtro esplicito user_id = auth.uid() oltre alle RLS: difesa in profondità (regge anche se la
+  -- RLS venisse disabilitata o la funzione resa DEFINER). Un fondo non tuo → 0 righe, nessun effetto.
   update public.funds
      set balance = balance + p_delta
-   where id = p_fund_id;
+   where id = p_fund_id and user_id = auth.uid();
 $$;
 
 -- Trasferimento ATOMICO tra due fondi: i due aggiornamenti di saldo avvengono nella stessa
@@ -28,10 +32,12 @@ $$;
 create or replace function public.transfer_funds(p_from uuid, p_to uuid, p_delta numeric)
 returns void
 language plpgsql
+set search_path = public, pg_temp
 as $$
 begin
-  update public.funds set balance = balance - p_delta where id = p_from;
-  update public.funds set balance = balance + p_delta where id = p_to;
+  -- Entrambi gli UPDATE vincolati al proprietario (difesa in profondità oltre alle RLS).
+  update public.funds set balance = balance - p_delta where id = p_from and user_id = auth.uid();
+  update public.funds set balance = balance + p_delta where id = p_to and user_id = auth.uid();
 end;
 $$;
 
