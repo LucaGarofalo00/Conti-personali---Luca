@@ -415,6 +415,34 @@ export default function Dashboard() {
     setConfirmFuelFills((data || []).filter(t => !t.is_planned))
   }
 
+  // Carburante settimanale pagato in un giorno diverso dal previsto → propone (con conferma) di
+  // spostare PERMANENTEMENTE la ricorrente a quel giorno della settimana. Ri-aggancia la transazione
+  // appena registrata alla nuova occorrenza (la riconciliazione preferisce planned_date esatto),
+  // così l'importo reale non si scolla. Solo carburante, solo settimanali.
+  const WEEKDAYS_IT = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
+  const maybeShiftFuelWeekday = async (recExpId: string, name: string, payDateStr: string, oldPlannedDate: string) => {
+    const exp = expenses.find(e => e.id === recExpId)
+    if (!exp || (exp.frequency || 'monthly') !== 'weekly' || exp.day_of_week === null) return
+    const payDow = parseLocalDate(payDateStr).getDay()
+    if (payDow === exp.day_of_week) return
+    const ok = await confirm({
+      title: 'Giorno diverso dal previsto',
+      message: `Hai pagato «${name}» di ${WEEKDAYS_IT[payDow]} invece di ${WEEKDAYS_IT[exp.day_of_week]}. Vuoi spostare questa spesa ricorrente a ogni ${WEEKDAYS_IT[payDow]} d'ora in poi?`,
+      confirmText: `Sì, ogni ${WEEKDAYS_IT[payDow]}`,
+      cancelText: 'No, lascia invariato',
+    })
+    if (!ok) return
+    const { error } = await supabase.from('recurring_expenses').update({ day_of_week: payDow }).eq('id', exp.id)
+    if (error) { toast.error('Errore nello spostamento: ' + error.message); return }
+    // Ri-aggancia la transazione appena pagata alla nuova occorrenza (= il giorno del pagamento).
+    if (oldPlannedDate !== payDateStr) {
+      await supabase.from('transactions').update({ planned_date: payDateStr })
+        .eq('recurring_expense_id', exp.id).eq('date', payDateStr).eq('planned_date', oldPlannedDate)
+    }
+    toast.success(`«${name}» spostata a ogni ${WEEKDAYS_IT[payDow]}`)
+    load()
+  }
+
   const handleConfirm = async () => {
     if (!confirmItem || confirmAmount <= 0) return
     setConfirmSaving(true)
@@ -463,9 +491,12 @@ export default function Dashboard() {
     }
 
     setConfirmSaving(false)
+    const fuelRecId = isFuel ? (confirmItem.recurring_expense_id || null) : null
+    const itemName = confirmItem.name
     setConfirmItem(null)
     toast.success(confirmItem.kind === 'transfer' ? 'Trasferimento registrato' : confirmItem.kind === 'income' ? 'Entrata registrata' : 'Spesa registrata')
     load()
+    if (fuelRecId) void maybeShiftFuelWeekday(fuelRecId, itemName, effectiveDate, plannedDate)
   }
 
   const skipIncomeOccurrence = async (item: PendingItem) => {
@@ -608,9 +639,12 @@ export default function Dashboard() {
     }
 
     setConfirmSaving(false)
+    const fuelRecId = isFuel ? (confirmItem.recurring_expense_id || null) : null
+    const itemName = confirmItem.name
     setConfirmItem(null)
     toast.success('Segnato come pagato')
     load()
+    if (fuelRecId) void maybeShiftFuelWeekday(fuelRecId, itemName, effectiveDate, plannedDate)
   }
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Caricamento...</div>
