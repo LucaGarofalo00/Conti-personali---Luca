@@ -18,7 +18,7 @@ import { getPeriodBreakdown } from '../lib/periodBreakdown'
 import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { addDays } from 'date-fns'
-import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, monthlyOccurrencesInCurrentPeriod, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel, parseLocalDate, fmtDate } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, monthlyOccurrencesInCurrentPeriod, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel, parseLocalDate, fmtDate, sameWeekWeekday } from '../lib/utils'
 import CategorySelect from '../components/CategorySelect'
 import { isAmountsHidden } from '../lib/privacy'
 import { getSalaryIncomeId } from '../lib/periodSettings'
@@ -332,9 +332,12 @@ export default function Dashboard() {
 
       return filteredOccs.map(o => {
         const paidTx = matchOccurrence(o.dateStr)
+        // Già fatta → mostra il giorno EFFETTIVO del pagamento (data reale della transazione); ancora
+        // da pagare → il giorno PREVISTO dell'occorrenza.
+        const labelDate = paidTx ? parseLocalDate(paidTx.date) : o.date
         const dateLabel = freq === 'weekly'
-          ? format(o.date, 'EEE d MMM', { locale: it })
-          : format(o.date, 'd MMM', { locale: it })
+          ? format(labelDate, 'EEE d MMM', { locale: it })
+          : format(labelDate, 'd MMM', { locale: it })
         return {
           id: 'rec-' + exp.id + '-' + o.dateStr,
           kind: isTransfer ? 'transfer' as const : 'expense' as const,
@@ -355,7 +358,11 @@ export default function Dashboard() {
     })
     .sort((a, b) => (a.occurrence_date || '').localeCompare(b.occurrence_date || ''))
 
-  const pendingRecurringManual = pendingRecurring.filter(p => !p.auto)
+  // "Prossime Scadenze" mostra le voci ancora da pagare di OGGI in avanti + tutte quelle già fatte.
+  // Le occorrenze PASSATE e non pagate non compaiono come "da pagare" (non sono più scadenze
+  // imminenti, ed evita "fantasmi" quando si sposta il giorno di una ricorrente a metà periodo).
+  // Stesso criterio già usato dal ramo automatico (pendingAutoUpcoming).
+  const pendingRecurringManual = pendingRecurring.filter(p => !p.auto && (p.confirmed || !p.occurrence_date || p.occurrence_date >= today))
   const pendingAutoUpcoming = pendingRecurring.filter(p => p.auto && !p.confirmed && !!p.occurrence_date && p.occurrence_date >= today)
 
   const { start: pStartStr, end: pEndStr } = getBillingPeriod()
@@ -423,21 +430,34 @@ export default function Dashboard() {
   const maybeShiftFuelWeekday = async (recExpId: string, name: string, payDateStr: string, oldPlannedDate: string) => {
     const exp = expenses.find(e => e.id === recExpId)
     if (!exp || (exp.frequency || 'monthly') !== 'weekly' || exp.day_of_week === null) return
+    const oldDow = exp.day_of_week
     const payDow = parseLocalDate(payDateStr).getDay()
-    if (payDow === exp.day_of_week) return
+    if (payDow === oldDow) return
     const ok = await confirm({
       title: 'Giorno diverso dal previsto',
-      message: `Hai pagato «${name}» di ${WEEKDAYS_IT[payDow]} invece di ${WEEKDAYS_IT[exp.day_of_week]}. Vuoi spostare questa spesa ricorrente a ogni ${WEEKDAYS_IT[payDow]} d'ora in poi?`,
+      message: `Hai pagato «${name}» di ${WEEKDAYS_IT[payDow]} invece di ${WEEKDAYS_IT[oldDow]}. Vuoi spostare questa spesa ricorrente a ogni ${WEEKDAYS_IT[payDow]} d'ora in poi?`,
       confirmText: `Sì, ogni ${WEEKDAYS_IT[payDow]}`,
       cancelText: 'No, lascia invariato',
     })
     if (!ok) return
     const { error } = await supabase.from('recurring_expenses').update({ day_of_week: payDow }).eq('id', exp.id)
     if (error) { toast.error('Errore nello spostamento: ' + error.message); return }
-    // Ri-aggancia la transazione appena pagata alla nuova occorrenza (= il giorno del pagamento).
+    // Ri-aggancia TUTTI i pagamenti della ricorrente che stavano sul VECCHIO giorno al nuovo (stesso
+    // giorno della settimana, spostato di `delta`). Senza questo, i pagamenti PRECEDENTI restano
+    // orfani e il riepilogo conta l'occorrenza PREVISTA al posto del movimento reale → netto sballato.
+    const { data: txs } = await supabase.from('transactions')
+      .select('id,planned_date').eq('recurring_expense_id', exp.id).not('planned_date', 'is', null)
+    for (const t of (txs || [])) {
+      if (!t.planned_date) continue
+      const d = parseLocalDate(t.planned_date)
+      if (d.getDay() !== oldDow) continue
+      // Nuova occorrenza nella STESSA settimana (lun–dom): robusto anche ai confini di settimana.
+      await supabase.from('transactions').update({ planned_date: format(sameWeekWeekday(d, payDow), 'yyyy-MM-dd') }).eq('id', t.id)
+    }
+    // La transazione appena pagata segue la DATA REALE del pagamento (può cadere in un'altra settimana).
     if (oldPlannedDate !== payDateStr) {
       await supabase.from('transactions').update({ planned_date: payDateStr })
-        .eq('recurring_expense_id', exp.id).eq('date', payDateStr).eq('planned_date', oldPlannedDate)
+        .eq('recurring_expense_id', exp.id).eq('date', payDateStr)
     }
     toast.success(`«${name}» spostata a ogni ${WEEKDAYS_IT[payDow]}`)
     load()

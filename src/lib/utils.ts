@@ -160,6 +160,15 @@ export function currentPeriodLabel(): string {
   return formatPeriodRange(startDate, endDate)
 }
 
+// Data, nella STESSA settimana (lunedì–domenica) di `date`, che cade sul giorno della settimana
+// `targetDow` (convenzione getDay: 0=domenica … 6=sabato). Robusta ai confini di settimana: usata
+// per ri-ancorare le occorrenze di una ricorrente settimanale quando se ne cambia il giorno, senza
+// che un'occorrenza finisca nella settimana adiacente (es. spostando lunedì→domenica).
+export function sameWeekWeekday(date: Date, targetDow: number): Date {
+  const weekStart = addDays(date, -((date.getDay() + 6) % 7)) // lunedì della settimana di `date`
+  return addDays(weekStart, (targetDow + 6) % 7)              // stesso lunedì + offset del giorno target
+}
+
 export const iconMap: Record<string, React.ElementType> = {
   'credit-card': CreditCard, 'smartphone': Smartphone, 'globe': Globe,
   'banknote': Banknote, 'book-open': BookOpen, 'piggy-bank': PiggyBank, 'wallet': Wallet,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
-import { toDateString, todayString, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, getCurrentPeriod, currentPeriodLabel, monthlyOccurrencesInCurrentPeriod, formatDayMonth } from './utils'
+import { toDateString, todayString, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, getCurrentPeriod, currentPeriodLabel, monthlyOccurrencesInCurrentPeriod, formatDayMonth, sameWeekWeekday } from './utils'
 import { setLocalPeriodSettings, __resetPeriodSettingsForTest } from './periodSettings'
 
 describe('toDateString', () => {
@@ -268,5 +268,24 @@ describe('getCurrentPeriod default (no settings) is unchanged 15→14', () => {
     vi.setSystemTime(new Date(2026, 4, 19))
     const p = getCurrentPeriod()
     expect({ start: p.start, end: p.end }).toEqual({ start: '2026-05-15', end: '2026-06-14' })
+  })
+})
+
+describe('sameWeekWeekday (ri-ancoraggio giorno occorrenza, robusto ai confini settimana)', () => {
+  // 15 giu 2026 = lunedì, 21 giu = domenica (settimana lun 15 – dom 21).
+  it('mer → mar resta nella stessa settimana (17 giu → 16 giu)', () => {
+    expect(toDateString(sameWeekWeekday(new Date(2026, 5, 17), 2))).toBe('2026-06-16')
+  })
+  it('stesso giorno → invariato (17 giu mer → mer)', () => {
+    expect(toDateString(sameWeekWeekday(new Date(2026, 5, 17), 3))).toBe('2026-06-17')
+  })
+  it('CONFINE lun → dom = domenica della STESSA settimana (15 giu → 21 giu), non quella precedente', () => {
+    expect(toDateString(sameWeekWeekday(new Date(2026, 5, 15), 0))).toBe('2026-06-21')
+  })
+  it('CONFINE dom → lun = lunedì della STESSA settimana (21 giu → 15 giu), non quello successivo', () => {
+    expect(toDateString(sameWeekWeekday(new Date(2026, 5, 21), 1))).toBe('2026-06-15')
+  })
+  it('sab → lun nella stessa settimana (20 giu → 15 giu)', () => {
+    expect(toDateString(sameWeekWeekday(new Date(2026, 5, 20), 1))).toBe('2026-06-15')
   })
 })
