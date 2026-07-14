@@ -101,6 +101,25 @@ export function getCurrentPeriod(): Period {
   return computePeriod(getPeriodStartOverride(), getAnchorDay())
 }
 
+// Giorno in cui è atteso il PROSSIMO stipendio: l'anchor del mese successivo a quello d'inizio del
+// periodo, cioè il giorno DOPO la fine "naturale" del periodo. Volutamente NON tiene conto
+// dell'estensione a oggi del periodo aperto: se lo stipendio è in ritardo questa data è già
+// passata, ed è proprio da lì che si riconosce il ritardo.
+// Da usare al posto della "prossima occorrenza mensile in calendario": quella, se lo stipendio di
+// questo mese è già arrivato in anticipo, punta ancora al giorno di QUESTO mese (non ancora
+// trascorso) e fa collassare le proiezioni su oggi.
+export function getNextSalaryDate(): Date {
+  const override = getPeriodStartOverride()
+  const anchor = getAnchorDay()
+  if (override) {
+    const s = parseLocalDate(override)
+    const y = s.getFullYear()
+    const m = s.getMonth() + 1
+    return new Date(y, m, clampDay(y, m, anchor))
+  }
+  return addDays(periodForAnchor(startOfDay(new Date()), anchor).endDate, 1)
+}
+
 export function getBillingPeriod(): { start: string; end: string } {
   const { start, end } = getCurrentPeriod()
   return { start, end }

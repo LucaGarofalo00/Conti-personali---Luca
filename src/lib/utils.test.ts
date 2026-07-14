@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
-import { toDateString, todayString, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, getCurrentPeriod, currentPeriodLabel, monthlyOccurrencesInCurrentPeriod, formatDayMonth, sameWeekWeekday } from './utils'
+import { toDateString, todayString, getBillingPeriod, getBillingPeriodFor, getDateInCurrentPeriod, getCurrentPeriod, getNextSalaryDate, currentPeriodLabel, monthlyOccurrencesInCurrentPeriod, formatDayMonth, sameWeekWeekday } from './utils'
 import { setLocalPeriodSettings, __resetPeriodSettingsForTest } from './periodSettings'
 
 describe('toDateString', () => {
@@ -183,6 +183,90 @@ describe('getCurrentPeriod with salary-anchored override', () => {
     vi.setSystemTime(new Date(2026, 5, 20))
     setLocalPeriodSettings({ periodStart: '2026-06-10' })
     expect(currentPeriodLabel()).toBe('10 giu – 14 lug')
+  })
+})
+
+// REGRESSIONE — "nel periodo mi viene segnato anche il prossimo stipendio".
+// Il periodo finisce il giorno prima dell'anchor del mese successivo, quindi l'anchor DEVE essere
+// il giorno atteso dello stipendio (= day_of_month dell'entrata-stipendio, vedi
+// anchorFromSalaryIncome). Se divergono — stipendio il 14, anchor 15 rimasto al default — la fine
+// scivola sul 14 del mese dopo e il giorno 14 ricade DUE volte nello stesso periodo: due stipendi.
+describe('periodo coerente col giorno dello stipendio (anchor = day_of_month)', () => {
+  beforeAll(() => { vi.useFakeTimers() })
+  afterAll(() => { vi.useRealTimers() })
+  afterEach(() => { __resetPeriodSettingsForTest() })
+
+  it('stipendio il 14 con anchor 14 → periodo 14 lug – 13 ago (fino al giorno prima del prossimo)', () => {
+    vi.setSystemTime(new Date(2026, 6, 20))
+    setLocalPeriodSettings({ periodStart: '2026-07-14', anchorDay: 14 })
+    expect(getBillingPeriod()).toEqual({ start: '2026-07-14', end: '2026-08-13' })
+  })
+
+  it('con anchor coerente il giorno dello stipendio ricorre UNA sola volta nel periodo', () => {
+    vi.setSystemTime(new Date(2026, 6, 20))
+    setLocalPeriodSettings({ periodStart: '2026-07-14', anchorDay: 14 })
+    expect(monthlyOccurrencesInCurrentPeriod(14).map(toDateString)).toEqual(['2026-07-14'])
+  })
+
+  it('BUG STORICO: con anchor 15 e stipendio il 14 il giorno 14 ricorre DUE volte', () => {
+    vi.setSystemTime(new Date(2026, 6, 20))
+    setLocalPeriodSettings({ periodStart: '2026-07-14', anchorDay: 15 })
+    expect(getBillingPeriod()).toEqual({ start: '2026-07-14', end: '2026-08-14' })
+    expect(monthlyOccurrencesInCurrentPeriod(14).map(toDateString)).toEqual(['2026-07-14', '2026-08-14'])
+  })
+
+  it('accredito in RITARDO (atteso il 14, arrivato il 18): sposta solo l\'inizio → 18 lug – 13 ago', () => {
+    vi.setSystemTime(new Date(2026, 6, 20))
+    setLocalPeriodSettings({ periodStart: '2026-07-18', anchorDay: 14 })
+    expect(getBillingPeriod()).toEqual({ start: '2026-07-18', end: '2026-08-13' })
+    // Il prossimo stipendio (14 ago) resta FUORI: nessun doppio conteggio.
+    expect(monthlyOccurrencesInCurrentPeriod(14)).toEqual([])
+  })
+
+  it('accredito in ANTICIPO (atteso il 14, arrivato il 12): 12 lug – 13 ago, un solo stipendio', () => {
+    vi.setSystemTime(new Date(2026, 6, 20))
+    setLocalPeriodSettings({ periodStart: '2026-07-12', anchorDay: 14 })
+    expect(getBillingPeriod()).toEqual({ start: '2026-07-12', end: '2026-08-13' })
+    expect(monthlyOccurrencesInCurrentPeriod(14).map(toDateString)).toEqual(['2026-07-14'])
+  })
+})
+
+// La card "Saldo il …" della dashboard punta alla FINE DEL PERIODO, e il giorno atteso del prossimo
+// stipendio è il giorno dopo. Prima puntava alla "prossima occorrenza mensile in calendario": con
+// stipendio atteso il 15 già incassato il 14, quella restava il 15 di QUESTO mese, quindi la card
+// proiettava a ieri/oggi e mostrava di fatto il saldo attuale invece del saldo a fine periodo.
+describe('getNextSalaryDate', () => {
+  beforeAll(() => { vi.useFakeTimers() })
+  afterAll(() => { vi.useRealTimers() })
+  afterEach(() => { __resetPeriodSettingsForTest() })
+
+  it('stipendio atteso il 15, incassato il 14 lug: il prossimo è il 15 AGO, non il 15 lug', () => {
+    vi.setSystemTime(new Date(2026, 6, 14))
+    setLocalPeriodSettings({ periodStart: '2026-07-14', anchorDay: 15 })
+    expect(toDateString(getNextSalaryDate())).toBe('2026-08-15')
+    // La fine del periodo è il giorno PRIMA: è lì che punta la proiezione, non a oggi.
+    expect(getBillingPeriod().end).toBe('2026-08-14')
+  })
+
+  it('il prossimo stipendio è sempre il giorno dopo la fine naturale del periodo', () => {
+    vi.setSystemTime(new Date(2026, 6, 20))
+    setLocalPeriodSettings({ periodStart: '2026-07-14', anchorDay: 14 })
+    expect(getBillingPeriod().end).toBe('2026-08-13')
+    expect(toDateString(getNextSalaryDate())).toBe('2026-08-14')
+  })
+
+  it('stipendio in RITARDO: la data attesa resta nel passato (è così che si riconosce il ritardo)', () => {
+    vi.setSystemTime(new Date(2026, 7, 18)) // 18 ago, atteso il 14 ago
+    setLocalPeriodSettings({ periodStart: '2026-07-14', anchorDay: 14 })
+    expect(toDateString(getNextSalaryDate())).toBe('2026-08-14')
+    // Periodo aperto: si estende a oggi finché l'accredito non arriva.
+    expect(getBillingPeriod().end).toBe('2026-08-18')
+  })
+
+  it('senza periodStart (giorno fisso) resta coerente con la fine del periodo', () => {
+    vi.setSystemTime(new Date(2026, 4, 19)) // periodo 15 mag – 14 giu
+    expect(getBillingPeriod().end).toBe('2026-06-14')
+    expect(toDateString(getNextSalaryDate())).toBe('2026-06-15')
   })
 })
 
