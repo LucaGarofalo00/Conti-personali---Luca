@@ -15,10 +15,9 @@ import SchemaBanner from '../components/SchemaBanner'
 import InfoBox from '../components/InfoBox'
 import BreakdownList from '../components/BreakdownList'
 import { getPeriodBreakdown } from '../lib/periodBreakdown'
-import { generateForecast, projectBalanceAtDate, findNextMonthlyIncomeDate } from '../lib/forecast'
+import { generateForecast, projectBalanceAtDate } from '../lib/forecast'
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
-import { addDays } from 'date-fns'
-import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, monthlyOccurrencesInCurrentPeriod, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel, parseLocalDate, fmtDate, sameWeekWeekday } from '../lib/utils'
+import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getCurrentPeriod, getNextSalaryDate, monthlyOccurrencesInCurrentPeriod, toDateString, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel, parseLocalDate, fmtDate, sameWeekWeekday } from '../lib/utils'
 import CategorySelect from '../components/CategorySelect'
 import { isAmountsHidden } from '../lib/privacy'
 import { getSalaryIncomeId } from '../lib/periodSettings'
@@ -754,11 +753,17 @@ export default function Dashboard() {
       </div>
 
       {(() => {
-        const nextSalary = findNextMonthlyIncomeDate(income)
-        const projectionTarget = nextSalary ? addDays(nextSalary.date, -1) : null
-        const projection = projectionTarget
-          ? projectBalanceAtDate(projectionTarget, totalBalance, expenses, income, budgets, planned, excludedFundIds, periodTx)
-          : null
+        // La proiezione punta alla FINE DEL PERIODO, che per definizione è il giorno prima del
+        // prossimo stipendio atteso. NON alla "prossima occorrenza mensile in calendario": se lo
+        // stipendio di questo mese è già arrivato (magari in anticipo), quella punta ancora al
+        // giorno di QUESTO mese non ancora trascorso, e la card finisce per proiettare a OGGI —
+        // cioè a mostrare il saldo attuale invece del saldo a fine periodo.
+        const projectionTarget = getCurrentPeriod().endDate
+        const expectedSalary = getNextSalaryDate()
+        // Periodo aperto: il giorno atteso è passato e lo stipendio non è ancora stato registrato.
+        const salaryLate = todayString() >= toDateString(expectedSalary)
+        const salaryName = income.find(i => i.id === getSalaryIncomeId())?.name.trim() || null
+        const projection = projectBalanceAtDate(projectionTarget, totalBalance, expenses, income, budgets, planned, excludedFundIds, periodTx)
         return (
           <>
             <div className="bg-brand hero-glow rounded-3xl p-5 sm:p-8 mb-4 text-white shadow-lg shadow-indigo-600/25">
@@ -803,19 +808,17 @@ export default function Dashboard() {
                 sub={`Entrate ${cur(est.income)} · Uscite ${cur(est.expenses)}${plannedExpensesInPeriod > 0 ? ` (incl. ${cur(plannedExpensesInPeriod)} pianif.)` : ''}`}
                 onClick={() => setBreakdownModal('net')}
               />
-              {projection && projectionTarget && nextSalary ? (
-                <Card
-                  icon={projection.balance >= 0 ? TrendingUp : TrendingDown}
-                  color={projection.balance >= 0 ? 'bg-violet-500/15 text-violet-600' : 'bg-red-500/15 text-red-600'}
-                  tint={projection.balance >= 0 ? 'bg-violet-50 border-violet-100' : 'bg-red-50 border-red-100'}
-                  label={`Saldo il ${format(projectionTarget, 'd MMM', { locale: it })}`}
-                  value={cur(projection.balance)}
-                  valueColor={projection.balance >= 0 ? 'text-violet-700' : 'text-red-700'}
-                  sub={`Giorno prima di "${nextSalary.income.name.trim()}"`}
-                />
-              ) : (
-                <Card icon={TrendingDown} color="bg-slate-200 text-slate-400" tint="bg-slate-50 border-slate-200" label="Saldo prossimo stipendio" value="—" sub="Configura un'entrata mensile" />
-              )}
+              <Card
+                icon={projection.balance >= 0 ? TrendingUp : TrendingDown}
+                color={projection.balance >= 0 ? 'bg-violet-500/15 text-violet-600' : 'bg-red-500/15 text-red-600'}
+                tint={projection.balance >= 0 ? 'bg-violet-50 border-violet-100' : 'bg-red-50 border-red-100'}
+                label={`Saldo il ${format(projectionTarget, 'd MMM', { locale: it })}`}
+                value={cur(projection.balance)}
+                valueColor={projection.balance >= 0 ? 'text-violet-700' : 'text-red-700'}
+                sub={salaryLate
+                  ? `Stipendio atteso il ${format(expectedSalary, 'd MMM', { locale: it })}: in ritardo`
+                  : `Giorno prima del prossimo stipendio${salaryName ? ` ("${salaryName}")` : ''}`}
+              />
             </div>
             <InfoBox title="Come vengono calcolate queste cifre" tone="blue">
               <p><strong>Saldo Totale</strong> (mostrato come <strong>Saldo Filtrato</strong> quando escludi dei fondi col selettore in alto): somma di tutti i fondi inclusi.</p>
@@ -823,13 +826,12 @@ export default function Dashboard() {
               <p><strong>Netto del Periodo</strong>: Entrate − Uscite del periodo ({periodLabel}). Click per vedere il dettaglio.</p>
               <p>Queste cifre comprendono sia le voci <strong>previste</strong> (ricorrenti, budget, pianificate) sia le <strong>transazioni manuali</strong> già registrate nel periodo: ogni movimento che aggiungi, modifichi o elimini si riflette qui (badge <span className="font-medium text-cyan-700">EFFETTIVA</span>).</p>
               <p><strong>Budget</strong>: per le settimane <strong>già concluse</strong> conta quanto hai <strong>speso davvero</strong> (le transazioni del budget); per la settimana <strong>in corso</strong> conta il <strong>maggiore tra quota e speso</strong> (così uno <strong>sforamento</strong> si riflette subito, ma sotto la quota resta la stima conservativa); le settimane <strong>future</strong> contano la <strong>quota stimata</strong> (la previsione). L'avanzo non speso <strong>non</strong> viene conteggiato come entrata.</p>
-              {projection && projectionTarget && nextSalary && (
-                <p>
-                  <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo il giorno PRIMA del prossimo stipendio ({nextSalary.income.name.trim()}, atteso il {format(nextSalary.date, 'd MMM', { locale: it })}).
-                  Conta <strong>TUTTO</strong>: ricorrenti, budget settimanali, spese variabili (GPL/benzina come stima), pianificate.
-                  Da oggi al {format(projectionTarget, 'd MMM', { locale: it })}: <span className="text-emerald-600">+{cur(projection.totalIncome)}</span> entrate, <span className="text-red-500">-{cur(projection.totalExpenses)}</span> uscite.
-                </p>
-              )}
+              <p>
+                <strong>Saldo il {format(projectionTarget, 'd MMM', { locale: it })}</strong>: proiezione del saldo alla <strong>fine del periodo</strong>, cioè il giorno PRIMA del prossimo stipendio{salaryName ? ` ("${salaryName}")` : ''}, atteso il {format(expectedSalary, 'd MMM', { locale: it })}
+                {salaryLate ? ' — ma non è ancora arrivato: il periodo resta aperto fino a oggi, quindi la proiezione arriva a oggi.' : '.'}
+                {' '}Conta <strong>TUTTO</strong>: ricorrenti, budget settimanali, spese variabili (GPL/benzina come stima), pianificate.
+                Da oggi al {format(projectionTarget, 'd MMM', { locale: it })}: <span className="text-emerald-600">+{cur(projection.totalIncome)}</span> entrate, <span className="text-red-500">-{cur(projection.totalExpenses)}</span> uscite.
+              </p>
               <p className="text-amber-700"><strong>Nota su GPL/Benzina</strong>: usate come <strong>stime fisse</strong> per la previsione (es. 30€/sett GPL). Se in alcuni mesi spendi diversamente (25€ invece di 30€), modifica l'importo nella pagina <strong>Spese Ricorrenti</strong>. Quando registri il rifornimento puoi inserire km/litri per vedere i consumi reali.</p>
             </InfoBox>
           </>
