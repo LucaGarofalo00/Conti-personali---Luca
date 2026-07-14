@@ -8,6 +8,8 @@ import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
 import { cur, getBillingPeriod, currentPeriodLabel, todayString, fmtDate } from '../lib/utils'
 import { logSupabaseError } from '../lib/logError'
+import { getSalaryIncomeId } from '../lib/periodSettings'
+import { savePeriodSettings } from '../lib/periodSettingsDb'
 import { generateIncomeOccurrences } from '../lib/incomeOccurrences'
 import InfoBox from '../components/InfoBox'
 import type { RecurringIncome, Fund, Transaction } from '../types'
@@ -92,6 +94,13 @@ export default function Income() {
     const { error } = editing
       ? await supabase.from('recurring_income').update(data).eq('id', editing.id)
       : await supabase.from('recurring_income').insert({ user_id: user!.id, ...data })
+    // Se ho appena modificato l'entrata scelta come STIPENDIO, il suo giorno può essere cambiato:
+    // ri-derivo l'anchor del periodo (savePeriodSettings senza anchorDay lo ricalcola dal
+    // day_of_month). Altrimenti la fine del periodo resterebbe sul giorno vecchio e il periodo
+    // potrebbe contenere due stipendi.
+    if (!error && editing && user && editing.id === getSalaryIncomeId()) {
+      await savePeriodSettings(user.id, {})
+    }
     setSaving(false)
     if (error) { toast.error('Errore nel salvataggio'); return }
     toast.success(editing ? 'Entrata aggiornata' : 'Entrata aggiunta')

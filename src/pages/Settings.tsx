@@ -7,7 +7,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import InfoBox from '../components/InfoBox'
 import { logSupabaseError } from '../lib/logError'
-import { usePeriodSettings } from '../lib/periodSettings'
+import { usePeriodSettings, anchorFromSalaryIncome } from '../lib/periodSettings'
 import { savePeriodSettings } from '../lib/periodSettingsDb'
 import { resetFromToday } from '../lib/resetData'
 import { fetchBackup, downloadJson, downloadTransactionsCsv } from '../lib/exportData'
@@ -59,13 +59,21 @@ export default function Settings() {
 
   useEffect(() => { getNotifState().then(setNotifState) }, [])
 
+  // Il giorno atteso dello stipendio (anchor) NON si digita: lo detta l'entrata scelta come
+  // stipendio. Solo senza stipendio configurato (periodo a giorno fisso) resta modificabile a mano.
+  const selectedSalary = incomes.find(i => i.id === salaryIncomeId) || null
+  const derivedAnchor = anchorFromSalaryIncome(selectedSalary)
+  const effectiveAnchor = derivedAnchor ?? anchorDay
+
   const save = async () => {
     if (!user) return
     setSaving(true)
     const { error } = await savePeriodSettings(user.id, {
       salaryIncomeId: salaryIncomeId || null,
-      anchorDay,
       periodStart: periodStart || null,
+      // Con uno stipendio selezionato l'anchor lo ri-deriva savePeriodSettings dal suo day_of_month
+      // (omettendolo qui); senza stipendio vale il valore digitato a mano.
+      ...(derivedAnchor === null ? { anchorDay } : {}),
     })
     setSaving(false)
     if (error) {
@@ -168,7 +176,7 @@ export default function Settings() {
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
 
   // Anteprima calcolata dai valori del FORM (non ancora salvati), così aggiorna mentre digiti.
-  const period = computePeriod(periodStart || null, anchorDay)
+  const period = computePeriod(periodStart || null, effectiveAnchor)
   const monthlyIncomes = incomes.filter(i => i.frequency === 'monthly')
 
   return (
@@ -187,9 +195,9 @@ export default function Settings() {
         </div>
 
         <InfoBox title="Come funziona il periodo" tone="blue">
-          <p>Il periodo <strong>inizia dal giorno in cui arriva davvero lo stipendio</strong> e <strong>finisce il giorno prima del «giorno tipico»</strong> del mese successivo (il giorno tipico è il primo giorno del periodo dopo) — non sposta la fine se l’accredito è in ritardo o in anticipo. Es. con giorno tipico 15: stipendio il 18 → periodo <strong>18 → 14</strong>; stipendio il 12 → <strong>12 → 14</strong>; stipendio il 20 → <strong>20 → 14</strong>.</p>
-          <p>Siccome il giorno cambia ogni mese, scegli quale entrata è <strong>lo stipendio</strong>: quando la registri nella dashboard, l’app ti propone di far partire il nuovo periodo da quella data reale (con conferma).</p>
-          <p>Il <strong>giorno tipico</strong> definisce la fine prevista del periodo (il giorno atteso del prossimo stipendio). Se al suo arrivo il prossimo stipendio non è ancora stato registrato, il periodo resta aperto fino a oggi.</p>
+          <p>Il periodo <strong>inizia dal giorno in cui arriva davvero lo stipendio</strong> e <strong>finisce il giorno prima del prossimo stipendio atteso</strong>. Il giorno atteso è quello dell’entrata scelta qui sotto come stipendio: se lo stipendio è il <strong>14</strong>, il periodo va dal <strong>14 al 13</strong> del mese dopo, così contiene un solo stipendio.</p>
+          <p>Siccome la data reale cambia ogni mese, scegli quale entrata è <strong>lo stipendio</strong>: quando la registri nella dashboard, l’app ti propone di far partire il nuovo periodo da quella data reale (con conferma). Un accredito in anticipo o in ritardo <strong>sposta solo l’inizio</strong>, non la fine: stipendio atteso il 14 ma arrivato il 18 → periodo <strong>18 → 13</strong>.</p>
+          <p>Se al giorno atteso il prossimo stipendio non è ancora stato registrato, il periodo <strong>resta aperto fino a oggi</strong>: i soldi devono bastare finché non arriva l’accredito.</p>
         </InfoBox>
 
         <div className="space-y-4 mt-2">
@@ -222,14 +230,20 @@ export default function Settings() {
               <button onClick={() => setPeriodStart(todayString())} className="inline-flex items-center min-h-[40px] sm:min-h-0 px-2 -mx-2 text-xs text-blue-600 mt-1 hover:text-blue-700 active:scale-95 transition-[transform,color]">Imposta a oggi</button>
             </div>
             <div>
-              <label htmlFor="set-anchor" className="block text-sm font-medium text-slate-700 mb-1">Giorno tipico (stima)</label>
+              <label htmlFor="set-anchor" className="block text-sm font-medium text-slate-700 mb-1">Giorno atteso dello stipendio</label>
               <input
                 id="set-anchor"
                 type="number" inputMode="numeric" min={1} max={28}
-                value={anchorDay}
+                value={effectiveAnchor}
+                disabled={derivedAnchor !== null}
                 onChange={e => setAnchorDay(Math.min(28, Math.max(1, parseInt(e.target.value) || 1)))}
-                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow disabled:bg-slate-100 disabled:text-slate-500"
               />
+              <p className="text-xs text-slate-500 mt-1">
+                {derivedAnchor !== null
+                  ? <>Deriva dal giorno di «{selectedSalary?.name}». Per cambiarlo, modifica quell’entrata nella pagina Entrate.</>
+                  : <>Senza uno stipendio selezionato il periodo è a giorno fisso: da questo giorno al giorno prima del mese successivo.</>}
+              </p>
             </div>
           </div>
 
