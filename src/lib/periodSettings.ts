@@ -16,16 +16,33 @@ export interface PeriodSettings {
   periodStart: string | null
   // Entrata ricorrente che definisce lo stipendio (per il rilevamento automatico).
   salaryIncomeId: string | null
-  // Giorno tipico atteso dello stipendio (1..28). Default 15 = ciclo storico 15→14.
+  // Giorno ATTESO dello stipendio (1..28). Definisce la fine del periodo: il periodo finisce il
+  // giorno PRIMA dell'anchor del mese successivo. DEVE coincidere col day_of_month dell'entrata
+  // scelta come stipendio (vedi anchorFromSalaryIncome): è quella l'unica fonte di verità.
   anchorDay: number
 }
 
 const DEFAULTS: PeriodSettings = { periodStart: null, salaryIncomeId: null, anchorDay: 15 }
 
-function clampAnchor(n: unknown): number {
+// Vincolo del DB: user_settings.anchor_day check (anchor_day between 1 and 28).
+export function clampAnchorDay(n: unknown): number {
   const v = typeof n === 'number' ? n : parseInt(String(n), 10)
   if (!Number.isFinite(v)) return 15
   return Math.min(28, Math.max(1, Math.trunc(v)))
+}
+
+// L'anchor NON è un numero libero: è il giorno ATTESO dello stipendio, cioè il day_of_month
+// dell'entrata scelta come stipendio. Se i due divergono la fine del periodo (anchor − 1 del mese
+// dopo) non è più "il giorno prima del prossimo stipendio" e il periodo può contenerne DUE:
+// stipendio il 14 con anchor 15 → periodo 14 lug – 14 ago, che include ANCHE il 14 ago. Con
+// anchor 14 → 14 lug – 13 ago, un solo stipendio (vedi computePeriod in utils.ts).
+// Restituisce null se non c'è uno stipendio configurato o non è mensile: in quel caso l'anchor
+// resta quello impostato a mano (periodo a giorno fisso).
+export function anchorFromSalaryIncome(
+  income: { frequency?: string | null; day_of_month?: number | null } | null | undefined,
+): number | null {
+  if (!income || income.frequency !== 'monthly' || income.day_of_month == null) return null
+  return clampAnchorDay(income.day_of_month)
 }
 
 function readInitial(): PeriodSettings {
@@ -36,7 +53,7 @@ function readInitial(): PeriodSettings {
     return {
       periodStart: typeof parsed.periodStart === 'string' ? parsed.periodStart : null,
       salaryIncomeId: typeof parsed.salaryIncomeId === 'string' ? parsed.salaryIncomeId : null,
-      anchorDay: clampAnchor(parsed.anchorDay),
+      anchorDay: clampAnchorDay(parsed.anchorDay),
     }
   } catch {
     return { ...DEFAULTS }
@@ -69,7 +86,7 @@ export function setLocalPeriodSettings(partial: Partial<PeriodSettings>): void {
   const next: PeriodSettings = {
     periodStart: partial.periodStart !== undefined ? partial.periodStart : state.periodStart,
     salaryIncomeId: partial.salaryIncomeId !== undefined ? partial.salaryIncomeId : state.salaryIncomeId,
-    anchorDay: partial.anchorDay !== undefined ? clampAnchor(partial.anchorDay) : state.anchorDay,
+    anchorDay: partial.anchorDay !== undefined ? clampAnchorDay(partial.anchorDay) : state.anchorDay,
   }
   if (next.periodStart === state.periodStart && next.salaryIncomeId === state.salaryIncomeId && next.anchorDay === state.anchorDay) {
     return
