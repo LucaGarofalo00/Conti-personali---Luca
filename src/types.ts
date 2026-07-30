@@ -87,6 +87,11 @@ export interface Transaction {
   // anche se l'ho segnata giorni prima o dopo. Opzionale: assente sui movimenti manuali e sui
   // DB non ancora migrati.
   planned_date?: string | null
+  // Spesa pianificata "a progetto" di cui questo movimento fa parte (es. i singoli acquisti di una
+  // vacanza da 350 €). La pianificata resta il tetto: man mano che si agganciano spese il suo
+  // residuo cala, così i totali del periodo non cambiano finché non si sfora. Vedi plannedBudget.ts.
+  // Opzionale: assente sui movimenti normali e sui DB non ancora migrati.
+  planned_parent_id?: string | null
   created_at: string
 }
 
