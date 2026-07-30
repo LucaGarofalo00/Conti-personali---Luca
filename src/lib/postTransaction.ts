@@ -25,6 +25,9 @@ export interface TxPayload {
   fuel_type?: 'benzina' | 'gpl' | null
   fuel_odometer?: number | null
   planned_date?: string | null
+  // Spesa pianificata di cui questo movimento fa parte (budget a progetto). Va incluso solo se il
+  // DB ha la colonna: usare withPlannedParent, che la omette sui database non migrati.
+  planned_parent_id?: string | null
   date: string
 }
 

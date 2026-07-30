@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fuelConsumption, previousFuelFill, averageFuelConsumption, fuelStatsOdometer, lifetimeCostPerKmOdometer, lifetimePerFuelStima, previousOdometerFill } from './fuelConsumption'
+import { fuelConsumption, fuelTotalFromLiters, previousFuelFill, averageFuelConsumption, fuelStatsOdometer, lifetimeCostPerKmOdometer, lifetimePerFuelStima, previousOdometerFill } from './fuelConsumption'
 import type { Transaction } from '../types'
 
 function mkFuelTx(opts: {
@@ -193,5 +193,36 @@ describe('lifetimePerFuelStima', () => {
   })
   it('null con un solo pieno di quel tipo', () => {
     expect(lifetimePerFuelStima(ALL, 'benzina')).toBeNull()
+  })
+})
+
+describe('fuelTotalFromLiters', () => {
+  it('calcola litri × €/litro arrotondando al centesimo', () => {
+    // Caso reale: 42,28 L × 0,686 €/L = 29,00408 → 29,00
+    expect(fuelTotalFromLiters(42.28, 0.686)).toBe(29)
+    expect(fuelTotalFromLiters(41.26, 0.686)).toBe(28.3)
+    expect(fuelTotalFromLiters(40.78, 0.689)).toBe(28.1)
+  })
+
+  it('arrotonda per eccesso oltre il mezzo centesimo', () => {
+    expect(fuelTotalFromLiters(10, 1.555)).toBe(15.55)
+    expect(fuelTotalFromLiters(10, 1.556)).toBe(15.56)
+  })
+
+  it('gestisce la benzina a prezzo pieno', () => {
+    expect(fuelTotalFromLiters(30, 1.8)).toBe(54)
+  })
+
+  it('null se manca uno dei due valori', () => {
+    expect(fuelTotalFromLiters(0, 1.8)).toBeNull()
+    expect(fuelTotalFromLiters(30, 0)).toBeNull()
+    expect(fuelTotalFromLiters(0, 0)).toBeNull()
+  })
+
+  it('null su valori non validi invece di produrre NaN', () => {
+    expect(fuelTotalFromLiters(NaN, 1.8)).toBeNull()
+    expect(fuelTotalFromLiters(30, NaN)).toBeNull()
+    expect(fuelTotalFromLiters(-5, 1.8)).toBeNull()
+    expect(fuelTotalFromLiters(30, -1)).toBeNull()
   })
 })

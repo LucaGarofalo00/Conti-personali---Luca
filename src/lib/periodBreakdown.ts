@@ -2,6 +2,7 @@ import { addDays, getDate, getDay, getDaysInMonth, startOfDay, startOfWeek, isBe
 import { it } from 'date-fns/locale'
 import { toDateString, parseLocalDate } from './utils'
 import { inSameRecurrenceWindow } from './recurrenceMatch'
+import { plannedResidualAmount } from './plannedBudget'
 import type { RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
 export type BreakdownSource =
@@ -37,6 +38,14 @@ interface Args {
   // effettivo, se è stata segnata come memo (es. "non lavorato") non viene contata.
   // Se omesso, il breakdown resta una pura proiezione (comportamento storico).
   actualTx?: Transaction[]
+  // Movimenti dei giorni PRECEDENTI l'inizio periodo, usabili SOLO per riconciliare le occorrenze:
+  // non vengono mai emessi come voci né conteggiati come budget. Servono perché la finestra di
+  // un'occorrenza a inizio periodo sconfina all'indietro (la settimana lun–dom di un'occorrenza di
+  // mercoledì parte due giorni prima): senza questi, un rifornimento del lunedì con il confine di
+  // periodo in mezzo resta orfano e l'occorrenza risulta non pagata pur essendolo.
+  // Un'occorrenza agganciata a un movimento FUORI periodo vale 'skip': è soddisfatta, ma la spesa
+  // è già stata contata nel periodo in cui è realmente avvenuta e qui non deve pesare.
+  reconcileOnlyTx?: Transaction[]
   // Se true, conta anche le transazioni "una tantum" davvero registrate nel periodo
   // (spese/entrate manuali non legate a ricorrenti, budget o pianificate). Serve alle
   // card della home perché riflettano SEMPRE ogni movimento reale. Richiede actualTx.
@@ -70,7 +79,7 @@ const SOURCE_LABELS: Record<BreakdownSource, string> = {
 type Reconciled = { amount: number } | 'skip' | null
 
 export function getPeriodBreakdown(args: Args): BreakdownItem[] {
-  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false, actualTx, includeActualOneOffs = false, reconcileBudgets = false, excludeRealized = false, now } = args
+  const { startDate, endDate, recurringExpenses, recurringIncome, weeklyBudgets, planned, excludedFundIds, fromToday = false, actualTx, reconcileOnlyTx, includeActualOneOffs = false, reconcileBudgets = false, excludeRealized = false, now } = args
   const excluded = new Set(excludedFundIds)
   const items: BreakdownItem[] = []
   const today = startOfDay(now ?? new Date())
@@ -92,8 +101,16 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
   // un'occorrenza (consumo greedy in ordine di data) per evitare doppi conteggi.
   const incomeByRec = new Map<string, Transaction[]>()
   const expenseByRec = new Map<string, Transaction[]>()
-  if (actualTx) {
-    for (const tx of actualTx) {
+  // Ripiego per i movimenti NON collegati a una ricorrente (import, voci inserite a mano prima che
+  // la ricorrente esistesse): si agganciano per NOME normalizzato — trim + minuscole, così "Gpl"
+  // trova la ricorrente "GPL" — restando comunque vincolati alla finestra dell'occorrenza.
+  // Stesso criterio già usato dalle "Prossime Scadenze" in dashboard: i due devono concordare,
+  // altrimenti la lista dice "pagata" e i totali contano lo stesso l'importo previsto.
+  const unlinkedExpenseByName = new Map<string, Transaction[]>()
+  const normName = (s: string | null | undefined) => (s || '').trim().toLowerCase()
+  const reconcilePool = [...(actualTx || []), ...(reconcileOnlyTx || [])]
+  if (reconcilePool.length) {
+    for (const tx of reconcilePool) {
       if (tx.is_planned) continue
       if (tx.recurring_income_id) {
         const arr = incomeByRec.get(tx.recurring_income_id) || []
@@ -102,13 +119,19 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       if (tx.recurring_expense_id) {
         const arr = expenseByRec.get(tx.recurring_expense_id) || []
         arr.push(tx); expenseByRec.set(tx.recurring_expense_id, arr)
+      } else if (tx.type === 'expense' && !tx.budget_id) {
+        const k = normName(tx.description)
+        if (k) { const arr = unlinkedExpenseByName.get(k) || []; arr.push(tx); unlinkedExpenseByName.set(k, arr) }
       }
     }
     const byDate = (a: Transaction, b: Transaction) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0
     for (const arr of incomeByRec.values()) arr.sort(byDate)
     for (const arr of expenseByRec.values()) arr.sort(byDate)
+    for (const arr of unlinkedExpenseByName.values()) arr.sort(byDate)
   }
   const consumedTxIds = new Set<string>()
+  const periodStartStr = toDateString(startDate)
+  const periodEndStr = toDateString(endDate)
 
   // Spese reali imputate a un budget settimanale (no memo, no pianificate): servono sia alla
   // riconciliazione delle settimane CONCLUSE (più sotto) sia a far emergere SUBITO un eventuale
@@ -129,16 +152,27 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
   // finestra. In assenza di planned_date (movimenti vecchi/manuali) si usa windowFn sulla data
   // effettiva: finestra (settimana/ciclo) per le normali, intervallo lavoro→pagamento per le
   // entrate settimanali con ritardo.
-  const reconcile = (map: Map<string, Transaction[]>, recId: string, occDateStr: string, windowFn: (txDate: string) => boolean): Reconciled => {
-    if (!actualTx) return null
-    const arr = map.get(recId)
-    if (!arr) return null
-    const tx = arr.find(t => !consumedTxIds.has(t.id) && (t.planned_date ? t.planned_date === occDateStr : windowFn(t.date)))
+  const reconcile = (
+    map: Map<string, Transaction[]>,
+    recId: string,
+    occDateStr: string,
+    windowFn: (txDate: string) => boolean,
+    fallbackPool?: Transaction[],
+  ): Reconciled => {
+    if (!reconcilePool.length) return null
+    const matches = (t: Transaction) =>
+      !consumedTxIds.has(t.id) && (t.planned_date ? t.planned_date === occDateStr : windowFn(t.date))
+    // Prima i movimenti COLLEGATI alla ricorrente; solo in loro assenza il ripiego per nome.
+    const tx = (map.get(recId) || []).find(matches) || (fallbackPool || []).find(matches)
     if (!tx) return null
     consumedTxIds.add(tx.id)
     // Memo con importo (es. "segnato senza scalare"): conta nei totali con l'importo effettivo
     // ma non muove i fondi. Memo a 0 (es. "non lavorato"/"non avvenuto"): non conta.
     if (tx.is_memo && Number(tx.amount) === 0) return 'skip'
+    // Movimento di un ALTRO periodo che soddisfa comunque questa occorrenza (finestra a cavallo del
+    // confine): l'occorrenza è coperta, ma la spesa è già stata contata nel periodo in cui è
+    // avvenuta — contarla di nuovo qui la conterebbe due volte.
+    if (tx.date < periodStartStr || tx.date > periodEndStr) return 'skip'
     return { amount: Number(tx.amount) }
   }
 
@@ -215,7 +249,7 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
         if (dom === adjusted && cursor.getMonth() + 1 === exp.month_of_year) occurs = true
       }
       if (occurs) {
-        const r = reconcile(expenseByRec, exp.id, dateStr, d => inSameRecurrenceWindow(d, dateStr, freq))
+        const r = reconcile(expenseByRec, exp.id, dateStr, d => inSameRecurrenceWindow(d, dateStr, freq), unlinkedExpenseByName.get(normName(exp.name)))
         const amt = resolveAmount(r, Number(exp.amount))
         if (amt !== null) {
           emittedRecIds.add(exp.id)
@@ -244,11 +278,18 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
           amount: Number(p.amount), kind: 'income', source: 'planned', sourceLabel: SOURCE_LABELS.planned,
         })
       } else if (p.type === 'expense') {
-        items.push({
-          date: dateStr, description: p.description || 'Pianificata',
-          amount: Number(p.amount), kind: 'expense', source: 'planned', sourceLabel: SOURCE_LABELS.planned,
-          category: p.category,
-        })
+        // Pianificata usata come budget a progetto: conta solo il RESIDUO, perché le spese già
+        // agganciate entrano nei totali per conto proprio (blocco "una tantum" più sotto).
+        // Residuo + speso = tetto, quindi la cifra del periodo non si muove mentre si spende.
+        // Residuo 0 → tetto esaurito: la voce non si emette, contano solo le spese reali.
+        const residual = plannedResidualAmount(p, actualTx || [])
+        if (residual > 0) {
+          items.push({
+            date: dateStr, description: p.description || 'Pianificata',
+            amount: residual, kind: 'expense', source: 'planned', sourceLabel: SOURCE_LABELS.planned,
+            category: p.category,
+          })
+        }
       }
     }
 
@@ -292,7 +333,11 @@ export function getPeriodBreakdown(args: Args): BreakdownItem[] {
       if (tx.type === 'transfer') continue
       if (tx.budget_id) continue
       const recId = tx.recurring_income_id || tx.recurring_expense_id || null
-      if (recId && (consumedTxIds.has(tx.id) || emittedRecIds.has(recId))) continue
+      // Consumata dalla riconciliazione → è GIÀ contata come occorrenza, qui la si conterebbe due
+      // volte. Vale anche senza recurring_*_id: col ripiego per nome anche un movimento scollegato
+      // può essere assorbito da un'occorrenza.
+      if (consumedTxIds.has(tx.id)) continue
+      if (recId && emittedRecIds.has(recId)) continue
       // Memo: contano solo quelli CON importo (>0) legati a una ricorrente non proiettata (es.
       // stipendio "segnato senza scalare" con occorrenza fuori periodo). Gli altri memo (manuali o
       // a importo 0 = "non avvenuto") non contano nei totali.

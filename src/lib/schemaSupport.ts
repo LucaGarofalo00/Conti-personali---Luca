@@ -22,3 +22,25 @@ export async function probePlannedDateSupport(): Promise<boolean> {
 export function withPlannedDate(payload: Record<string, unknown>, plannedDate: string | null): Record<string, unknown> {
   return plannedDateSupported === true ? { ...payload, planned_date: plannedDate } : payload
 }
+
+// Stessa logica per transactions.planned_parent_id (spese pianificate usate come budget a
+// progetto, vedi supabase-planned-budget.sql). Senza la colonna la funzione resta semplicemente
+// non disponibile: i selettori "rientra in" non mostrano le pianificate e il resto non cambia.
+let plannedParentSupported: boolean | null = null
+
+export function plannedParentSupportedNow(): boolean {
+  return plannedParentSupported === true
+}
+
+export async function probePlannedParentSupport(): Promise<boolean> {
+  if (plannedParentSupported !== null) return plannedParentSupported
+  const { error } = await supabase.from('transactions').select('planned_parent_id').limit(1)
+  plannedParentSupported = !(error && /planned_parent_id/i.test(error.message || ''))
+  return plannedParentSupported
+}
+
+// Include planned_parent_id nel payload solo se la colonna esiste. Passare null è lecito e
+// significa "nessun budget a progetto": va comunque scritto, per poter SGANCIARE un movimento.
+export function withPlannedParent(payload: Record<string, unknown>, plannedParentId: string | null): Record<string, unknown> {
+  return plannedParentSupported === true ? { ...payload, planned_parent_id: plannedParentId } : payload
+}

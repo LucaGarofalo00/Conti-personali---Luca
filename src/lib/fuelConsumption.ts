@@ -1,7 +1,16 @@
 import type { Transaction } from '../types'
-import { FUEL_CATEGORY } from './utils'
+import { FUEL_CATEGORY, round2 } from './utils'
 
 export type FuelType = 'benzina' | 'gpl'
+
+// Importo del rifornimento derivato da litri × €/litro, arrotondato al centesimo (il prezzo al
+// litro ha 3 decimali, quindi il prodotto grezzo ne avrebbe 4: 42,28 × 0,686 = 29,00408).
+// null quando manca uno dei due valori: non c'è nulla da calcolare e l'importo digitato a mano
+// non va toccato.
+export function fuelTotalFromLiters(liters: number, pricePerLiter: number): number | null {
+  if (!(liters > 0) || !(pricePerLiter > 0)) return null
+  return round2(liters * pricePerLiter)
+}
 
 export interface FuelConsumption {
   kmPerLiter: number
