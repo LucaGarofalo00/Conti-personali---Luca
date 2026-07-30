@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2, Pencil, ArrowLeftRight, LineChart } from 'lucide-react'
-import { format } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -22,15 +22,17 @@ import CategorySelect from '../components/CategorySelect'
 import { isAmountsHidden } from '../lib/privacy'
 import { getSalaryIncomeId } from '../lib/periodSettings'
 import { savePeriodSettings } from '../lib/periodSettingsDb'
-import { probePlannedDateSupport, withPlannedDate } from '../lib/schemaSupport'
+import { probePlannedDateSupport, probePlannedParentSupport, withPlannedDate } from '../lib/schemaSupport'
+import { plannedBudgetStatus } from '../lib/plannedBudget'
 import { postTransaction } from '../lib/postTransaction'
 import { logSupabaseError } from '../lib/logError'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
 import { generateIncomeOccurrences, type IncomeOccurrence } from '../lib/incomeOccurrences'
-import { FUEL_TYPE_LABEL, fuelStatsOdometer, lifetimeCostPerKmOdometer, lifetimePerFuelStima, type FuelType } from '../lib/fuelConsumption'
+import { FUEL_TYPE_LABEL, fuelStatsOdometer, fuelTotalFromLiters, lifetimeCostPerKmOdometer, lifetimePerFuelStima, type FuelType } from '../lib/fuelConsumption'
 import { inSameRecurrenceWindow } from '../lib/recurrenceMatch'
+import { DUE_SOON_DAYS, dueBadgeText, dueStatusOf, type DueStatus } from '../lib/dueStatus'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction } from '../types'
 
 interface PendingItem {
@@ -52,6 +54,17 @@ interface PendingItem {
 
 const FUEL_COLUMNS = ['transactions.fuel_km', 'transactions.fuel_liters', 'transactions.fuel_price_per_liter', 'transactions.fuel_type', 'transactions.fuel_odometer']
 
+// Quanti giorni PRIMA dell'inizio periodo caricare per la sola riconciliazione delle occorrenze.
+// La finestra di un'occorrenza può sconfinare all'indietro oltre il confine del periodo: 6 giorni
+// per una settimanale (settimana lun–dom), fino a ~30 per un'annuale (mese solare). 31 le copre
+// tutte. Questi movimenti NON entrano nei totali del periodo: servono solo a capire se
+// un'occorrenza a cavallo del confine è già stata pagata.
+const RECONCILE_LOOKBACK_DAYS = 31
+
+// Confronto dei nomi tollerante a maiuscole e spazi: un movimento inserito a mano come "Gpl"
+// deve agganciare la ricorrente "GPL".
+const normName = (s: string | null | undefined) => (s || '').trim().toLowerCase()
+
 function isFuelColumnError(msg?: string | null): boolean {
   if (!msg) return false
   return /fuel_(km|liters|price_per_liter|type)/.test(msg) && /column|schema|find/i.test(msg)
@@ -59,6 +72,20 @@ function isFuelColumnError(msg?: string | null): boolean {
 
 function formatItalianDayMonth(d: Date): string {
   return format(d, 'EEE d MMM', { locale: it })
+}
+
+function DueBadge({ status, text }: { status: DueStatus; text: string | null }) {
+  if (!text) return null
+  const cls = status === 'overdue'
+    ? 'bg-red-100 text-red-700'
+    : status === 'today'
+      ? 'bg-amber-100 text-amber-800'
+      : 'bg-amber-50 text-amber-700'
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold uppercase tracking-wide shrink-0 ${cls}`}>
+      {text}
+    </span>
+  )
 }
 
 // Etichette asse Y compatte (€1,2k / €1,2M): un valore intero in euro mangia la larghezza del
@@ -92,6 +119,9 @@ export default function Dashboard() {
   const [income, setIncome] = useState<RecurringIncome[]>([])
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
   const [periodTx, setPeriodTx] = useState<Transaction[]>([])
+  // Movimenti dei giorni precedenti l'inizio periodo: solo per riconciliare le occorrenze a
+  // cavallo del confine (vedi RECONCILE_LOOKBACK_DAYS). Mai sommati ai totali del periodo.
+  const [preTx, setPreTx] = useState<Transaction[]>([])
   const [planned, setPlanned] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [missingColumns, setMissingColumns] = useState<string[]>([])
@@ -124,11 +154,18 @@ export default function Dashboard() {
   const [plannedSaving, setPlannedSaving] = useState(false)
   const [editingPlanned, setEditingPlanned] = useState<Transaction | null>(null)
 
+  // Spesa imputata a una pianificata usata come budget a progetto.
+  const [plannedParentOk, setPlannedParentOk] = useState(false)
+  const [spendOn, setSpendOn] = useState<Transaction | null>(null)
+  const [spendForm, setSpendForm] = useState({ description: '', amount: 0, fund_id: '', date: todayString() })
+  const [spendSaving, setSpendSaving] = useState(false)
+
   const load = async () => {
     try {
       setLoadError(false)
       // Rileva il supporto a planned_date prima di eventuali inserimenti (auto-deduct in fondo).
       await probePlannedDateSupport()
+      setPlannedParentOk(await probePlannedParentSupport())
       const { start: periodStart, end: periodEnd } = getBillingPeriod()
 
       const [f, e, i, b] = await Promise.all([
@@ -152,6 +189,22 @@ export default function Dashboard() {
         toast.error('Errore caricamento transazioni: ' + txRes.error.message)
       } else {
         periodTxData = txRes.data || []
+      }
+
+      // Finestra di riconciliazione all'indietro. Se lo schema non ha is_planned si ricade sulla
+      // query senza filtro, coerentemente col ramo delle transazioni di periodo qui sopra.
+      let preTxData: Transaction[] = []
+      const lookbackStart = toDateString(addDays(parseLocalDate(periodStart), -RECONCILE_LOOKBACK_DAYS))
+      const preQuery = () => supabase.from('transactions').select('*').gte('date', lookbackStart).lt('date', periodStart)
+      const preRes = missing.includes('transactions.is_planned')
+        ? await preQuery()
+        : await preQuery().eq('is_planned', false)
+      if (preRes.error) {
+        // Non è un errore bloccante: senza questi movimenti si torna al comportamento precedente
+        // (un'occorrenza a cavallo del confine può risultare non pagata), il resto funziona.
+        logSupabaseError('Errore transazioni pre-periodo:', preRes.error)
+      } else {
+        preTxData = preRes.data || []
       }
 
       const plRes = await supabase.from('transactions').select('*').eq('is_planned', true).order('date', { ascending: true })
@@ -201,6 +254,7 @@ export default function Dashboard() {
       setIncome(i.data || [])
       setBudgets(b.data || [])
       setPeriodTx(finalPeriodTx)
+      setPreTx(preTxData)
       setPlanned(plannedData)
       setMissingColumns(missing)
     } catch (err) {
@@ -311,9 +365,17 @@ export default function Dashboard() {
       // stesso nome (es. vecchi memo "solo pagato"). Consumo greedy: una transazione copre
       // al più un'occorrenza.
       const byDate = (a: Transaction, b: Transaction) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0
-      const linkedTx = periodTx.filter(tx => tx.recurring_expense_id === exp.id).sort(byDate)
-      const namedTx = periodTx.filter(tx =>
-        !tx.recurring_expense_id && tx.description === exp.name &&
+      // Pool esteso ai giorni prima dell'inizio periodo: la finestra di un'occorrenza a cavallo del
+      // confine sconfina all'indietro, e senza questi movimenti l'occorrenza risulterebbe scaduta
+      // pur essendo pagata. La finestra stessa (settimana/ciclo) fa da filtro, quindi un movimento
+      // troppo vecchio non aggancia nulla.
+      const matchPool = [...preTx, ...periodTx]
+      const linkedTx = matchPool.filter(tx => tx.recurring_expense_id === exp.id).sort(byDate)
+      // Ripiego per nome NORMALIZZATO (trim + minuscole): copre i movimenti inseriti a mano o
+      // importati che non hanno il collegamento alla ricorrente, anche se scritti "Gpl" invece di
+      // "GPL". Stesso criterio del motore dei totali, così lista e cifre concordano.
+      const namedTx = matchPool.filter(tx =>
+        !tx.recurring_expense_id && normName(tx.description) === normName(exp.name) &&
         (isTransfer ? tx.type === 'transfer' : tx.type === 'expense')
       ).sort(byDate)
       const consumed = new Set<string>()
@@ -357,12 +419,19 @@ export default function Dashboard() {
     })
     .sort((a, b) => (a.occurrence_date || '').localeCompare(b.occurrence_date || ''))
 
-  // "Prossime Scadenze" mostra le voci ancora da pagare di OGGI in avanti + tutte quelle già fatte.
-  // Le occorrenze PASSATE e non pagate non compaiono come "da pagare" (non sono più scadenze
-  // imminenti, ed evita "fantasmi" quando si sposta il giorno di una ricorrente a metà periodo).
-  // Stesso criterio già usato dal ramo automatico (pendingAutoUpcoming).
-  const pendingRecurringManual = pendingRecurring.filter(p => !p.auto && (p.confirmed || !p.occurrence_date || p.occurrence_date >= today))
-  const pendingAutoUpcoming = pendingRecurring.filter(p => p.auto && !p.confirmed && !!p.occurrence_date && p.occurrence_date >= today)
+  // "Prossime Scadenze" mostra TUTTE le occorrenze del periodo corrente, comprese quelle il cui
+  // giorno previsto è già passato senza pagamento: restano visibili marcate come SCADUTE.
+  // Prima venivano nascoste, e una bolletta dimenticata spariva dalla dashboard pur continuando a
+  // pesare sul "Netto del Periodo" (getPeriodBreakdown gira con fromToday:false, quindi conta anche
+  // le occorrenze passate) — la lista diceva una cosa e i totali un'altra.
+  // Il perimetro resta il periodo corrente: nulla si accumula all'infinito da periodi precedenti.
+  const pendingRecurringManual = pendingRecurring.filter(p => !p.auto)
+  // Le automatiche si scalano da sole (processAutoDeducts) nel giorno previsto. Se una risulta
+  // ancora scaduta significa che l'addebito NON è andato a buon fine (tipicamente ricorrente senza
+  // fondo, o colonne mancanti a schema): va segnalata invece che nascosta.
+  const pendingAutoPending = pendingRecurring.filter(p => p.auto && !p.confirmed)
+  const pendingAutoOverdue = pendingAutoPending.filter(p => dueStatusOf(p.occurrence_date, today) === 'overdue')
+  const pendingAutoUpcoming = pendingAutoPending.filter(p => dueStatusOf(p.occurrence_date, today) !== 'overdue')
 
   const { start: pStartStr, end: pEndStr } = getBillingPeriod()
   const incomeOccurrences = generateIncomeOccurrences(income, pStartStr, pEndStr, periodTx)
@@ -410,6 +479,14 @@ export default function Dashboard() {
     if (item.kind === 'expense' && item.category === FUEL_CATEGORY) {
       void loadFuelFills()
     }
+  }
+
+  // Litri e €/litro compilano l'importo effettivamente pagato. Qui i due campi vivono in stati
+  // separati, quindi il valore appena digitato va passato esplicitamente: leggerlo dallo stato
+  // darebbe quello precedente (setState non è sincrono).
+  const syncFuelAmount = (litersStr: string, priceStr: string) => {
+    const total = fuelTotalFromLiters(parseDecimal(litersStr), parseDecimal(priceStr))
+    if (total != null) setConfirmAmount(total)
   }
 
   const loadFuelFills = async () => {
@@ -606,6 +683,37 @@ export default function Dashboard() {
     load()
   }
 
+  const openSpendOn = (p: Transaction) => {
+    setSpendOn(p)
+    setSpendForm({ description: '', amount: 0, fund_id: p.fund_id || '', date: todayString() })
+  }
+
+  // Registra una spesa REALE imputata alla pianificata: muove i fondi come qualunque uscita e
+  // consuma il residuo del tetto. La pianificata resta aperta finché non la si completa.
+  const saveSpendOn = async () => {
+    if (!spendOn) return
+    if (spendForm.amount <= 0) { toast.error('Inserisci un importo valido'); return }
+    if (!spendForm.description.trim()) { toast.error('Inserisci una descrizione'); return }
+    setSpendSaving(true)
+    const { error } = await postTransaction(user!.id, {
+      type: 'expense',
+      amount: spendForm.amount,
+      description: spendForm.description,
+      fund_id: spendForm.fund_id || null,
+      fund_to_id: null,
+      category: spendOn.category,
+      date: spendForm.date || todayString(),
+      // Omesso sui DB non migrati: il pulsante che apre questo modale compare solo se supportato,
+      // ma la guardia resta per non scrivere una colonna inesistente in nessun caso.
+      ...(plannedParentOk ? { planned_parent_id: spendOn.id } : {}),
+    })
+    setSpendSaving(false)
+    if (error) { toast.error('Errore nel salvataggio: ' + error); return }
+    setSpendOn(null)
+    toast.success('Spesa aggiunta alla pianificazione')
+    load()
+  }
+
   const deletePlanned = async (id: string) => {
     if (!(await confirm({ message: 'Eliminare questa pianificazione?', confirmText: 'Elimina', danger: true }))) return
     const { error } = await supabase.from('transactions').delete().eq('id', id)
@@ -684,6 +792,7 @@ export default function Dashboard() {
     excludedFundIds,
     fromToday: false,
     actualTx: periodTx,
+    reconcileOnlyTx: preTx,
     includeActualOneOffs: true,
     // Budget: settimane concluse → spesa reale; settimana in corso e future → quota stimata.
     reconcileBudgets: true,
@@ -838,13 +947,15 @@ export default function Dashboard() {
         )
       })()}
 
-      {(pendingRecurringManual.length > 0 || pendingIncome.length > 0 || pendingAutoUpcoming.length > 0) && (
+      {(pendingRecurringManual.length > 0 || pendingIncome.length > 0 || pendingAutoUpcoming.length > 0 || pendingAutoOverdue.length > 0) && (
         <div className="mb-6 sm:mb-8">
           <InfoBox title="Come funzionano le Prossime Scadenze" tone="emerald">
             <p>Tutte le voci del periodo corrente ({periodLabel}): cosa devi <strong>confermare</strong> e cosa verrà scalato in <strong>automatico</strong>.</p>
             <p><strong>Spese fisse del mese</strong>: spese ricorrenti manuali. Clicca "Paga" → puoi modificare l'importo prima di registrare, poi viene creata la transazione e aggiornato il saldo del fondo.</p>
             <p><strong>Entrate da confermare</strong>: ogni sabato lavorato (con la data di pagamento attesa) e lo stipendio mensile. "Non lavorato" su un sabato → memo che lo segna come gestito senza generare entrata.</p>
-            <p><strong>Spese automatiche</strong>: vengono scalate da sole dal fondo nel giorno previsto. Qui le vedi solo come promemoria — non c'è nulla da confermare.</p>
+            <p><strong>Spese automatiche</strong>: vengono scalate da sole dal fondo nel giorno previsto. Qui le vedi solo come promemoria — non c'è nulla da confermare. Se una compare sotto <strong>"non addebitate"</strong> l'addebito automatico non è riuscito (di solito manca il fondo di pagamento): puoi registrarla a mano col tasto "Paga".</p>
+            <p><strong>Scaduto e in scadenza</strong>: una voce <strong>non sparisce</strong> quando passa il giorno previsto. Resta in elenco con l'etichetta <span className="font-medium text-red-700">SCADUTO DA N GIORNI</span> finché non la registri, e viene evidenziata come <span className="font-medium text-amber-700">SCADE OGGI / TRA N GIORNI</span> quando la data si avvicina (entro {DUE_SOON_DAYS} giorni). Sono mostrate le occorrenze del periodo corrente ({periodLabel}): nulla si accumula dai periodi precedenti.</p>
+            <p>Se una scadenza passata l'hai in realtà già pagata fuori app (o hai deciso di saltarla), aprila e usa <strong>"Segna senza scalare"</strong>: esce dall'elenco senza toccare i saldi.</p>
           </InfoBox>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
@@ -863,13 +974,30 @@ export default function Dashboard() {
               <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Spese Fisse del Mese</p>
               {(() => {
                 const renderItem = (item: PendingItem) => {
-                  const borderColor = item.confirmed ? 'border-l-emerald-400 opacity-60' : item.kind === 'transfer' ? 'border-l-blue-400' : 'border-l-red-400'
-                  const btnClass = item.kind === 'transfer' ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-red-50 text-red-600 hover:bg-red-100'
+                  // Una voce già confermata non è mai "scaduta": è chiusa, a prescindere dal giorno.
+                  const status: DueStatus = item.confirmed ? 'upcoming' : dueStatusOf(item.occurrence_date, today)
+                  const isLate = status === 'overdue'
+                  const borderColor = item.confirmed
+                    ? 'border-l-emerald-400 opacity-60'
+                    : isLate
+                      ? 'border-l-red-500'
+                      : status === 'today' || status === 'soon'
+                        ? 'border-l-amber-400'
+                        : item.kind === 'transfer' ? 'border-l-blue-400' : 'border-l-red-400'
+                  // Sfondo dedicato per le scadute (niente `bg-white` in classe statica, altrimenti
+                  // le due utility Tailwind competerebbero e vincerebbe l'ordine nel CSS).
+                  const bgClass = isLate ? 'bg-red-50/60' : 'bg-white'
+                  const btnClass = item.kind === 'transfer'
+                    ? (isLate ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100')
+                    : (isLate ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-50 text-red-600 hover:bg-red-100')
                   const btnLabel = item.kind === 'transfer' ? 'Trasferisci' : 'Paga'
                   return (
-                    <div key={item.id} className={`bg-white rounded-xl border-l-4 border border-slate-200 p-4 flex items-center justify-between gap-3 ${borderColor}`}>
+                    <div key={item.id} className={`${bgClass} rounded-xl border-l-4 border border-slate-200 p-4 flex items-center justify-between gap-3 ${borderColor}`}>
                       <div className="min-w-0 flex-1">
-                        <p className={`font-medium text-slate-800 break-words ${item.confirmed ? 'line-through' : ''}`}>{item.name}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`font-medium text-slate-800 break-words ${item.confirmed ? 'line-through' : ''}`}>{item.name}</p>
+                          <DueBadge status={status} text={dueBadgeText(status, item.occurrence_date, today)} />
+                        </div>
                         <p className="text-xs text-slate-500 break-words">{item.label} · {cur(item.amount)}</p>
                       </div>
                       {item.confirmed ? (
@@ -887,10 +1015,21 @@ export default function Dashboard() {
                     </div>
                   )
                 }
-                const daPagare = pendingRecurringManual.filter(p => !p.confirmed)
+                const nonPagate = pendingRecurringManual.filter(p => !p.confirmed)
+                // Le scadute in testa e in una sezione propria: sono la cosa che richiede azione.
+                // Ordinamento ereditato da pendingRecurring (occurrence_date crescente) → la più
+                // vecchia per prima.
+                const scadute = nonPagate.filter(p => dueStatusOf(p.occurrence_date, today) === 'overdue')
+                const daPagare = nonPagate.filter(p => dueStatusOf(p.occurrence_date, today) !== 'overdue')
                 const giaFatte = pendingRecurringManual.filter(p => p.confirmed)
                 return (
                   <div className="space-y-3">
+                    {scadute.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-semibold text-red-700 mb-1.5 uppercase tracking-wide">Scadute · da saldare ({scadute.length})</p>
+                        <div className="space-y-2">{scadute.map(renderItem)}</div>
+                      </div>
+                    )}
                     {daPagare.length > 0 && (
                       <div>
                         <p className="text-[11px] font-semibold text-red-600 mb-1.5 uppercase tracking-wide">Da pagare ({daPagare.length})</p>
@@ -945,18 +1084,54 @@ export default function Dashboard() {
             </div>
           )}
 
+          {pendingAutoOverdue.length > 0 && (
+            <div className="mb-3">
+              <p className="text-xs font-medium text-red-700 mb-2 uppercase tracking-wide">Spese Automatiche non addebitate ({pendingAutoOverdue.length})</p>
+              <div className="space-y-2">
+                {pendingAutoOverdue.map(item => {
+                  const due = parseLocalDate(item.occurrence_date as string)
+                  return (
+                    <div key={item.id} className="bg-red-50/60 rounded-xl border-l-4 border-l-red-500 border border-slate-200 p-4 flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-medium text-slate-800 break-words">{item.name}</p>
+                          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-medium">Automatica</span>
+                          <DueBadge status="overdue" text={dueBadgeText('overdue', item.occurrence_date, today)} />
+                        </div>
+                        <p className="text-xs text-slate-500 break-words">
+                          {format(due, 'EEE d MMM', { locale: it })} · {cur(item.amount)} · addebito automatico non riuscito
+                        </p>
+                      </div>
+                      {/* Registrarla a mano è sicuro: postTransaction salva planned_date =
+                          occurrence_date, e processAutoDeducts la riconosce come già processata
+                          (match su recurring_expense_id + data), quindi niente doppio addebito. */}
+                      <button
+                        onClick={() => openConfirm(item)}
+                        className="inline-flex items-center justify-center min-h-[40px] px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 active:scale-[0.98] transition-[transform,background-color] shrink-0"
+                      >
+                        {item.kind === 'transfer' ? 'Trasferisci' : 'Paga'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {pendingAutoUpcoming.length > 0 && (
             <div className="mb-3">
               <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Spese Automatiche in arrivo ({pendingAutoUpcoming.length})</p>
               <div className="space-y-2">
                 {pendingAutoUpcoming.map(item => {
-                  const due = new Date((item.occurrence_date as string) + 'T00:00:00')
+                  const due = parseLocalDate(item.occurrence_date as string)
+                  const status = dueStatusOf(item.occurrence_date, today)
                   return (
-                    <div key={item.id} className="bg-white rounded-xl border-l-4 border-l-emerald-400 border border-slate-200 p-4 flex items-center justify-between gap-3">
+                    <div key={item.id} className={`bg-white rounded-xl border-l-4 border border-slate-200 p-4 flex items-center justify-between gap-3 ${status === 'today' || status === 'soon' ? 'border-l-amber-400' : 'border-l-emerald-400'}`}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="font-medium text-slate-800 truncate">{item.name}</p>
                           <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-medium">Automatica</span>
+                          <DueBadge status={status} text={dueBadgeText(status, item.occurrence_date, today)} />
                         </div>
                         <p className="text-xs text-slate-500">{format(due, 'EEE d MMM', { locale: it })} · si scalerà da sola</p>
                       </div>
@@ -1004,22 +1179,48 @@ export default function Dashboard() {
                   const fundName = funds.find(f => f.id === p.fund_id)?.name
                   // Solo-data in locale: una pianificata in scadenza OGGI non è "scaduta".
                   const isPast = p.date < today
+                  // Budget a progetto: attivo appena si aggancia la prima spesa.
+                  const st = plannedBudgetStatus(p, periodTx)
+                  const isBudget = p.type === 'expense' && st.count > 0
                   return (
                     <div key={p.id} className={`bg-white rounded-xl border-l-4 ${p.type === 'income' ? 'border-l-emerald-500' : 'border-l-purple-500'} border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-medium text-slate-800 break-words">{p.description}</p>
-                          {isPast && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-md font-medium uppercase">scaduta</span>}
+                          {isPast && !isBudget && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-md font-medium uppercase">scaduta</span>}
+                          {st.overspent > 0 && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md font-semibold uppercase">sforato {cur(st.overspent)}</span>}
                         </div>
                         <p className="text-xs text-slate-500">
                           {fmtDate(p.date)}
                           {fundName && ` · ${fundName}`}
                           {' · '}{p.type === 'income' ? '+' : '-'}{cur(Number(p.amount))}
                         </p>
+                        {isBudget && (
+                          <div className="mt-2">
+                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-[width] ${st.overspent > 0 ? 'bg-red-500' : 'bg-purple-500'}`}
+                                style={{ width: `${st.percent}%` }}
+                              />
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Speso <span className="font-semibold text-slate-700">{cur(st.spent)}</span> di {cur(st.total)}
+                              {st.overspent > 0
+                                ? <> · <span className="font-semibold text-red-600">sfori di {cur(st.overspent)}</span></>
+                                : <> · restano <span className="font-semibold text-purple-700">{cur(st.remaining)}</span></>}
+                              {' · '}{st.count} {st.count === 1 ? 'spesa' : 'spese'}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center justify-end gap-1 shrink-0 w-full sm:w-auto">
+                        {plannedParentOk && p.type === 'expense' && (
+                          <button onClick={() => openSpendOn(p)} title="Aggiungi una spesa che rientra in questa pianificazione" className="inline-flex items-center gap-1 justify-center min-h-[40px] px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 active:scale-[0.98] transition-[transform,background-color]">
+                            <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Spesa
+                          </button>
+                        )}
                         <button onClick={() => openCompletePlanned(p)} className="inline-flex items-center justify-center min-h-[40px] px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-100 active:scale-[0.98] transition-[transform,background-color]">
-                          Fatto
+                          {isBudget ? 'Chiudi' : 'Fatto'}
                         </button>
                         <button onClick={() => openEditPlanned(p)} aria-label="Modifica pianificazione" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 active:scale-90 transition-[transform,background-color,color]">
                           <Pencil className="w-4 h-4" />
@@ -1219,13 +1420,25 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="min-w-0">
                     <label className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
-                    <input type="text" inputMode="decimal" value={confirmFuelLiters} onChange={e => setConfirmFuelLiters(e.target.value)} placeholder="es. 30" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+                    <input type="text" inputMode="decimal" value={confirmFuelLiters} onChange={e => { setConfirmFuelLiters(e.target.value); syncFuelAmount(e.target.value, confirmFuelPrice) }} placeholder="es. 30" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
                   </div>
                   <div className="min-w-0">
                     <label className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
-                    <input type="text" inputMode="decimal" value={confirmFuelPrice} onChange={e => setConfirmFuelPrice(e.target.value)} placeholder="es. 1,80" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+                    <input type="text" inputMode="decimal" value={confirmFuelPrice} onChange={e => { setConfirmFuelPrice(e.target.value); syncFuelAmount(confirmFuelLiters, e.target.value) }} placeholder="es. 1,80" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
                   </div>
                 </div>
+                {(() => {
+                  const l = parseDecimal(confirmFuelLiters)
+                  const ppl = parseDecimal(confirmFuelPrice)
+                  const total = fuelTotalFromLiters(l, ppl)
+                  if (total == null) return null
+                  return (
+                    <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5">
+                      {l.toLocaleString('it-IT')} L × {ppl.toLocaleString('it-IT', { minimumFractionDigits: 3 })} €/L =
+                      {' '}<span className="font-semibold">{cur(total)}</span> · importo compilato in automatico
+                    </p>
+                  )
+                })()}
                 {(() => {
                   const odo = parseDecimal(confirmFuelOdometer)
                   const beforeDate = confirmDate || todayString()
@@ -1257,7 +1470,7 @@ export default function Dashboard() {
                     </div>
                   )
                 })()}
-                <p className="text-[11px] text-slate-400">Inserisci la lettura del <strong>contachilometri</strong> (km totali). Per le auto bifuel il <strong>€/km è reale</strong>; il km/l per carburante è una <strong>stima</strong>. Dati solo per i consumi: non modificano l'importo pagato qui sopra.</p>
+                <p className="text-[11px] text-slate-400">Inserisci la lettura del <strong>contachilometri</strong> (km totali). Per le auto bifuel il <strong>€/km è reale</strong>; il km/l per carburante è una <strong>stima</strong>. Litri e €/litro <strong>compilano l'importo pagato</strong> qui sopra (puoi comunque correggerlo a mano); il contachilometri serve solo ai consumi.</p>
               </div>
             )}
             {confirmItem.kind !== 'transfer' && (
@@ -1299,6 +1512,7 @@ export default function Dashboard() {
             weeklyBudgets: budgets, planned,
             excludedFundIds, fromToday: false,
             actualTx: periodTx,
+            reconcileOnlyTx: preTx,
             includeActualOneOffs: true,
             reconcileBudgets: true,
           })
@@ -1311,6 +1525,70 @@ export default function Dashboard() {
               <div className="max-h-[60vh] overflow-y-auto">
                 <BreakdownList items={breakdown} kind={breakdownModal === 'net' ? 'both' : breakdownModal} emptyText="Nessuna voce nel periodo" />
               </div>
+            </div>
+          )
+        })()}
+      </Modal>
+
+      <Modal isOpen={!!spendOn} onClose={() => setSpendOn(null)} title={spendOn ? `Spesa per «${spendOn.description}»` : ''}>
+        {spendOn && (() => {
+          const st = plannedBudgetStatus(spendOn, periodTx)
+          const after = st.spent + spendForm.amount
+          const over = after > st.total
+          return (
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-purple-50">
+                <p className="text-xs text-slate-600">
+                  Tetto <span className="font-semibold text-slate-800">{cur(st.total)}</span> · speso {cur(st.spent)} · restano <span className="font-semibold text-purple-700">{cur(st.remaining)}</span>
+                </p>
+                <div className="h-1.5 rounded-full bg-white mt-2 overflow-hidden">
+                  <div className={`h-full rounded-full ${st.overspent > 0 ? 'bg-red-500' : 'bg-purple-500'}`} style={{ width: `${st.percent}%` }} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
+                <input
+                  type="text" value={spendForm.description}
+                  onChange={e => setSpendForm({ ...spendForm, description: e.target.value })}
+                  placeholder="es. Hotel, benzina, cena"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+                <DecimalInput
+                  value={spendForm.amount}
+                  onChange={n => setSpendForm({ ...spendForm, amount: n })}
+                  className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-lg font-semibold"
+                />
+                {spendForm.amount > 0 && (
+                  <p className={`text-xs mt-1 ${over ? 'text-red-600' : 'text-slate-500'}`}>
+                    Dopo: {cur(after)} di {cur(st.total)}
+                    {over ? ` · sfori di ${cur(after - st.total)}` : ` · resterebbero ${cur(st.total - after)}`}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+                <input
+                  type="date" value={spendForm.date}
+                  onChange={e => setSpendForm({ ...spendForm, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Paga con</label>
+                <select value={spendForm.fund_id} onChange={e => setSpendForm({ ...spendForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                  <option value="">Nessun fondo</option>
+                  {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
+                </select>
+              </div>
+              <button onClick={saveSpendOn} disabled={spendSaving || spendForm.amount <= 0} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 active:scale-[0.98] transition-[transform,background-color] text-sm">
+                {spendSaving ? 'Registrazione...' : 'Registra spesa'}
+              </button>
+              <p className="text-[11px] text-slate-400 text-center -mt-1">
+                Scala il fondo come una normale uscita e consuma il residuo della pianificazione. Il totale del periodo non cambia finché resti entro il tetto.
+              </p>
             </div>
           )
         })()}

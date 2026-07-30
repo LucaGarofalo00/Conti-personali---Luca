@@ -12,9 +12,11 @@ import { isAmountsHidden } from '../lib/privacy'
 import { incrementFundBalance } from '../lib/fundBalances'
 import { postTransaction } from '../lib/postTransaction'
 import { logSupabaseError } from '../lib/logError'
-import { fuelConsumption, previousFuelFill, averageFuelConsumption, normalizeFuelType, FUEL_TYPE_LABEL, fuelStatsOdometer, lifetimeCostPerKmOdometer, lifetimePerFuelStima, type FuelType } from '../lib/fuelConsumption'
+import { fuelConsumption, fuelTotalFromLiters, previousFuelFill, averageFuelConsumption, normalizeFuelType, FUEL_TYPE_LABEL, fuelStatsOdometer, lifetimeCostPerKmOdometer, lifetimePerFuelStima, type FuelType } from '../lib/fuelConsumption'
 import InfoBox from '../components/InfoBox'
-import type { Transaction, Fund } from '../types'
+import { probePlannedParentSupport, withPlannedParent } from '../lib/schemaSupport'
+import { plannedBudgetStatus } from '../lib/plannedBudget'
+import type { Transaction, Fund, WeeklyBudget } from '../types'
 
 const PAGE_SIZE = 50
 
@@ -23,11 +25,40 @@ const emptyForm = {
   amount: 0, description: '', fund_id: '', fund_to_id: '',
   category: 'altro', date: todayString(),
   fuel_odometer: '', fuel_liters: '', fuel_price_per_liter: '', fuel_type: 'gpl' as FuelType,
+  // "Rientra in": budget settimanale (weekly:<id>) oppure spesa pianificata (planned:<id>).
+  // Un solo campo perché per chi compila è una domanda sola — sono due colonne diverse solo
+  // nel database.
+  belongsTo: '',
+}
+
+const WEEKLY_PREFIX = 'weekly:'
+const PLANNED_PREFIX = 'planned:'
+
+function belongsToValue(tx: Transaction): string {
+  if (tx.budget_id) return WEEKLY_PREFIX + tx.budget_id
+  if (tx.planned_parent_id) return PLANNED_PREFIX + tx.planned_parent_id
+  return ''
+}
+
+// Scompone la scelta unica nelle due colonne del database.
+function belongsToColumns(v: string): { budget_id: string | null; planned_parent_id: string | null } {
+  if (v.startsWith(WEEKLY_PREFIX)) return { budget_id: v.slice(WEEKLY_PREFIX.length), planned_parent_id: null }
+  if (v.startsWith(PLANNED_PREFIX)) return { budget_id: null, planned_parent_id: v.slice(PLANNED_PREFIX.length) }
+  return { budget_id: null, planned_parent_id: null }
 }
 
 function isFuelColumnError(msg?: string | null): boolean {
   if (!msg) return false
   return /fuel_(km|liters|price_per_liter|type)/.test(msg) && /column|schema|find/i.test(msg)
+}
+
+// Ricalcola l'importo da litri × €/litro ogni volta che uno dei due cambia: chi compila quei campi
+// sta derivando la spesa da lì. L'importo resta comunque modificabile a mano — viene sovrascritto
+// solo al successivo ritocco di litri o prezzo, mai "di nascosto".
+type FuelFormFields = { amount: number; fuel_liters: string; fuel_price_per_liter: string }
+function withFuelTotal<T extends FuelFormFields>(f: T): T {
+  const total = fuelTotalFromLiters(parseDecimal(f.fuel_liters), parseDecimal(f.fuel_price_per_liter))
+  return total == null ? f : { ...f, amount: total }
 }
 
 function numToInput(n: number | string | null): string {
@@ -62,6 +93,11 @@ export default function Transactions() {
   const confirm = useConfirm()
   const [items, setItems] = useState<Transaction[]>([])
   const [funds, setFunds] = useState<Fund[]>([])
+  // Contenitori a cui una spesa può essere imputata: budget settimanali attivi e pianificate
+  // ancora aperte (queste ultime solo se il DB ha planned_parent_id).
+  const [budgets, setBudgets] = useState<WeeklyBudget[]>([])
+  const [openPlanned, setOpenPlanned] = useState<Transaction[]>([])
+  const [plannedParentOk, setPlannedParentOk] = useState(false)
   const [fuelFills, setFuelFills] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -92,10 +128,13 @@ export default function Transactions() {
       if (dateFrom) query = query.gte('date', dateFrom)
       if (dateTo) query = query.lte('date', dateTo)
 
-      const [{ data: tx, error: e1 }, { data: fnd, error: e2 }, fuelRes] = await Promise.all([
+      if (reset) setPlannedParentOk(await probePlannedParentSupport())
+      const [{ data: tx, error: e1 }, { data: fnd, error: e2 }, fuelRes, budRes, planRes] = await Promise.all([
         query,
         reset ? supabase.from('funds').select('*').order('sort_order') : Promise.resolve({ data: funds, error: null }),
         reset ? supabase.from('transactions').select('*').eq('category', FUEL_CATEGORY) : Promise.resolve({ data: null, error: null }),
+        reset ? supabase.from('weekly_budgets').select('*').eq('is_active', true).order('name') : Promise.resolve({ data: null, error: null }),
+        reset ? supabase.from('transactions').select('*').eq('is_planned', true).eq('type', 'expense').order('date') : Promise.resolve({ data: null, error: null }),
       ])
       const firstError = e1 || e2
       if (firstError) {
@@ -106,6 +145,8 @@ export default function Transactions() {
         setItems(tx || [])
         setFunds(fnd || [])
         if (!fuelRes.error) setFuelFills((fuelRes.data || []).filter(t => !t.is_planned))
+        if (!budRes.error) setBudgets(budRes.data || [])
+        if (!planRes.error) setOpenPlanned(planRes.data || [])
         setSelectedIds(new Set())
       } else {
         setItems(prev => [...prev, ...(tx || [])])
@@ -132,6 +173,7 @@ export default function Transactions() {
       fuel_liters: numToInput(tx.fuel_liters),
       fuel_price_per_liter: numToInput(tx.fuel_price_per_liter),
       fuel_type: normalizeFuelType(tx.fuel_type),
+      belongsTo: belongsToValue(tx),
     })
     setShowModal(true)
   }
@@ -160,12 +202,17 @@ export default function Transactions() {
 
     const fundId = form.fund_id || null
     const fundToId = form.type === 'transfer' ? (form.fund_to_id || null) : null
+    // Solo le uscite possono rientrare in un budget o in una pianificata: su entrate e
+    // trasferimenti il campo non compare e va comunque azzerato (es. se si cambia tipo in modifica).
+    const cols = form.type === 'expense' ? belongsToColumns(form.belongsTo) : { budget_id: null, planned_parent_id: null }
+    const belongsFields = withPlannedParent({ budget_id: cols.budget_id }, cols.planned_parent_id)
 
     // Nuovo movimento: insert + saldo atomici via post_transaction (fallback al percorso storico).
     if (!editing) {
       const { error } = await postTransaction(user!.id, {
         type: form.type, amount: form.amount, description: form.description,
         fund_id: fundId, fund_to_id: fundToId, category: form.category, date: form.date,
+        ...belongsFields,
         ...fuelFields,
       })
       setSaving(false)
@@ -199,6 +246,7 @@ export default function Transactions() {
     const payload = {
       type: form.type, amount: form.amount, description: form.description,
       fund_id: fundId, fund_to_id: fundToId, category: form.category, date: form.date,
+      ...belongsFields,
       ...fuelFields,
     }
     const { error } = await supabase.from('transactions').update(payload).eq('id', editing.id)
@@ -626,6 +674,49 @@ export default function Transactions() {
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
+          {form.type === 'expense' && (budgets.length > 0 || (plannedParentOk && openPlanned.length > 0)) && (
+            <div>
+              <label htmlFor="tx-belongs" className="block text-sm font-medium text-slate-700 mb-1">Rientra in <span className="font-normal text-slate-400">(facoltativo)</span></label>
+              <select
+                id="tx-belongs"
+                value={form.belongsTo}
+                onChange={e => setForm({ ...form, belongsTo: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+              >
+                <option value="">Nessun budget</option>
+                {budgets.length > 0 && (
+                  <optgroup label="Budget settimanali">
+                    {budgets.map(b => <option key={b.id} value={WEEKLY_PREFIX + b.id}>{b.name} ({cur(Number(b.amount))}/sett)</option>)}
+                  </optgroup>
+                )}
+                {plannedParentOk && openPlanned.length > 0 && (
+                  <optgroup label="Spese pianificate">
+                    {openPlanned.map(p => {
+                      const st = plannedBudgetStatus(p, items)
+                      return (
+                        <option key={p.id} value={PLANNED_PREFIX + p.id}>
+                          {p.description} — {st.spent > 0 ? `restano ${cur(st.remaining)} di ${cur(st.total)}` : cur(st.total)}
+                        </option>
+                      )
+                    })}
+                  </optgroup>
+                )}
+              </select>
+              {form.belongsTo.startsWith(PLANNED_PREFIX) && (() => {
+                const p = openPlanned.find(x => x.id === form.belongsTo.slice(PLANNED_PREFIX.length))
+                if (!p) return null
+                const st = plannedBudgetStatus(p, items)
+                const after = st.spent + form.amount
+                const over = after > st.total
+                return (
+                  <p className={`text-xs mt-1 ${over ? 'text-red-600' : 'text-slate-500'}`}>
+                    Dopo questa spesa: {cur(after)} di {cur(st.total)}
+                    {over ? ` · sfori di ${cur(after - st.total)}` : ` · resterebbero ${cur(st.total - after)}`}
+                  </p>
+                )
+              })()}
+            </div>
+          )}
           {form.type === 'transfer' && (
             <div>
               <label htmlFor="tx-fund-to" className="block text-sm font-medium text-slate-700 mb-1">A fondo</label>
@@ -676,7 +767,7 @@ export default function Transactions() {
                     id="tx-fuel-liters"
                     type="text" inputMode="decimal"
                     value={form.fuel_liters}
-                    onChange={e => setForm({ ...form, fuel_liters: e.target.value })}
+                    onChange={e => setForm(withFuelTotal({ ...form, fuel_liters: e.target.value }))}
                     placeholder="es. 30"
                     className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-base sm:text-sm"
                   />
@@ -687,12 +778,24 @@ export default function Transactions() {
                     id="tx-fuel-ppl"
                     type="text" inputMode="decimal"
                     value={form.fuel_price_per_liter}
-                    onChange={e => setForm({ ...form, fuel_price_per_liter: e.target.value })}
+                    onChange={e => setForm(withFuelTotal({ ...form, fuel_price_per_liter: e.target.value }))}
                     placeholder="es. 1,80"
                     className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-base sm:text-sm"
                   />
                 </div>
               </div>
+              {(() => {
+                const l = parseDecimal(form.fuel_liters)
+                const ppl = parseDecimal(form.fuel_price_per_liter)
+                const total = fuelTotalFromLiters(l, ppl)
+                if (total == null) return null
+                return (
+                  <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5">
+                    {l.toLocaleString('it-IT')} L × {ppl.toLocaleString('it-IT', { minimumFractionDigits: 3 })} €/L =
+                    {' '}<span className="font-semibold">{cur(total)}</span> · importo compilato in automatico
+                  </p>
+                )
+              })()}
               {(() => {
                 const odo = parseDecimal(form.fuel_odometer)
                 const ref = { id: editing?.id ?? '', date: form.date, created_at: editing?.created_at ?? new Date().toISOString(), fuel_type: form.fuel_type, fuel_odometer: odo > 0 ? odo : null }
@@ -722,7 +825,7 @@ export default function Transactions() {
                   </div>
                 )
               })()}
-              <p className="text-[11px] text-slate-500">Inserisci la lettura del <strong>contachilometri</strong> (km totali dell'auto). Per le auto bifuel il <strong>€/km è reale</strong>; il <strong>km/l per carburante è una stima</strong> (i km includono l'altro carburante). Dati solo per i consumi: non modificano l'importo.</p>
+              <p className="text-[11px] text-slate-500">Inserisci la lettura del <strong>contachilometri</strong> (km totali dell'auto). Per le auto bifuel il <strong>€/km è reale</strong>; il <strong>km/l per carburante è una stima</strong> (i km includono l'altro carburante). Litri e €/litro <strong>compilano l'importo</strong> (puoi comunque correggerlo a mano); il contachilometri serve solo ai consumi.</p>
             </div>
           )}
           <button onClick={save} disabled={form.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 transition-[transform,background-color] active:scale-[0.98]">
