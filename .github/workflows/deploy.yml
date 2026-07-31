@@ -24,14 +24,22 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
+
+      # I 319 test coprono il motore finanziario (periodi, ricorrenze, previsione, arrotondamenti):
+      # senza questo passo un errore di calcolo dei saldi arrivava in produzione senza fermare nulla.
+      - run: npm test
+
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Senza questa variabile la build esce con la chiave VAPID vuota e le notifiche push
+          # risultano non attivabili sul sito pubblicato, anche con la Edge Function già installata.
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
 
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
