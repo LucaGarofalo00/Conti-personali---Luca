@@ -11,7 +11,15 @@ describe('toDateString', () => {
   it('does NOT shift the date due to UTC conversion (bug fix)', () => {
     const d = new Date(2026, 4, 15, 0, 0, 0)
     expect(toDateString(d)).toBe('2026-05-15')
-    expect(d.toISOString().split('T')[0]).not.toBe('2026-05-15')
+    // Controprova: a mezzanotte locale, in un fuso a est di Greenwich la data UTC è il giorno
+    // PRIMA — quindi toISOString() darebbe un risultato diverso, ed è proprio l'errore che
+    // toDateString evita. La controprova ha senso solo dove esiste uno scarto da UTC: in un fuso a
+    // scarto zero le due formattazioni coincidono per definizione e non proverebbero nulla.
+    // (La suite fissa Europe/Rome — vedi src/test/setupTimezone.ts — ma la guardia resta perché il
+    // test non deve tornare a dipendere dalla macchina se quella configurazione cambia.)
+    if (d.getTimezoneOffset() !== 0) {
+      expect(d.toISOString().split('T')[0]).not.toBe('2026-05-15')
+    }
   })
 
   it('handles year boundary correctly', () => {
