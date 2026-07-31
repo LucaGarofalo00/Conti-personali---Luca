@@ -10,7 +10,7 @@ import { catLabel } from '../lib/utils'
 // (custom_categories) e selezionata, e compare ovunque grazie allo store condiviso.
 
 const ADD = '__add_category__'
-const INPUT_CLASS = 'flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize'
+const INPUT_CLASS = 'flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow capitalize'
 
 interface Props {
   value: string

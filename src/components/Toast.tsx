@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react'
 import { CheckCircle, XCircle, X } from 'lucide-react'
 
 interface Toast {
@@ -29,10 +29,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => remove(id), 4000)
   }, [remove])
 
-  const ctx: ToastContextType = {
-    success: useCallback((msg: string) => add(msg, 'success'), [add]),
-    error: useCallback((msg: string) => add(msg, 'error'), [add]),
-  }
+  // Il valore del context deve essere STABILE: senza useMemo l'oggetto è nuovo a ogni comparsa o
+  // scadenza di un toast, e tutte le pagine (che chiamano useToast) si ri-renderizzano per intero
+  // due volte per ogni notifica. Le due funzioni sono già stabili grazie a useCallback.
+  const success = useCallback((msg: string) => add(msg, 'success'), [add])
+  const error = useCallback((msg: string) => add(msg, 'error'), [add])
+  const ctx = useMemo<ToastContextType>(() => ({ success, error }), [success, error])
 
   return (
     <ToastContext.Provider value={ctx}>

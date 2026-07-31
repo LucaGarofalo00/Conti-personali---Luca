@@ -90,7 +90,7 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
           className={`absolute mt-1.5 w-70 max-w-[calc(100vw-1rem)] bg-white border border-slate-200 rounded-lg shadow-xl z-40 overflow-hidden animate-[scaleIn_0.1s_ease-out] ${alignRight ? 'right-0' : 'left-0'}`}
         >
           <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
-            <p className="min-w-0 truncate text-xs font-medium text-slate-400 uppercase tracking-wider">Escludi dai calcoli</p>
+            <p className="min-w-0 truncate text-xs font-medium text-slate-500 uppercase tracking-wider">Escludi dai calcoli</p>
             {excludedCount > 0 && (
               <button onClick={onClear} className="shrink-0 inline-flex items-center min-h-[40px] sm:min-h-0 -my-2.5 sm:my-0 px-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
                 Reset
@@ -101,22 +101,33 @@ export default function FundExcluder({ funds, excludedIds, onToggle, onClear, co
             {funds.map(f => {
               const excluded = excludedIds.includes(f.id)
               return (
+                // aria-pressed: incluso/escluso era veicolato solo dal colore dell'occhio e dal
+                // barrato — invisibile a uno screen reader e ambiguo per chi non distingue i colori.
                 <button
                   key={f.id}
                   onClick={() => onToggle(f.id)}
-                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2 min-h-[40px] text-left text-[13px] hover:bg-slate-50 transition-colors ${excluded ? 'text-slate-400' : 'text-slate-700'}`}
+                  aria-pressed={excluded}
+                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2 min-h-[40px] text-left text-[13px] hover:bg-slate-50 transition-colors ${excluded ? 'text-slate-500' : 'text-slate-700'}`}
                 >
                   <span className="flex items-center gap-2.5 min-w-0 truncate">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: f.color }} />
+                    <span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: f.color }} />
                     <span className={`truncate ${excluded ? 'line-through' : ''}`}>{f.name}</span>
                   </span>
-                  {excluded ? <EyeOff className="w-3.5 h-3.5 shrink-0 text-slate-300" /> : <Eye className="w-3.5 h-3.5 shrink-0 text-emerald-500" />}
+                  <span className="flex items-center gap-1.5 shrink-0">
+                    {/* Etichetta testuale accanto all'icona: l'informazione non passa più dal solo colore. */}
+                    <span className={`text-[11px] font-medium ${excluded ? 'text-slate-500' : 'text-emerald-600'}`}>
+                      {excluded ? 'Escluso' : 'Incluso'}
+                    </span>
+                    {excluded
+                      ? <EyeOff aria-hidden="true" className="w-3.5 h-3.5 text-slate-400" />
+                      : <Eye aria-hidden="true" className="w-3.5 h-3.5 text-emerald-600" />}
+                  </span>
                 </button>
               )
             })}
           </div>
           <div className="px-3.5 py-2 bg-slate-50 border-t border-slate-100">
-            <p className="text-[11px] text-slate-400">I fondi esclusi non sono conteggiati nelle previsioni e nelle stime.</p>
+            <p className="text-[11px] text-slate-500">I fondi esclusi non sono conteggiati nelle previsioni e nelle stime.</p>
           </div>
         </div>
       )}

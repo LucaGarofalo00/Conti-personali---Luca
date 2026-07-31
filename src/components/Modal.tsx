@@ -15,9 +15,42 @@ const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input
 // (con modali impilati, es. un Confirm sopra un form, Escape non deve chiudere l'intero stack).
 const modalStack: HTMLElement[] = []
 
+// Elemento realmente scrollabile dell'app. Il layout è `flex h-dvh` con un <main> in overflow-auto:
+// il body NON scorre mai, quindi `document.body.style.overflow = 'hidden'` non bloccava nulla e
+// dietro al pannello la pagina continuava a scorrere sotto il dito. Blocchiamo lo scroller vero e,
+// come rete di sicurezza, anche il body (schermate senza Layout, es. Auth).
+function lockTargets(): HTMLElement[] {
+  const scroller = document.querySelector<HTMLElement>('[data-app-scroll]')
+  return scroller ? [scroller, document.body] : [document.body]
+}
+
+// Stile originale dei nodi bloccati, per ripristinarlo alla chiusura dell'ultimo pannello.
+let savedStyles: Array<{ el: HTMLElement; overflow: string; paddingRight: string }> = []
+
+function lockScroll() {
+  savedStyles = lockTargets().map(el => {
+    const saved = { el, overflow: el.style.overflow, paddingRight: el.style.paddingRight }
+    // Compensa la barra di scorrimento che sparisce: senza, su desktop il contenuto "salta".
+    const scrollbar = el.offsetWidth - el.clientWidth
+    if (scrollbar > 0) el.style.paddingRight = `${scrollbar}px`
+    el.style.overflow = 'hidden'
+    return saved
+  })
+}
+
+function unlockScroll() {
+  for (const { el, overflow, paddingRight } of savedStyles) {
+    el.style.overflow = overflow
+    el.style.paddingRight = paddingRight
+  }
+  savedStyles = []
+}
+
 export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
+  // true solo se il puntatore è stato premuto sullo sfondo (non trascinato dal pannello).
+  const backdropDownRef = useRef(false)
   // Ref così l'effect dipende solo da `isOpen`: evita di rieseguire il focus a ogni render.
   const onCloseRef = useRef(onClose)
   useEffect(() => { onCloseRef.current = onClose }, [onClose])
@@ -27,11 +60,7 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
     const panel = panelRef.current
     const previouslyFocused = document.activeElement as HTMLElement | null
 
-    if (modalStack.length === 0) {
-      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
-      document.body.style.paddingRight = `${scrollbarWidth}px`
-      document.body.style.overflow = 'hidden'
-    }
+    if (modalStack.length === 0) lockScroll()
     if (panel) modalStack.push(panel)
 
     panel?.focus()
@@ -57,10 +86,7 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
         const idx = modalStack.indexOf(panel)
         if (idx !== -1) modalStack.splice(idx, 1)
       }
-      if (modalStack.length === 0) {
-        document.body.style.paddingRight = ''
-        document.body.style.overflow = ''
-      }
+      if (modalStack.length === 0) unlockScroll()
       previouslyFocused?.focus?.()
     }
   }, [isOpen])
@@ -69,7 +95,14 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]" onClick={onClose} />
+      {/* Chiusura sullo sfondo solo se il gesto è NATO sullo sfondo: senza questa guardia, trascinare
+          per selezionare del testo dentro il pannello e rilasciare fuori chiudeva il modale,
+          buttando via il modulo in compilazione. */}
+      <div
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
+        onPointerDown={e => { backdropDownRef.current = e.target === e.currentTarget }}
+        onClick={e => { if (backdropDownRef.current && e.target === e.currentTarget) onClose() }}
+      />
       {/* Bottom-sheet su mobile (sale dal basso, angoli alti arrotondati), card centrata da sm in su.
           Colonna flex: header fisso, corpo scrollabile → su schermi bassi la testata resta sempre visibile. */}
       <div ref={panelRef} tabIndex={-1} className="relative flex flex-col w-full max-h-[92dvh] bg-white rounded-t-2xl shadow-2xl ring-1 ring-slate-900/5 overflow-hidden outline-none animate-[slideUp_0.28s_cubic-bezier(0.16,1,0.3,1)] sm:max-w-md sm:max-h-[90vh] sm:rounded-2xl sm:animate-[scaleIn_0.22s_cubic-bezier(0.16,1,0.3,1)]">

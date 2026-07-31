@@ -39,7 +39,7 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
   const filtered = kind === 'both' ? items : items.filter(i => i.kind === kind)
 
   if (filtered.length === 0) {
-    return <p className="text-xs text-slate-400 italic py-2 text-center">{emptyText}</p>
+    return <p className="text-xs text-slate-500 italic py-2 text-center">{emptyText}</p>
   }
 
   // Le voci "già avvenute" (transazioni reali del periodo) sono solo informative:
@@ -71,7 +71,7 @@ export default function BreakdownList({ items, kind = 'both', emptyText = 'Nessu
           <div className="min-w-0">
             <p className="text-slate-700 break-words leading-snug">{item.description}</p>
             <p className="flex items-center gap-1.5 flex-wrap mt-0.5">
-              <span className="text-[11px] text-slate-400 tabular-nums">{format(new Date(item.date), 'd MMM', { locale: it })}</span>
+              <span className="text-[11px] text-slate-500 tabular-nums">{format(new Date(item.date), 'd MMM', { locale: it })}</span>
               {!showHeaders && (
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase ${SOURCE_COLORS[item.source] || 'bg-slate-100 text-slate-600'}`}>
                   {item.sourceLabel}
