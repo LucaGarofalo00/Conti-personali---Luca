@@ -20,9 +20,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # v5: le versioni @v4 di queste due azioni girano su Node 20, ormai deprecato sui runner
+      # GitHub (avviso in ogni esecuzione). Cambia solo il runtime dell'azione, non il Node usato
+      # per build e test, che resta quello impostato qui sotto.
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
