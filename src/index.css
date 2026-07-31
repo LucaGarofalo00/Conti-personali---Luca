@@ -61,6 +61,13 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Barra di avanzamento indeterminata della schermata di avvio. Anima solo `transform`:
+   gira sul compositor, senza ricalcoli di layout a ogni frame. */
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
 /* ----------------------------------------------------------------------------
    Base
    ---------------------------------------------------------------------------- */

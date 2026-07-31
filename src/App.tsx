@@ -8,7 +8,22 @@ import { useAmountsHidden } from './lib/privacy'
 import { usePeriodSettings } from './lib/periodSettings'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
+import Logo from './components/Logo'
 import Auth from './pages/Auth'
+
+// Schermata di avvio: sostituisce il testo "Caricamento..." su fondo grigio. Mostra il marchio
+// mentre si recupera la sessione, così l'apertura dell'app (specie installata come PWA, dove non
+// c'è la chrome del browser a dare contesto) non è una pagina vuota con una scritta.
+function BootScreen() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50" role="status" aria-label="Caricamento in corso">
+      <Logo className="w-14 h-14 drop-shadow-sm animate-[fadeIn_0.4s_ease-out]" />
+      <div aria-hidden="true" className="h-1 w-24 overflow-hidden rounded-full bg-slate-200">
+        <div className="h-full w-1/2 rounded-full bg-primary-600 animate-[indeterminate_1.4s_ease-in-out_infinite]" />
+      </div>
+    </div>
+  )
+}
 
 // Caricate on-demand: ogni pagina è un chunk separato, così Recharts (Dashboard/Previsione)
 // e le altre viste non pesano sul caricamento iniziale.
@@ -27,7 +42,7 @@ function SetupPage() {
     <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#f7f8fa' }}>
       <div className="w-full max-w-lg bg-white rounded-xl shadow-sm border border-slate-200/60 p-8">
         <h1 className="text-xl font-semibold tracking-tight text-slate-800 mb-1">FinanzApp</h1>
-        <p className="text-slate-400 text-sm mb-6">Configura Supabase per iniziare</p>
+        <p className="text-slate-500 text-sm mb-6">Configura Supabase per iniziare</p>
         <div className="space-y-3 text-sm">
           <div className="bg-slate-50 rounded-lg p-4">
             <p className="font-medium text-slate-700 mb-1.5">1. Vai su Supabase</p>
@@ -60,11 +75,13 @@ VITE_SUPABASE_ANON_KEY=eyJhbGci...`}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm" style={{ backgroundColor: '#f7f8fa' }}>Caricamento...</div>
+  if (loading) return <BootScreen />
   if (!user) return <Navigate to="/auth" replace />
   return (
     <Layout>
-      <Suspense fallback={<div className="flex items-center justify-center h-64 text-slate-400 text-sm">Caricamento...</div>}>
+      {/* Il fallback è vuoto di proposito: ogni pagina mostra già il proprio scheletro appena
+          montata, e uno spinner intermedio aggiungerebbe solo un lampeggio fra i due stati. */}
+      <Suspense fallback={<div className="h-64" />}>
         {children}
       </Suspense>
     </Layout>
@@ -73,7 +90,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AuthRoute() {
   const { user, loading } = useAuth()
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm" style={{ backgroundColor: '#f7f8fa' }}>Caricamento...</div>
+  if (loading) return <BootScreen />
   if (user) return <Navigate to="/" replace />
   return <Auth />
 }
