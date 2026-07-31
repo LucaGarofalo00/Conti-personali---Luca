@@ -11,6 +11,7 @@ import { postTransaction } from '../lib/postTransaction'
 import { logSupabaseError } from '../lib/logError'
 import InfoBox from '../components/InfoBox'
 import type { Fund } from '../types'
+import { SkeletonListPage } from '../components/Skeleton'
 
 const emptyForm = { name: '', type: 'main' as 'main' | 'sub', parent_id: null as string | null, balance: 0, icon: 'wallet', color: '#3B82F6', sort_order: 0 }
 const emptyTransfer = { from_id: '', to_id: '', amount: 0 }
@@ -70,10 +71,19 @@ export default function Funds() {
   }
 
   const remove = async (id: string) => {
-    if (!(await confirm({ message: 'Eliminare questo fondo?', confirmText: 'Elimina', danger: true }))) return
+    // Lo schema ha `parent_id ... on delete cascade`: eliminando un fondo principale spariscono
+    // anche tutti i suoi salvadanai, coi rispettivi saldi. Il messaggio generico "Eliminare questo
+    // fondo?" non lo diceva, e la perdita era silenziosa e irreversibile.
+    const subs = funds.filter(f => f.parent_id === id)
+    const target = funds.find(f => f.id === id)
+    const subsTotal = subs.reduce((s, f) => s + Number(f.balance), 0)
+    const message = subs.length > 0
+      ? `Eliminare «${target?.name ?? 'questo fondo'}»? Verranno eliminati anche i suoi ${subs.length} salvadanai (${subs.map(s => s.name).join(', ')}), per un totale di ${cur(subsTotal)}. L'operazione non è reversibile.`
+      : `Eliminare «${target?.name ?? 'questo fondo'}»? L'operazione non è reversibile.`
+    if (!(await confirm({ message, confirmText: 'Elimina', danger: true }))) return
     const { error } = await supabase.from('funds').delete().eq('id', id)
     if (error) { toast.error('Errore nell\'eliminazione'); return }
-    toast.success('Fondo eliminato')
+    toast.success(subs.length > 0 ? `Fondo e ${subs.length} salvadanai eliminati` : 'Fondo eliminato')
     load()
   }
 
@@ -114,7 +124,7 @@ export default function Funds() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+  if (loading) return <SkeletonListPage cards={3} rows={4} />
 
   const mainFunds = funds.filter(f => f.type === 'main')
   const subFunds = funds.filter(f => f.type === 'sub')
@@ -163,7 +173,7 @@ export default function Funds() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-base font-semibold tracking-tight text-slate-900 truncate">{fund.name}</p>
-                    <p className="text-xs text-slate-400">Fondo principale</p>
+                    <p className="text-xs text-slate-500">Fondo principale</p>
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
@@ -209,17 +219,17 @@ export default function Funds() {
         <div className="space-y-4">
           <div>
             <label htmlFor="fund-name" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input id="fund-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <input id="fund-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
           </div>
           <div>
             <label htmlFor="fund-balance" className="block text-sm font-medium text-slate-700 mb-1">Saldo (€)</label>
-            <DecimalInput id="fund-balance" value={form.balance} onChange={n => setForm({ ...form, balance: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <DecimalInput id="fund-balance" value={form.balance} onChange={n => setForm({ ...form, balance: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
           </div>
           {form.type === 'main' && (
             <>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Icona</label>
-                <div className="flex gap-2 flex-wrap">
+                <p className="block text-sm font-medium text-slate-700 mb-1">Icona</p>
+                <div className="flex gap-2 flex-wrap" role="group" aria-label="Icona del fondo">
                   {ICONS.map(ic => {
                     const Ic = iconMap[ic.value]
                     return (
@@ -231,8 +241,8 @@ export default function Funds() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Colore</label>
-                <div className="flex flex-wrap gap-2">
+                <p className="block text-sm font-medium text-slate-700 mb-1">Colore</p>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Colore del fondo">
                   {COLORS.map(c => (
                     <button key={c} onClick={() => setForm({ ...form, color: c })} aria-label={`Colore ${c}`} className={`w-8 h-8 rounded-full border-2 active:scale-95 transition-[transform,border-color] ${form.color === c ? 'border-slate-800 scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
                   ))}
@@ -250,21 +260,21 @@ export default function Funds() {
         <div className="space-y-4">
           <div>
             <label htmlFor="transfer-from" className="block text-sm font-medium text-slate-700 mb-1">Da</label>
-            <select id="transfer-from" value={transfer.from_id} onChange={e => setTransfer({ ...transfer, from_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <select id="transfer-from" value={transfer.from_id} onChange={e => setTransfer({ ...transfer, from_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
               <option value="">Seleziona fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
           <div>
             <label htmlFor="transfer-to" className="block text-sm font-medium text-slate-700 mb-1">A</label>
-            <select id="transfer-to" value={transfer.to_id} onChange={e => setTransfer({ ...transfer, to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <select id="transfer-to" value={transfer.to_id} onChange={e => setTransfer({ ...transfer, to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
               <option value="">Seleziona fondo</option>
               {funds.filter(f => f.id !== transfer.from_id).map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
           <div>
             <label htmlFor="transfer-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-            <DecimalInput id="transfer-amount" value={transfer.amount} onChange={n => setTransfer({ ...transfer, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <DecimalInput id="transfer-amount" value={transfer.amount} onChange={n => setTransfer({ ...transfer, amount: n })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
           </div>
           <button onClick={doTransfer} disabled={!transfer.from_id || !transfer.to_id || transfer.from_id === transfer.to_id || transfer.amount <= 0 || saving} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 active:scale-[0.98] disabled:opacity-50 transition-[transform,background-color]">
             {saving ? 'Trasferimento...' : 'Trasferisci'}

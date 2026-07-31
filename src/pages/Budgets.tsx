@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ShoppingBag, Receipt, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ShoppingBag, Receipt, AlertTriangle, ChevronDown, ChevronRight, PiggyBank } from 'lucide-react'
 import { addDays, format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
@@ -8,14 +8,24 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Modal from '../components/Modal'
 import DecimalInput from '../components/DecimalInput'
-import { cur, todayString, getBillingPeriod, currentPeriodLabel, parseLocalDate, fmtDate } from '../lib/utils'
+import { cur, todayString, toDateString, getBillingPeriod, currentPeriodLabel, parseLocalDate, fmtDate } from '../lib/utils'
 import { incrementFundBalance } from '../lib/fundBalances'
 import { postTransaction } from '../lib/postTransaction'
 import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import { computeBudgetRollover } from '../lib/budgetRollover'
 import InfoBox from '../components/InfoBox'
+import EmptyState from '../components/EmptyState'
 import type { WeeklyBudget, Fund, Transaction } from '../types'
+import { SkeletonListPage } from '../components/Skeleton'
+
+// computeBudgetRollover non risale oltre 52 settimane (MAX_PAST_WEEKS in budgetRollover.ts) e il
+// totale di periodo guarda solo il periodo corrente: scaricare TUTTE le spese di budget mai fatte
+// era lavoro buttato, e cresceva a ogni settimana d'uso. Una settimana di margine per sicurezza.
+const BUDGET_TX_WEEKS = 53
+function budgetTxFloor(): string {
+  return toDateString(addDays(new Date(), -7 * BUDGET_TX_WEEKS))
+}
 
 export default function Budgets() {
   const { user } = useAuth()
@@ -45,12 +55,19 @@ export default function Budgets() {
   })
 
 
+  // Apertura del modale "nuovo budget": la usano sia il pulsante in testata sia lo stato vuoto.
+  const openAddBudget = () => {
+    setEditingBudget(null)
+    setBudgetForm({ name: '', amount: 0, fund_id: '' })
+    setShowBudgetModal(true)
+  }
+
   const load = async () => {
     try {
       const [{ data: b, error: e1 }, { data: f, error: e2 }, { data: btx, error: e3 }] = await Promise.all([
         supabase.from('weekly_budgets').select('*').order('created_at'),
         supabase.from('funds').select('*').order('sort_order'),
-        supabase.from('transactions').select('*').not('budget_id', 'is', null),
+        supabase.from('transactions').select('*').not('budget_id', 'is', null).gte('date', budgetTxFloor()),
       ])
       const firstError = e1 || e2 || e3
       if (firstError) {
@@ -164,10 +181,12 @@ export default function Budgets() {
     load()
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
-
   const { start: pStart, end: pEnd } = getBillingPeriod()
-  const budgetBreakdown = getPeriodBreakdown({
+
+  // Memoizzati: `getPeriodBreakdown` percorre il periodo giorno per giorno e `computeBudgetRollover`
+  // ricostruisce fino a 52 settimane di storico PER OGNI budget. Nel corpo del componente venivano
+  // rifatti a ogni render — anche solo aprendo/chiudendo una settimana o digitando in un modale.
+  const totalMonthlyAll = useMemo(() => totalsFromBreakdown(getPeriodBreakdown({
     startDate: parseLocalDate(pStart),
     endDate: parseLocalDate(pEnd),
     recurringExpenses: [],
@@ -181,8 +200,16 @@ export default function Budgets() {
     // sotto (che mostrano già lo sforamento). Settimane future → quota.
     actualTx: budgetTx,
     reconcileBudgets: true,
-  })
-  const totalMonthlyAll = totalsFromBreakdown(budgetBreakdown).expenses
+  })).expenses, [pStart, pEnd, budgets, budgetTx])
+
+  // Rollover per budget, calcolato una volta sola e riusato dalla lista.
+  const rollovers = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof computeBudgetRollover>>()
+    for (const b of budgets) map.set(b.id, computeBudgetRollover(b, budgetTx))
+    return map
+  }, [budgets, budgetTx])
+
+  if (loading) return <SkeletonListPage rows={5} />
 
   return (
     <div>
@@ -207,19 +234,27 @@ export default function Budgets() {
             </span>
             <h3 className="text-lg font-semibold text-slate-900 tracking-tight">Budget Settimanali</h3>
           </div>
-          <button onClick={() => { setEditingBudget(null); setBudgetForm({ name: '', amount: 0, fund_id: '' }); setShowBudgetModal(true) }} className="flex items-center justify-center gap-2 px-3 min-h-[40px] sm:min-h-0 sm:py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium shrink-0">
+          <button onClick={openAddBudget} className="flex items-center justify-center gap-2 px-3 min-h-[40px] sm:min-h-0 sm:py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-[transform,background-color] active:scale-[0.98] text-[13px] font-medium shrink-0">
             <Plus className="w-4 h-4" aria-hidden="true" /> Nuovo Budget
           </button>
         </div>
 
         {budgets.length === 0 ? (
-          <div className="text-center py-10 bg-white rounded-2xl border border-slate-200/70 shadow-sm">
-            <p className="text-slate-500 text-base font-medium">Nessun budget settimanale configurato</p>
-          </div>
+          <EmptyState
+            icon={PiggyBank}
+            tone="purple"
+            title="Nessun budget settimanale"
+            description="Un budget è una somma che ti concedi ogni settimana (spesa, sfizi, benzina). La previsione la considera automaticamente."
+            action={(
+              <button onClick={openAddBudget} className="inline-flex items-center justify-center gap-2 px-4 min-h-[44px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium">
+                <Plus className="w-4 h-4" aria-hidden="true" /> Crea il primo budget
+              </button>
+            )}
+          />
         ) : (
           <div className="space-y-5">
             {budgets.map(b => {
-              const rollInfo = computeBudgetRollover(b, budgetTx)
+              const rollInfo = rollovers.get(b.id)!
               const limit = Number(b.amount)
               // Riusa le tx della settimana già filtrate dal rollover (niente memo, niente date
               // future), invece di ricalcolare un filtro divergente qui.
@@ -252,7 +287,7 @@ export default function Budgets() {
 
                   <div className="mb-2">
                     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 sm:gap-3 mb-2">
-                      <span className="text-sm text-slate-500 min-w-0">Speso questa settimana: <span className="block text-xl font-bold text-slate-900 tracking-tight tabular-nums whitespace-nowrap">{cur(spentThisWeek)}</span> <span className="text-xs text-slate-400">/ {cur(effective)}</span></span>
+                      <span className="text-sm text-slate-500 min-w-0">Speso questa settimana: <span className="block text-xl font-bold text-slate-900 tracking-tight tabular-nums whitespace-nowrap">{cur(spentThisWeek)}</span> <span className="text-xs text-slate-500">/ {cur(effective)}</span></span>
                       <span className={`text-base sm:text-xl font-bold tracking-tight tabular-nums sm:text-right shrink-0 ${overBudget ? 'text-red-600' : 'text-emerald-600'}`}>
                         {overBudget ? `Sforato di ${cur(Math.abs(remaining))}` : `Rimangono ${cur(remaining)}`}
                       </span>
@@ -327,7 +362,7 @@ export default function Budgets() {
                               {open && (
                                 <div className="px-3 pb-2.5 pt-1.5 border-t border-slate-100 space-y-1.5">
                                   {week.txs.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic">Nessuna spesa in questa settimana</p>
+                                    <p className="text-xs text-slate-500 italic">Nessuna spesa in questa settimana</p>
                                   ) : (
                                     week.txs.map(tx => (
                                       <div key={tx.id} className="flex items-center justify-between gap-2 text-sm">
@@ -365,15 +400,15 @@ export default function Budgets() {
         <div className="space-y-4">
           <div>
             <label htmlFor="bud-name" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input id="bud-name" type="text" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Sfizi, Mangiare fuori..." />
+            <input id="bud-name" type="text" value={budgetForm.name} onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" placeholder="es. Sfizi, Mangiare fuori..." />
           </div>
           <div>
             <label htmlFor="bud-amount" className="block text-sm font-medium text-slate-700 mb-1">Budget settimanale (€)</label>
-            <DecimalInput id="bud-amount" value={budgetForm.amount} onChange={n => setBudgetForm({ ...budgetForm, amount: n })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <DecimalInput id="bud-amount" value={budgetForm.amount} onChange={n => setBudgetForm({ ...budgetForm, amount: n })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
           </div>
           <div>
             <label htmlFor="bud-fund" className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
-            <select id="bud-fund" value={budgetForm.fund_id} onChange={e => setBudgetForm({ ...budgetForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <select id="bud-fund" value={budgetForm.fund_id} onChange={e => setBudgetForm({ ...budgetForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
               <option value="">Scegli al momento della spesa</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
@@ -388,21 +423,21 @@ export default function Budgets() {
         <div className="space-y-4">
           <div>
             <label htmlFor="bexp-desc" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input id="bexp-desc" type="text" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Pizza, Gelato..." />
+            <input id="bexp-desc" type="text" value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" placeholder="es. Pizza, Gelato..." />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="min-w-0">
               <label htmlFor="bexp-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput id="bexp-amount" value={expForm.amount} onChange={n => setExpForm({ ...expForm, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput id="bexp-amount" value={expForm.amount} onChange={n => setExpForm({ ...expForm, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
             <div className="min-w-0">
               <label htmlFor="bexp-date" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-              <input id="bexp-date" type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="bexp-date" type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
             <label htmlFor="bexp-fund" className="block text-sm font-medium text-slate-700 mb-1">Paga con</label>
-            <select id="bexp-fund" value={expForm.fund_id} onChange={e => setExpForm({ ...expForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <select id="bexp-fund" value={expForm.fund_id} onChange={e => setExpForm({ ...expForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
               <option value="">Nessun fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
@@ -420,21 +455,21 @@ export default function Budgets() {
           </div>
           <div>
             <label htmlFor="bedit-desc" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input id="bedit-desc" type="text" value={editExpForm.description} onChange={e => setEditExpForm({ ...editExpForm, description: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+            <input id="bedit-desc" type="text" value={editExpForm.description} onChange={e => setEditExpForm({ ...editExpForm, description: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="min-w-0">
               <label htmlFor="bedit-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput id="bedit-amount" value={editExpForm.amount} onChange={n => setEditExpForm({ ...editExpForm, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput id="bedit-amount" value={editExpForm.amount} onChange={n => setEditExpForm({ ...editExpForm, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
             <div className="min-w-0">
               <label htmlFor="bedit-date" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-              <input id="bedit-date" type="date" value={editExpForm.date} onChange={e => setEditExpForm({ ...editExpForm, date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="bedit-date" type="date" value={editExpForm.date} onChange={e => setEditExpForm({ ...editExpForm, date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
             <label htmlFor="bedit-fund" className="block text-sm font-medium text-slate-700 mb-1">Pagato con</label>
-            <select id="bedit-fund" value={editExpForm.fund_id} onChange={e => setEditExpForm({ ...editExpForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <select id="bedit-fund" value={editExpForm.fund_id} onChange={e => setEditExpForm({ ...editExpForm, fund_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
               <option value="">Nessun fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>

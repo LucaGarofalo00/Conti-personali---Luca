@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { Skeleton, SkeletonCard, SkeletonPage } from '../components/Skeleton'
 import { TrendingUp, TrendingDown, Scale } from 'lucide-react'
 import { format, subMonths, startOfMonth, startOfYear } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -119,14 +120,24 @@ export default function Stats() {
             {r.label}
           </button>
         ))}
-        <span className="ml-auto self-center text-xs text-slate-400">{range === 'period' ? currentPeriodLabel() : `${RANGES.find(r => r.key === range)?.label}`}</span>
+        <span className="ml-auto self-center text-xs text-slate-500">{range === 'period' ? currentPeriodLabel() : `${RANGES.find(r => r.key === range)?.label}`}</span>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+        <SkeletonPage>
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm sm:p-6">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="mt-4 h-[260px] w-full" />
+          </div>
+        </SkeletonPage>
       ) : isEmpty ? (
         <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow-sm">
-          <p className="text-slate-400">Nessun movimento in questo intervallo</p>
+          <p className="text-slate-500">Nessun movimento in questo intervallo</p>
         </div>
       ) : (
         <>
@@ -139,6 +150,12 @@ export default function Stats() {
           {showMonthly && (
             <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-6 mb-6">
               <h3 className="text-base font-semibold tracking-tight text-slate-900 mb-4">Andamento mensile</h3>
+              {/* Il grafico è puramente visivo: senza questo riassunto chi usa uno screen reader non
+                  ha alcun accesso ai dati. sr-only lo tiene fuori dalla vista ma dentro il documento. */}
+              <p className="sr-only">
+                Entrate e uscite mese per mese, da {stats.byMonth[0]?.label} a {stats.byMonth[stats.byMonth.length - 1]?.label}:{' '}
+                {stats.byMonth.map(m => `${m.label}: entrate ${cur(m.income)}, uscite ${cur(m.expenses)}`).join('; ')}.
+              </p>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={stats.byMonth} barGap={2} barCategoryGap="20%">
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
@@ -158,10 +175,13 @@ export default function Stats() {
           <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-6">
             <h3 className="text-base font-semibold tracking-tight text-slate-900 mb-4">Uscite per categoria</h3>
             {stats.byCategory.length === 0 ? (
-              <p className="text-sm text-slate-400 py-6 text-center">Nessuna uscita in questo intervallo</p>
+              <p className="text-sm text-slate-500 py-6 text-center">Nessuna uscita in questo intervallo</p>
             ) : (
               <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-                <div className="lg:w-1/2 shrink-0">
+                {/* La torta duplica in forma grafica l'elenco qui accanto, che riporta già categoria,
+                    importo e percentuale: nasconderla agli screen reader evita di far attraversare un
+                    SVG senza etichette per arrivare agli stessi dati. */}
+                <div aria-hidden="true" className="lg:w-1/2 shrink-0">
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
                       <Pie data={stats.byCategory} dataKey="amount" nameKey="category" cx="50%" cy="50%" innerRadius={52} outerRadius={84} paddingAngle={2} stroke="none">
@@ -181,7 +201,7 @@ export default function Stats() {
                         </span>
                         <span className="flex items-center gap-2 shrink-0">
                           <span className="text-sm font-semibold text-slate-900 tabular-nums whitespace-nowrap">{cur(c.amount)}</span>
-                          <span className="text-xs text-slate-400 tabular-nums w-10 text-right">{c.pct.toFixed(0)}%</span>
+                          <span className="text-xs text-slate-500 tabular-nums w-10 text-right">{c.pct.toFixed(0)}%</span>
                         </span>
                       </div>
                       <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">

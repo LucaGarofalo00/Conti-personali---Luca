@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, Fragment, type ReactNode } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { TrendingUp, TrendingDown, AlertTriangle, Target, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react'
 import { format, addMonths, addDays, differenceInDays, startOfDay } from 'date-fns'
@@ -16,6 +16,7 @@ import { useExcludedFunds } from '../lib/excludedFunds'
 import { cur, getBillingPeriodFor, toDateString, parseLocalDate } from '../lib/utils'
 import { isAmountsHidden } from '../lib/privacy'
 import type { Fund, RecurringExpense, RecurringIncome, WeeklyBudget, Transaction, ForecastPoint } from '../types'
+import { SkeletonListPage } from '../components/Skeleton'
 
 // Etichette asse Y compatte: su mobile un valore intero in euro (€1.234.567) mangia la larghezza
 // del grafico. Abbreviamo in k/M così l'asse resta stretto e leggibile a 360px.
@@ -61,6 +62,20 @@ function buildActualItems(actualTx: Transaction[], excludedFundIds: string[], st
       sourceLabel: 'Già avvenuta',
       category: t.category,
     }))
+}
+
+type PeriodRow = {
+  month: string
+  label: string
+  income: number
+  expenses: number
+  net: number
+  endBalance: number
+  minBalance: number
+  minBalanceDate: Date
+  startDate: Date
+  endDate: Date
+  effectiveEnd: Date
 }
 
 export default function Forecast() {
@@ -117,37 +132,28 @@ export default function Forecast() {
     })
   }, [user])
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+  // ---------------------------------------------------------------------------------------------
+  // Tutta la proiezione in UN solo useMemo. Il walk chiama getPeriodBreakdown una volta per ogni
+  // periodo di fatturazione fino alla data obiettivo (default +6 mesi): a nudo nel corpo del
+  // componente veniva rieseguito per intero anche solo espandendo una riga del riepilogo o
+  // aprendo una scheda informativa. Sta sopra il return del caricamento perché gli hook non
+  // possono vivere dopo un early return.
+  // ---------------------------------------------------------------------------------------------
+  const view = useMemo(() => {
+    const targetDateObj = parseLocalDate(targetDate)
+    const daysToTarget = Math.max(1, differenceInDays(targetDateObj, new Date()))
+    const periodNow = getBillingPeriodFor(new Date())
+    const plannedInCurrent = planned.filter(p => p.date >= periodNow.start && p.date <= periodNow.end)
+    const est = getMonthlyEstimates(expenses, income, budgets, excludedFundIds, plannedInCurrent)
+    const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
+    const excludedNames = funds.filter(f => excludedFundIds.includes(f.id)).map(f => f.name)
 
-  const targetDateObj = parseLocalDate(targetDate)
-  const daysToTarget = Math.max(1, differenceInDays(targetDateObj, new Date()))
-  const periodNow = getBillingPeriodFor(new Date())
-  const plannedInCurrent = planned.filter(p => p.date >= periodNow.start && p.date <= periodNow.end)
-  const est = getMonthlyEstimates(expenses, income, budgets, excludedFundIds, plannedInCurrent)
-  const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
-  const excludedNames = funds.filter(f => excludedFundIds.includes(f.id)).map(f => f.name)
+    const startBalance = funds.filter(f => !excludedFundIds.includes(f.id)).reduce((s, f) => s + Number(f.balance), 0)
 
-  const includedFundsBalance = funds.filter(f => !excludedFundIds.includes(f.id)).reduce((s, f) => s + Number(f.balance), 0)
-  const startBalance = includedFundsBalance
+    const today = startOfDay(new Date())
+    const targetEnd = startOfDay(targetDateObj)
 
-  const today = startOfDay(new Date())
-  const targetEnd = startOfDay(targetDateObj)
-
-  type PeriodRow = {
-    month: string
-    label: string
-    income: number
-    expenses: number
-    net: number
-    endBalance: number
-    minBalance: number
-    minBalanceDate: Date
-    startDate: Date
-    endDate: Date
-    effectiveEnd: Date
-  }
-
-  const monthlyData: PeriodRow[] = []
+    const monthlyData: PeriodRow[] = []
   // Saldo dopo OGNI evento, accumulato lungo lo stesso walk per-periodo usato per le card e la
   // tabella: da qui ricaviamo la serie del grafico, così grafico, "Saldo al…", "Minimo" e
   // riepilogo vengono da UN'unica fonte e non possono divergere (niente più secondo motore).
@@ -243,6 +249,13 @@ export default function Forecast() {
     })),
   ]
 
+    return { targetDateObj, daysToTarget, est, hasExclusions, excludedNames, startBalance, monthlyData, endBalance, trend, minPoint, chartData }
+  }, [targetDate, funds, expenses, income, budgets, planned, actualTx, excludedFundIds])
+
+  if (loading) return <SkeletonListPage cards={4} rows={5} />
+
+  const { targetDateObj, daysToTarget, est, hasExclusions, excludedNames, startBalance, monthlyData, endBalance, trend, minPoint, chartData } = view
+
   return (
     <div>
       <InfoBox title="Come funziona la previsione" tone="blue">
@@ -283,7 +296,7 @@ export default function Forecast() {
               value={targetDate}
               min={toDateString(new Date())}
               onChange={e => setTargetDate(e.target.value)}
-              className="min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+              className="min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow"
             />
             <span className="text-xs text-slate-500 whitespace-nowrap">({daysToTarget} giorni)</span>
           </div>
@@ -319,6 +332,14 @@ export default function Forecast() {
       <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-6 mb-6 sm:mb-8">
         <h3 className="text-lg font-semibold tracking-tight text-slate-900 mb-4">Proiezione Saldo</h3>
         {chartData.length > 1 ? (
+          <>
+          {/* Riassunto testuale del grafico: la tabella/lista dei periodi qui sotto riporta già i
+              dettagli, ma la curva ha un'informazione propria (il punto di minimo e il saldo finale)
+              che altrimenti resterebbe solo visiva. */}
+          <p className="sr-only">
+            Andamento previsto del saldo da oggi al {format(targetDateObj, 'd MMMM yyyy', { locale: it })}: si parte da {cur(startBalance)},
+            si arriva a {cur(endBalance)}, con un minimo di {cur(minPoint.balance)} intorno al {minPoint.label}.
+          </p>
           <ResponsiveContainer width="100%" height={350}>
             <AreaChart data={chartData}>
               <defs>
@@ -334,8 +355,9 @@ export default function Forecast() {
               <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#forecastGrad)" strokeWidth={2} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
+          </>
         ) : (
-          <p className="text-center text-slate-400 py-12">Configura fondi, entrate e uscite per vedere la previsione</p>
+          <p className="text-center text-slate-500 py-12">Configura fondi, entrate e uscite per vedere la previsione</p>
         )}
       </div>
 
@@ -373,7 +395,7 @@ export default function Forecast() {
                   onClick={() => toggleExpand(row.month)}
                   aria-expanded={isOpen}
                 >
-                  <span className="text-slate-400 shrink-0 mt-0.5">
+                  <span className="text-slate-500 shrink-0 mt-0.5">
                     {isOpen ? <ChevronDown className="w-4 h-4" aria-hidden="true" /> : <ChevronRight className="w-4 h-4" aria-hidden="true" />}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -461,7 +483,7 @@ export default function Forecast() {
                       className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
                       onClick={() => toggleExpand(row.month)}
                     >
-                      <td className="px-2 py-3 text-slate-400">
+                      <td className="px-2 py-3 text-slate-500">
                         {isOpen ? <ChevronDown className="w-4 h-4" aria-hidden="true" /> : <ChevronRight className="w-4 h-4" aria-hidden="true" />}
                       </td>
                       <td className="px-4 py-3 font-medium text-slate-700">{row.label}</td>
@@ -517,7 +539,7 @@ function MetricCard({ icon: Icon, color, label, value, sub, onClick, tint, value
   return (
     <Wrapper
       onClick={onClick}
-      className={`${tint || 'bg-white border-slate-200/70'} rounded-2xl border shadow-sm p-5 text-left w-full ${onClick ? 'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer' : ''}`}
+      className={`${tint || 'bg-white border-slate-200/70'} rounded-2xl border shadow-sm p-5 text-left w-full ${onClick ? 'hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer' : ''}`}
     >
       <div className="flex items-center gap-2 mb-3">
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color}`}>
@@ -527,7 +549,7 @@ function MetricCard({ icon: Icon, color, label, value, sub, onClick, tint, value
         {onClick && <HelpCircle className="w-3.5 h-3.5 text-slate-300 shrink-0" aria-hidden="true" />}
       </div>
       <p className={`text-2xl font-bold tracking-tight tabular-nums ${valueColor || 'text-slate-900'}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
     </Wrapper>
   )
 }

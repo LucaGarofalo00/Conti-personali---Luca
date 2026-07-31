@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Wallet, TrendingUp, TrendingDown, Target, ArrowRight, PiggyBank, CheckCircle2, Check, Clock, CalendarClock, Plus, Trash2, Pencil, ArrowLeftRight, LineChart } from 'lucide-react'
 import { addDays, format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -19,13 +18,16 @@ import { generateForecast, projectBalanceAtDate } from '../lib/forecast'
 import { totalsFromBreakdown } from '../lib/periodBreakdown'
 import { cur, iconMap, getBillingPeriod, getBillingPeriodFor, getCurrentPeriod, getNextSalaryDate, monthlyOccurrencesInCurrentPeriod, toDateString, todayString, currentPeriodLabel, TRANSACTION_CATEGORIES, FUEL_CATEGORY, parseDecimal, catLabel, parseLocalDate, fmtDate, sameWeekWeekday } from '../lib/utils'
 import CategorySelect from '../components/CategorySelect'
+import AreaChartLite from '../components/AreaChartLite'
+import { SkeletonDashboard } from '../components/Skeleton'
 import { isAmountsHidden } from '../lib/privacy'
 import { getSalaryIncomeId } from '../lib/periodSettings'
 import { savePeriodSettings } from '../lib/periodSettingsDb'
 import { probePlannedDateSupport, probePlannedParentSupport, withPlannedDate } from '../lib/schemaSupport'
 import { plannedBudgetStatus } from '../lib/plannedBudget'
 import { postTransaction } from '../lib/postTransaction'
-import { logSupabaseError } from '../lib/logError'
+import { logSupabaseError, userMessage } from '../lib/logError'
+import { useRefreshOnResume } from '../lib/network'
 import { useExcludedFunds } from '../lib/excludedFunds'
 import { processAutoDeducts } from '../lib/autoDeduct'
 import { markPlannedAsDone } from '../lib/plannedTransactions'
@@ -60,6 +62,17 @@ const FUEL_COLUMNS = ['transactions.fuel_km', 'transactions.fuel_liters', 'trans
 // tutte. Questi movimenti NON entrano nei totali del periodo: servono solo a capire se
 // un'occorrenza a cavallo del confine è già stata pagata.
 const RECONCILE_LOOKBACK_DAYS = 31
+
+// Quante voci mostrare in "Ultime Transazioni". Il riquadro è alto 20rem e ne mostra ~5 alla volta:
+// oltre questa soglia si montano nodi che nessuno scorrerà, e c'è il link alla pagina completa.
+const RECENT_TX_LIMIT = 50
+
+// Le pianificate non hanno un limite temporale (una vacanza può essere segnata con un anno
+// d'anticipo) ma nemmeno devono crescere all'infinito nella query d'apertura.
+const PLANNED_LIMIT = 300
+
+// Rifornimenti letti per il calcolo dei consumi nel modale di conferma: bastano i più recenti.
+const FUEL_FILLS_LIMIT = 400
 
 // Confronto dei nomi tollerante a maiuscole e spazi: un movimento inserito a mano come "Gpl"
 // deve agganciare la ricorrente "GPL".
@@ -97,16 +110,14 @@ function fmtAxisEur(v: number): string {
   return `€${Number(v).toLocaleString('it-IT')}`
 }
 
-function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { label: string; balance: number; income: number; expenses: number } }> }) {
-  if (!active || !payload?.length) return null
-  const d = payload[0].payload
+function ChartTooltipBody({ point }: { point: { label: string; balance: number; income: number; expenses: number } }) {
   return (
-    <div className="bg-white p-3 rounded-lg shadow-xl border border-slate-100 text-[13px]">
-      <p className="font-medium text-slate-700 mb-1">{d.label}</p>
-      <p className="text-slate-800">Saldo: {cur(d.balance)}</p>
-      <p className="text-emerald-600">Entrate: {cur(d.income)}</p>
-      <p className="text-red-500">Uscite: {cur(d.expenses)}</p>
-    </div>
+    <>
+      <p className="font-medium text-slate-700 mb-1">{point.label}</p>
+      <p className="text-slate-800">Saldo: {cur(point.balance)}</p>
+      <p className="text-emerald-600">Entrate: {cur(point.income)}</p>
+      <p className="text-red-500">Uscite: {cur(point.expenses)}</p>
+    </>
   )
 }
 
@@ -160,55 +171,71 @@ export default function Dashboard() {
   const [spendForm, setSpendForm] = useState({ description: '', amount: 0, fund_id: '', date: todayString() })
   const [spendSaving, setSpendSaving] = useState(false)
 
+  // Contatore dei caricamenti: ogni azione (conferma di una scadenza, salvataggio, eliminazione)
+  // chiama load(), e più chiamate possono sovrapporsi. Senza questo, la risposta più LENTA vince
+  // e riporta a schermo dati già superati.
+  const loadSeq = useRef(0)
+
   const load = async () => {
+    const seq = ++loadSeq.current
     try {
       setLoadError(false)
-      // Rileva il supporto a planned_date prima di eventuali inserimenti (auto-deduct in fondo).
-      await probePlannedDateSupport()
-      setPlannedParentOk(await probePlannedParentSupport())
       const { start: periodStart, end: periodEnd } = getBillingPeriod()
+      const lookbackStart = toDateString(addDays(parseLocalDate(periodStart), -RECONCILE_LOOKBACK_DAYS))
 
-      const [f, e, i, b] = await Promise.all([
+      // TUTTE le letture d'apertura in una sola ondata. Prima erano sei viaggi in fila (due sonde
+      // di schema + i quattro elenchi + le tre query su transactions): su rete mobile, dove conta
+      // la latenza e non la banda, ogni viaggio è un'attesa a sé e si sommavano tutte.
+      // Le due sonde restano in questo gruppo perché servono PRIMA degli inserimenti dell'auto-deduct.
+      const [plannedDateOk, plannedParentSupported, f, e, i, b, txRes, preRes, plRes] = await Promise.all([
+        probePlannedDateSupport(),
+        probePlannedParentSupport(),
         supabase.from('funds').select('*').order('sort_order'),
         supabase.from('recurring_expenses').select('*'),
         supabase.from('recurring_income').select('*'),
         supabase.from('weekly_budgets').select('*'),
+        supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd).eq('is_planned', false),
+        supabase.from('transactions').select('*').gte('date', lookbackStart).lt('date', periodStart).eq('is_planned', false),
+        supabase.from('transactions').select('*').eq('is_planned', true).order('date', { ascending: true }).limit(PLANNED_LIMIT),
       ])
+      void plannedDateOk
+      // Risposta superata da un caricamento più recente: scartala invece di sovrascrivere dati freschi.
+      if (seq !== loadSeq.current) return
+      setPlannedParentOk(plannedParentSupported)
 
       let periodTxData: Transaction[] = []
       let plannedData: Transaction[] = []
       const missing: string[] = []
 
-      const txRes = await supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd).eq('is_planned', false)
-      if (txRes.error && /column.*is_planned.*does not exist/i.test(txRes.error.message || '')) {
+      const noIsPlanned = (msg?: string | null) => /column.*is_planned.*does not exist/i.test(msg || '')
+
+      if (txRes.error && noIsPlanned(txRes.error.message)) {
         missing.push('transactions.is_planned')
-        const fallback = await supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd)
+        // Schema senza is_planned: si ripetono le due query di periodo senza quel filtro. È il
+        // percorso raro (DB non migrato), quindi resta sequenziale senza penalizzare il caso normale.
+        const [fallback, preFallback] = await Promise.all([
+          supabase.from('transactions').select('*').gte('date', periodStart).lte('date', periodEnd),
+          supabase.from('transactions').select('*').gte('date', lookbackStart).lt('date', periodStart),
+        ])
+        if (seq !== loadSeq.current) return
         periodTxData = fallback.data || []
+        preRes.data = preFallback.data
+        preRes.error = preFallback.error
       } else if (txRes.error) {
         logSupabaseError('Errore tx:', txRes.error)
-        toast.error('Errore caricamento transazioni: ' + txRes.error.message)
+        toast.error(userMessage(txRes.error, 'Errore nel caricamento delle transazioni'))
       } else {
         periodTxData = txRes.data || []
       }
 
-      // Finestra di riconciliazione all'indietro. Se lo schema non ha is_planned si ricade sulla
-      // query senza filtro, coerentemente col ramo delle transazioni di periodo qui sopra.
+      // Finestra di riconciliazione all'indietro: non è bloccante. Senza questi movimenti si torna
+      // al comportamento precedente (un'occorrenza a cavallo del confine può risultare non pagata),
+      // il resto funziona.
       let preTxData: Transaction[] = []
-      const lookbackStart = toDateString(addDays(parseLocalDate(periodStart), -RECONCILE_LOOKBACK_DAYS))
-      const preQuery = () => supabase.from('transactions').select('*').gte('date', lookbackStart).lt('date', periodStart)
-      const preRes = missing.includes('transactions.is_planned')
-        ? await preQuery()
-        : await preQuery().eq('is_planned', false)
-      if (preRes.error) {
-        // Non è un errore bloccante: senza questi movimenti si torna al comportamento precedente
-        // (un'occorrenza a cavallo del confine può risultare non pagata), il resto funziona.
-        logSupabaseError('Errore transazioni pre-periodo:', preRes.error)
-      } else {
-        preTxData = preRes.data || []
-      }
+      if (preRes.error) logSupabaseError('Errore transazioni pre-periodo:', preRes.error)
+      else preTxData = preRes.data || []
 
-      const plRes = await supabase.from('transactions').select('*').eq('is_planned', true).order('date', { ascending: true })
-      if (plRes.error && /column.*is_planned.*does not exist/i.test(plRes.error.message || '')) {
+      if (plRes.error && noIsPlanned(plRes.error.message)) {
         if (!missing.includes('transactions.is_planned')) missing.push('transactions.is_planned')
       } else if (plRes.error) {
         logSupabaseError('Errore planned:', plRes.error)
@@ -220,7 +247,7 @@ export default function Dashboard() {
       if (firstError) {
         logSupabaseError('Errore Supabase:', firstError)
         setLoadError(true)
-        toast.error('Errore: ' + (firstError.message || 'caricamento dati'))
+        toast.error(userMessage(firstError, 'Errore nel caricamento dei dati'))
       }
 
       const expensesData = e.data || []
@@ -258,15 +285,21 @@ export default function Dashboard() {
       setPlanned(plannedData)
       setMissingColumns(missing)
     } catch (err) {
+      if (seq !== loadSeq.current) return
       logSupabaseError('Errore fatale in load:', err)
       setLoadError(true)
-      toast.error('Errore imprevisto: controlla la console (F12)')
+      toast.error(userMessage(err, 'Errore imprevisto nel caricamento'))
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }
 
   useEffect(() => { if (user) load() }, [user])
+
+  // App installata e lasciata in secondo piano per ore o giorni: alla riapertura le scadenze, il
+  // "saldo a fine periodo" e le occorrenze di oggi sarebbero ancora quelle del giorno in cui è
+  // stata chiusa. Ricarica al rientro (o al cambio di giorno, o quando torna la rete).
+  useRefreshOnResume(() => { if (user) load() })
 
   // Rilevamento automatico (con conferma) del nuovo periodo: se nel periodo corrente è stato
   // registrato un accredito dello stipendio in una data SUCCESSIVA all'inizio del periodo, vuol
@@ -296,7 +329,7 @@ export default function Dashboard() {
       if (ok) {
         const { error } = await savePeriodSettings(user.id, { periodStart: candidate.date })
         salaryPromptRef.current = false
-        if (error) { toast.error('Errore impostazione periodo: ' + error); return }
+        if (error) { toast.error(userMessage(error, 'Errore nell impostazione del periodo')); return }
         toast.success(`Periodo aggiornato: parte dal ${dateLabel}`)
         load()
       } else {
@@ -315,12 +348,26 @@ export default function Dashboard() {
     [funds, expenses, income, budgets, excludedFundIds, planned, periodTx],
   )
 
+  // Serie ridotta per il grafico: solo etichetta e valore, così AreaChartLite non ricalcola la
+  // geometria quando cambiano campi che non disegna.
+  const chartData = useMemo(() => forecast.map(p => ({ label: p.label, value: p.balance })), [forecast])
+
   const today = todayString()
   const periodLabel = currentPeriodLabel()
 
-  const { startDate: periodStartObj, endDate: periodEndObj } = getBillingPeriodFor(new Date())
+  // Confini del periodo come stringhe: sono le dipendenze che rendono reattivi i useMemo qui sotto.
+  // Il periodo vive in uno store fuori da React (periodSettings), quindi non comparirebbe fra le
+  // dipendenze; leggendolo a ogni render (operazione banale) il cambio di periodo invalida i memo.
+  const { start: pStartStr, end: pEndStr } = getBillingPeriod()
+  // Stessi confini come oggetti Date, ma STABILI fra un render e l'altro: ricrearli ogni volta
+  // (getBillingPeriodFor(new Date())) invaliderebbe ogni memo che li usa, annullandone il beneficio.
+  const periodStartObj = useMemo(() => parseLocalDate(pStartStr), [pStartStr])
+  const periodEndObj = useMemo(() => parseLocalDate(pEndStr), [pEndStr])
 
-  const pendingRecurring: PendingItem[] = expenses
+  // Memoizzato: per ogni ricorrente genera le occorrenze del periodo e le riconcilia con i
+  // movimenti reali (scansione di periodTx + preTx per ciascuna). Senza memo l'intero incrocio
+  // veniva rifatto a ogni battuta di tasto nei modali di conferma.
+  const pendingRecurring: PendingItem[] = useMemo(() => expenses
     .filter(exp => exp.is_active && (!exp.end_date || exp.end_date >= today))
     .flatMap(exp => {
       const isTransfer = (exp.type || 'expense') === 'transfer'
@@ -417,7 +464,9 @@ export default function Dashboard() {
         }
       })
     })
-    .sort((a, b) => (a.occurrence_date || '').localeCompare(b.occurrence_date || ''))
+    .sort((a, b) => (a.occurrence_date || '').localeCompare(b.occurrence_date || '')),
+    [expenses, funds, periodTx, preTx, today, periodStartObj, periodEndObj],
+  )
 
   // "Prossime Scadenze" mostra TUTTE le occorrenze del periodo corrente, comprese quelle il cui
   // giorno previsto è già passato senza pagamento: restano visibili marcate come SCADUTE.
@@ -425,19 +474,19 @@ export default function Dashboard() {
   // pesare sul "Netto del Periodo" (getPeriodBreakdown gira con fromToday:false, quindi conta anche
   // le occorrenze passate) — la lista diceva una cosa e i totali un'altra.
   // Il perimetro resta il periodo corrente: nulla si accumula all'infinito da periodi precedenti.
-  const pendingRecurringManual = pendingRecurring.filter(p => !p.auto)
+  const pendingRecurringManual = useMemo(() => pendingRecurring.filter(p => !p.auto), [pendingRecurring])
   // Le automatiche si scalano da sole (processAutoDeducts) nel giorno previsto. Se una risulta
   // ancora scaduta significa che l'addebito NON è andato a buon fine (tipicamente ricorrente senza
   // fondo, o colonne mancanti a schema): va segnalata invece che nascosta.
-  const pendingAutoPending = pendingRecurring.filter(p => p.auto && !p.confirmed)
-  const pendingAutoOverdue = pendingAutoPending.filter(p => dueStatusOf(p.occurrence_date, today) === 'overdue')
-  const pendingAutoUpcoming = pendingAutoPending.filter(p => dueStatusOf(p.occurrence_date, today) !== 'overdue')
+  const pendingAutoPending = useMemo(() => pendingRecurring.filter(p => p.auto && !p.confirmed), [pendingRecurring])
+  const pendingAutoOverdue = useMemo(() => pendingAutoPending.filter(p => dueStatusOf(p.occurrence_date, today) === 'overdue'), [pendingAutoPending, today])
+  const pendingAutoUpcoming = useMemo(() => pendingAutoPending.filter(p => dueStatusOf(p.occurrence_date, today) !== 'overdue'), [pendingAutoPending, today])
 
-  const { start: pStartStr, end: pEndStr } = getBillingPeriod()
-  const incomeOccurrences = generateIncomeOccurrences(income, pStartStr, pEndStr, periodTx)
+  // Anche le occorrenze delle entrate scorrono tutte le transazioni del periodo per ogni entrata
+  // ricorrente: stesso motivo di pendingRecurring, va calcolato solo quando cambiano i dati.
+  const pendingIncome: PendingItem[] = useMemo(() => generateIncomeOccurrences(income, pStartStr, pEndStr, periodTx)
     .filter(o => o.status === 'pending')
-
-  const pendingIncome: PendingItem[] = incomeOccurrences.map(o => {
+    .map(o => {
     const inc = o.income
     const isWeekly = inc.frequency === 'weekly'
     const sameDay = o.workDateStr === o.paymentDateStr
@@ -460,9 +509,84 @@ export default function Dashboard() {
       recurring_income_id: inc.id,
       occurrence_date: o.paymentDateStr,
     }
-  })
+  }), [income, pStartStr, pEndStr, periodTx])
 
   const confirmedRecurringCount = pendingRecurringManual.filter(p => p.confirmed).length
+
+  // ---------------------------------------------------------------------------------------------
+  // Cifre del periodo. Stanno QUI, sopra il return anticipato del caricamento, perché gli hook non
+  // possono vivere dopo un early return. getPeriodBreakdown è il motore più pesante della pagina
+  // (occorrenze di ricorrenti, budget e pianificate riconciliate coi movimenti reali): prima veniva
+  // eseguito a ogni render, quindi anche a ogni carattere digitato nei modali.
+  // ---------------------------------------------------------------------------------------------
+  const includedFunds = useMemo(() => funds.filter(f => !excludedFundIds.includes(f.id)), [funds, excludedFundIds])
+  const totalBalance = useMemo(() => includedFunds.reduce((s, f) => s + Number(f.balance), 0), [includedFunds])
+  const totalBalanceAll = useMemo(() => funds.reduce((s, f) => s + Number(f.balance), 0), [funds])
+  const hasExclusions = useMemo(() => excludedFundIds.some(id => funds.some(f => f.id === id)), [excludedFundIds, funds])
+  const plannedInPeriod = useMemo(() => planned.filter(p => p.date >= pStartStr && p.date <= pEndStr), [planned, pStartStr, pEndStr])
+
+  const periodBreakdown = useMemo(() => getPeriodBreakdown({
+    startDate: periodStartObj,
+    endDate: periodEndObj,
+    recurringExpenses: expenses,
+    recurringIncome: income,
+    weeklyBudgets: budgets,
+    planned: plannedInPeriod,
+    excludedFundIds,
+    fromToday: false,
+    actualTx: periodTx,
+    reconcileOnlyTx: preTx,
+    includeActualOneOffs: true,
+    // Budget: settimane concluse → spesa reale; settimana in corso e future → quota stimata.
+    reconcileBudgets: true,
+  }), [periodStartObj, periodEndObj, expenses, income, budgets, plannedInPeriod, excludedFundIds, periodTx, preTx])
+
+  const est = useMemo(() => totalsFromBreakdown(periodBreakdown), [periodBreakdown])
+  const periodNet = Math.round((est.income - est.expenses) * 100) / 100
+
+  // Coerente col valore della card: il breakdown scarta le pianificate su fondi esclusi, quindi
+  // anche il sottotitolo "incl. … pianif." deve escluderle, altrimenti i numeri non tornano.
+  const { plannedIncomeInPeriod, plannedExpensesInPeriod } = useMemo(() => {
+    const notExcluded = (p: Transaction) => !(p.fund_id && excludedFundIds.includes(p.fund_id))
+    const sum = (type: 'income' | 'expense') =>
+      plannedInPeriod.filter(p => p.type === type && notExcluded(p)).reduce((s, p) => s + Number(p.amount), 0)
+    return { plannedIncomeInPeriod: sum('income'), plannedExpensesInPeriod: sum('expense') }
+  }, [plannedInPeriod, excludedFundIds])
+
+  const mainFunds = useMemo(() => funds.filter(f => f.type === 'main'), [funds])
+  const subFunds = useMemo(() => funds.filter(f => f.type === 'sub'), [funds])
+
+  // Le date sono stringhe 'YYYY-MM-DD' e created_at è ISO: l'ordinamento lessicografico coincide con
+  // quello cronologico e non alloca un oggetto Date per ogni confronto. Il taglio a RECENT_TX_LIMIT
+  // evita di montare centinaia di nodi in un riquadro alto 20rem che ne mostra cinque.
+  const recentTx = useMemo(() => [...periodTx]
+    .filter(tx => !tx.is_memo)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+    .slice(0, RECENT_TX_LIMIT), [periodTx])
+  const recentTxTruncated = useMemo(() => periodTx.filter(tx => !tx.is_memo).length > RECENT_TX_LIMIT, [periodTx])
+
+  // Proiezione a fine periodo: cammina giorno per giorno su ricorrenti, budget e pianificate.
+  const projectionInfo = useMemo(() => {
+    // La proiezione punta alla FINE DEL PERIODO, che per definizione è il giorno prima del prossimo
+    // stipendio atteso. NON alla "prossima occorrenza mensile in calendario": se lo stipendio di
+    // questo mese è già arrivato (magari in anticipo), quella punta ancora al giorno di QUESTO mese
+    // non ancora trascorso, e la card finisce per proiettare a OGGI — cioè a mostrare il saldo
+    // attuale invece del saldo a fine periodo.
+    const projectionTarget = getCurrentPeriod().endDate
+    const expectedSalary = getNextSalaryDate()
+    return {
+      projectionTarget,
+      expectedSalary,
+      // Periodo aperto: il giorno atteso è passato e lo stipendio non è ancora stato registrato.
+      salaryLate: today >= toDateString(expectedSalary),
+      salaryName: income.find(i => i.id === getSalaryIncomeId())?.name.trim() || null,
+      projection: projectBalanceAtDate(projectionTarget, totalBalance, expenses, income, budgets, planned, excludedFundIds, periodTx),
+    }
+    // pStartStr/pEndStr sembrano inutilizzate ma NON lo sono: getCurrentPeriod() e getNextSalaryDate()
+    // leggono lo store del periodo (fuori da React), quindi solo questi due valori — riletti a ogni
+    // render — segnalano al memo che il periodo è cambiato.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [today, pStartStr, pEndStr, totalBalance, expenses, income, budgets, planned, excludedFundIds, periodTx])
 
   const openConfirm = (item: PendingItem) => {
     setConfirmItem(item)
@@ -494,6 +618,8 @@ export default function Dashboard() {
       .from('transactions')
       .select('*')
       .eq('category', FUEL_CATEGORY)
+      .order('date', { ascending: false })
+      .limit(FUEL_FILLS_LIMIT)
     if (error) return
     setConfirmFuelFills((data || []).filter(t => !t.is_planned))
   }
@@ -517,7 +643,7 @@ export default function Dashboard() {
     })
     if (!ok) return
     const { error } = await supabase.from('recurring_expenses').update({ day_of_week: payDow }).eq('id', exp.id)
-    if (error) { toast.error('Errore nello spostamento: ' + error.message); return }
+    if (error) { toast.error(userMessage(error, 'Errore nello spostamento')); return }
     // Ri-aggancia TUTTI i pagamenti della ricorrente che stavano sul VECCHIO giorno al nuovo (stesso
     // giorno della settimana, spostato di `delta`). Senza questo, i pagamenti PRECEDENTI restano
     // orfani e il riepilogo conta l'occorrenza PREVISTA al posto del movimento reale → netto sballato.
@@ -581,7 +707,7 @@ export default function Dashboard() {
         setMissingColumns(prev => Array.from(new Set([...prev, ...FUEL_COLUMNS])))
         toast.error('Colonne benzina mancanti: esegui la SQL indicata nel banner in alto')
       } else {
-        toast.error('Errore nel salvataggio: ' + error)
+        toast.error(userMessage(error, 'Errore nel salvataggio'))
       }
       return
     }
@@ -609,7 +735,7 @@ export default function Dashboard() {
       is_memo: true,
       date: item.occurrence_date,
     }, item.occurrence_date))
-    if (error) { toast.error('Errore: ' + error.message); return }
+    if (error) { toast.error(userMessage(error)); return }
     toast.success('Segnato come "non lavorato"')
     load()
   }
@@ -677,7 +803,7 @@ export default function Dashboard() {
     setCompleteSaving(true)
     const { error } = await markPlannedAsDone(completePlannedItem, { amount: completeAmount, fund_id: completeFundId || null, date: completeDate || todayString() })
     setCompleteSaving(false)
-    if (error) { toast.error('Errore nel completamento: ' + error); return }
+    if (error) { toast.error(userMessage(error, 'Errore nel completamento')); return }
     setCompletePlannedItem(null)
     toast.success('Pianificazione completata')
     load()
@@ -708,7 +834,7 @@ export default function Dashboard() {
       ...(plannedParentOk ? { planned_parent_id: spendOn.id } : {}),
     })
     setSpendSaving(false)
-    if (error) { toast.error('Errore nel salvataggio: ' + error); return }
+    if (error) { toast.error(userMessage(error, 'Errore nel salvataggio')); return }
     setSpendOn(null)
     toast.success('Spesa aggiunta alla pianificazione')
     load()
@@ -760,7 +886,7 @@ export default function Dashboard() {
         setMissingColumns(prev => Array.from(new Set([...prev, ...FUEL_COLUMNS])))
         toast.error('Colonne benzina mancanti: esegui la SQL indicata nel banner in alto')
       } else {
-        toast.error('Errore nel salvataggio: ' + (insertError.message || ''))
+        toast.error(userMessage(insertError, 'Errore nel salvataggio'))
       }
       return
     }
@@ -774,42 +900,7 @@ export default function Dashboard() {
     if (fuelRecId) void maybeShiftFuelWeekday(fuelRecId, itemName, effectiveDate, plannedDate)
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Caricamento...</div>
-
-  const includedFunds = funds.filter(f => !excludedFundIds.includes(f.id))
-  const totalBalance = includedFunds.reduce((s, f) => s + Number(f.balance), 0)
-  const totalBalanceAll = funds.reduce((s, f) => s + Number(f.balance), 0)
-  const hasExclusions = excludedFundIds.some(id => funds.some(f => f.id === id))
-  const { start: pStartForEst, end: pEndForEst } = getBillingPeriod()
-  const plannedInPeriod = planned.filter(p => p.date >= pStartForEst && p.date <= pEndForEst)
-  const periodBreakdown = getPeriodBreakdown({
-    startDate: parseLocalDate(pStartForEst),
-    endDate: parseLocalDate(pEndForEst),
-    recurringExpenses: expenses,
-    recurringIncome: income,
-    weeklyBudgets: budgets,
-    planned: plannedInPeriod,
-    excludedFundIds,
-    fromToday: false,
-    actualTx: periodTx,
-    reconcileOnlyTx: preTx,
-    includeActualOneOffs: true,
-    // Budget: settimane concluse → spesa reale; settimana in corso e future → quota stimata.
-    reconcileBudgets: true,
-  })
-  const est = totalsFromBreakdown(periodBreakdown)
-  const periodNet = Math.round((est.income - est.expenses) * 100) / 100
-  // Coerente col valore della card: il breakdown scarta le pianificate su fondi esclusi, quindi
-  // anche il sottotitolo "incl. … pianif." deve escluderle, altrimenti i numeri non tornano.
-  const notExcluded = (p: Transaction) => !(p.fund_id && excludedFundIds.includes(p.fund_id))
-  const plannedIncomeInPeriod = plannedInPeriod.filter(p => p.type === 'income' && notExcluded(p)).reduce((s, p) => s + Number(p.amount), 0)
-  const plannedExpensesInPeriod = plannedInPeriod.filter(p => p.type === 'expense' && notExcluded(p)).reduce((s, p) => s + Number(p.amount), 0)
-  const mainFunds = funds.filter(f => f.type === 'main')
-  const subFunds = funds.filter(f => f.type === 'sub')
-
-  const recentTx = [...periodTx]
-    .filter(tx => !tx.is_memo)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  if (loading) return <SkeletonDashboard />
 
   if (funds.length === 0) {
     if (loadError) {
@@ -817,7 +908,7 @@ export default function Dashboard() {
         <div className="text-center py-16">
           <Wallet className="w-12 h-12 text-slate-300 mx-auto mb-4" aria-hidden="true" />
           <h2 className="text-lg font-semibold text-slate-700 mb-1">Impossibile caricare i dati</h2>
-          <p className="text-sm text-slate-400 mb-6">Si è verificato un problema di connessione. Riprova.</p>
+          <p className="text-sm text-slate-500 mb-6">Si è verificato un problema di connessione. Riprova.</p>
           <button onClick={() => { setLoading(true); load() }} className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium">
             Riprova
           </button>
@@ -828,7 +919,7 @@ export default function Dashboard() {
       <div className="text-center py-16">
         <Wallet className="w-12 h-12 text-slate-300 mx-auto mb-4" aria-hidden="true" />
         <h2 className="text-lg font-semibold text-slate-700 mb-1">Benvenuto in FinanzApp!</h2>
-        <p className="text-sm text-slate-400 mb-6">Inizia configurando i tuoi fondi per gestire le tue finanze</p>
+        <p className="text-sm text-slate-500 mb-6">Inizia configurando i tuoi fondi per gestire le tue finanze</p>
         <Link to="/fondi" className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium">
           Configura Fondi <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </Link>
@@ -862,17 +953,7 @@ export default function Dashboard() {
       </div>
 
       {(() => {
-        // La proiezione punta alla FINE DEL PERIODO, che per definizione è il giorno prima del
-        // prossimo stipendio atteso. NON alla "prossima occorrenza mensile in calendario": se lo
-        // stipendio di questo mese è già arrivato (magari in anticipo), quella punta ancora al
-        // giorno di QUESTO mese non ancora trascorso, e la card finisce per proiettare a OGGI —
-        // cioè a mostrare il saldo attuale invece del saldo a fine periodo.
-        const projectionTarget = getCurrentPeriod().endDate
-        const expectedSalary = getNextSalaryDate()
-        // Periodo aperto: il giorno atteso è passato e lo stipendio non è ancora stato registrato.
-        const salaryLate = todayString() >= toDateString(expectedSalary)
-        const salaryName = income.find(i => i.id === getSalaryIncomeId())?.name.trim() || null
-        const projection = projectBalanceAtDate(projectionTarget, totalBalance, expenses, income, budgets, planned, excludedFundIds, periodTx)
+        const { projectionTarget, expectedSalary, salaryLate, salaryName, projection } = projectionInfo
         return (
           <>
             <div className="bg-brand hero-glow rounded-3xl p-5 sm:p-8 mb-4 text-white shadow-lg shadow-indigo-600/25">
@@ -880,12 +961,12 @@ export default function Dashboard() {
                 <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white/15">
                   <Wallet className="w-4 h-4" aria-hidden="true" />
                 </span>
-                <span className="text-sm font-medium text-white/85">{hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'}</span>
+                <span className="text-sm font-medium text-white/90">{hasExclusions ? 'Saldo Filtrato' : 'Saldo Totale'}</span>
               </div>
               <p className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums">{cur(totalBalance)}</p>
               {hasExclusions
-                ? <p className="text-xs text-white/75 mt-2.5">Saldo totale reale: <span className="font-semibold text-white">{cur(totalBalanceAll)}</span></p>
-                : <p className="text-xs text-white/70 mt-2.5">Somma di tutti i tuoi fondi · {periodLabel}</p>}
+                ? <p className="text-xs text-white/90 mt-2.5">Saldo totale reale: <span className="font-semibold text-white">{cur(totalBalanceAll)}</span></p>
+                : <p className="text-xs text-white/90 mt-2.5">Somma di tutti i tuoi fondi · {periodLabel}</p>}
               <div className="mt-6 grid grid-cols-4 gap-1.5 sm:gap-3">
                 <button onClick={openAddPlanned} className="flex flex-col items-center gap-1.5 px-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 transition-colors active:scale-95 min-w-0">
                   <CalendarClock className="w-5 h-5 shrink-0" aria-hidden="true" />
@@ -963,7 +1044,7 @@ export default function Dashboard() {
               <h3 className="text-lg font-semibold text-slate-700 whitespace-nowrap">Prossime Scadenze</h3>
             </div>
             {pendingRecurringManual.length > 0 && (
-              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full whitespace-nowrap">
+              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full whitespace-nowrap">
                 {confirmedRecurringCount}/{pendingRecurringManual.length} spese fisse confermate
               </span>
             )}
@@ -1038,7 +1119,7 @@ export default function Dashboard() {
                     )}
                     {giaFatte.length > 0 && (
                       <div>
-                        <p className="text-[11px] font-medium text-slate-400 mb-1.5 uppercase tracking-wide">Già fatte ({giaFatte.length})</p>
+                        <p className="text-[11px] font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Già fatte ({giaFatte.length})</p>
                         <div className="space-y-2">{giaFatte.map(renderItem)}</div>
                       </div>
                     )}
@@ -1157,7 +1238,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <CalendarClock className="w-5 h-5 text-purple-600" aria-hidden="true" />
                 <h3 className="text-lg font-semibold text-slate-700">Pianificate del periodo</h3>
-                <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-full">{periodPlanned.length}</span>
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">{periodPlanned.length}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setPlannedListOpen(true)} className="inline-flex items-center min-h-[40px] text-sm text-purple-600 hover:text-purple-700 font-medium transition-colors">
@@ -1169,7 +1250,7 @@ export default function Dashboard() {
               </div>
             </div>
             {periodPlanned.length === 0 ? (
-              <div className="bg-white rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">
+              <div className="bg-white rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
                 Nessuna pianificata in questo periodo
                 {futurePlanned.length > 0 && <span> · {futurePlanned.length} future visibili nella vista completa</span>}
               </div>
@@ -1251,14 +1332,14 @@ export default function Dashboard() {
             const subs = subFunds.filter(s => s.parent_id === fund.id)
             const totalWithSubs = Number(fund.balance) + subs.reduce((s, sf) => s + Number(sf.balance), 0)
             return (
-              <div key={fund.id} className="rounded-2xl border border-slate-200/70 shadow-sm p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200" style={{ background: `linear-gradient(135deg, ${fund.color}1A 0%, #ffffff 60%)` }}>
+              <div key={fund.id} className="rounded-2xl border border-slate-200/70 shadow-sm p-5" style={{ background: `linear-gradient(135deg, ${fund.color}1A 0%, #ffffff 60%)` }}>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm" style={{ backgroundColor: fund.color }}>
                     <Icon className="w-5 h-5 text-white" aria-hidden="true" />
                   </div>
                   <div>
                     <p className="font-semibold text-slate-800 text-sm">{fund.name}</p>
-                    <p className="text-[11px] text-slate-400">{subs.length > 0 ? `Totale: ${cur(totalWithSubs)}` : ''}</p>
+                    <p className="text-[11px] text-slate-500">{subs.length > 0 ? `Totale: ${cur(totalWithSubs)}` : ''}</p>
                   </div>
                 </div>
                 <p className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{cur(Number(fund.balance))}</p>
@@ -1289,22 +1370,15 @@ export default function Dashboard() {
             </Link>
           </div>
           {forecast.length > 1 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <AreaChart data={forecast}>
-                <defs>
-                  <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={24} />
-                <YAxis width={46} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => isAmountsHidden() ? '•' : fmtAxisEur(v)} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="balance" stroke="#3B82F6" fill="url(#grad)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
+            <AreaChartLite
+              data={chartData}
+              height={250}
+              formatY={v => isAmountsHidden() ? '•' : fmtAxisEur(v)}
+              renderTooltip={i => <ChartTooltipBody point={forecast[i]} />}
+              ariaLabel={`Andamento previsto del saldo su 3 mesi, da ${forecast[0].label} a ${forecast[forecast.length - 1].label}`}
+            />
           ) : (
-            <p className="text-sm text-slate-400 py-8 text-center">Configura entrate e uscite per vedere la previsione</p>
+            <p className="text-sm text-slate-500 py-8 text-center">Configura entrate e uscite per vedere la previsione</p>
           )}
         </div>
 
@@ -1312,7 +1386,13 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-semibold tracking-tight text-slate-900">Ultime Transazioni</h3>
-              <Clock className="w-4 h-4 text-slate-300" aria-hidden="true" />
+              {recentTxTruncated ? (
+                <Link to="/transazioni" className="text-[13px] text-slate-500 hover:text-slate-700 font-medium inline-flex items-center gap-1 min-h-[40px] transition-colors">
+                  Vedi tutte <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                </Link>
+              ) : (
+                <Clock className="w-4 h-4 text-slate-300" aria-hidden="true" />
+              )}
             </div>
             {recentTx.length > 0 ? (
               <div className="space-y-0 max-h-80 overflow-y-auto">
@@ -1331,7 +1411,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <p className="text-[13px] text-slate-400 py-4 text-center">Nessuna transazione nel periodo</p>
+              <p className="text-[13px] text-slate-500 py-4 text-center">Nessuna transazione nel periodo</p>
             )}
           </div>
         </div>
@@ -1349,14 +1429,14 @@ export default function Dashboard() {
               Modifica l'importo qui sotto se hai pagato/ricevuto una cifra diversa da quella prevista. La spesa/entrata ricorrente NON viene modificata, solo questa transazione.
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="dashboard-f1" className="block text-sm font-medium text-slate-700 mb-1">
                 {confirmItem.kind === 'income' ? 'Importo effettivamente ricevuto (€)' : confirmItem.kind === 'transfer' ? 'Importo effettivamente trasferito (€)' : 'Importo effettivamente pagato (€)'}
               </label>
               <div className="relative">
-                <DecimalInput
+                <DecimalInput id="dashboard-f1"
                   value={confirmAmount}
                   onChange={setConfirmAmount}
-                  className={`w-full px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-lg font-semibold ${confirmAmount !== confirmItem.amount ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
+                  className={`w-full px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow text-lg font-semibold ${confirmAmount !== confirmItem.amount ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
                 />
                 {confirmAmount !== confirmItem.amount && (
                   <button
@@ -1375,12 +1455,12 @@ export default function Dashboard() {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data effettiva</label>
-              <input
+              <label htmlFor="dashboard-f2" className="block text-sm font-medium text-slate-700 mb-1">Data effettiva</label>
+              <input id="dashboard-f2"
                 type="date"
                 value={confirmDate}
                 onChange={e => setConfirmDate(e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow ${confirmItem.occurrence_date && confirmDate !== confirmItem.occurrence_date ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow ${confirmItem.occurrence_date && confirmDate !== confirmItem.occurrence_date ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
               />
               {confirmItem.occurrence_date && confirmDate !== confirmItem.occurrence_date && (
                 <p className="text-xs text-slate-500 mt-1">
@@ -1392,7 +1472,7 @@ export default function Dashboard() {
               <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dati rifornimento (facoltativi)</p>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Tipo carburante</label>
+                  <p className="block text-xs font-medium text-slate-600 mb-1">Tipo carburante</p>
                   <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo carburante">
                     {(['gpl', 'benzina'] as const).map(ft => (
                       <button
@@ -1408,23 +1488,23 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Contachilometri (km totali)</label>
-                  <input
+                  <label htmlFor="dashboard-f3" className="block text-xs font-medium text-slate-600 mb-1">Contachilometri (km totali)</label>
+                  <input id="dashboard-f3"
                     type="text" inputMode="decimal"
                     value={confirmFuelOdometer}
                     onChange={e => setConfirmFuelOdometer(e.target.value)}
                     placeholder="es. 124500"
-                    className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                    className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="min-w-0">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
-                    <input type="text" inputMode="decimal" value={confirmFuelLiters} onChange={e => { setConfirmFuelLiters(e.target.value); syncFuelAmount(e.target.value, confirmFuelPrice) }} placeholder="es. 30" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+                    <label htmlFor="dashboard-f4" className="block text-xs font-medium text-slate-600 mb-1">Litri</label>
+                    <input id="dashboard-f4" type="text" inputMode="decimal" value={confirmFuelLiters} onChange={e => { setConfirmFuelLiters(e.target.value); syncFuelAmount(e.target.value, confirmFuelPrice) }} placeholder="es. 30" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
                   </div>
                   <div className="min-w-0">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
-                    <input type="text" inputMode="decimal" value={confirmFuelPrice} onChange={e => { setConfirmFuelPrice(e.target.value); syncFuelAmount(confirmFuelLiters, e.target.value) }} placeholder="es. 1,80" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+                    <label htmlFor="dashboard-f5" className="block text-xs font-medium text-slate-600 mb-1">€/litro</label>
+                    <input id="dashboard-f5" type="text" inputMode="decimal" value={confirmFuelPrice} onChange={e => { setConfirmFuelPrice(e.target.value); syncFuelAmount(confirmFuelLiters, e.target.value) }} placeholder="es. 1,80" className="w-full min-w-0 px-2 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
                   </div>
                 </div>
                 {(() => {
@@ -1470,15 +1550,15 @@ export default function Dashboard() {
                     </div>
                   )
                 })()}
-                <p className="text-[11px] text-slate-400">Inserisci la lettura del <strong>contachilometri</strong> (km totali). Per le auto bifuel il <strong>€/km è reale</strong>; il km/l per carburante è una <strong>stima</strong>. Litri e €/litro <strong>compilano l'importo pagato</strong> qui sopra (puoi comunque correggerlo a mano); il contachilometri serve solo ai consumi.</p>
+                <p className="text-[11px] text-slate-500">Inserisci la lettura del <strong>contachilometri</strong> (km totali). Per le auto bifuel il <strong>€/km è reale</strong>; il km/l per carburante è una <strong>stima</strong>. Litri e €/litro <strong>compilano l'importo pagato</strong> qui sopra (puoi comunque correggerlo a mano); il contachilometri serve solo ai consumi.</p>
               </div>
             )}
             {confirmItem.kind !== 'transfer' && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="dashboard-f6" className="block text-sm font-medium text-slate-700 mb-1">
                   {confirmItem.kind === 'income' ? 'Accredita su' : 'Paga con'}
                 </label>
-                <select value={confirmFundId} onChange={e => setConfirmFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="dashboard-f6" value={confirmFundId} onChange={e => setConfirmFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                   <option value="">Nessun fondo</option>
                   {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
                 </select>
@@ -1492,7 +1572,7 @@ export default function Dashboard() {
                 Segna senza scalare
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 text-center -mt-1">
+            <p className="text-[11px] text-slate-500 text-center -mt-1">
               «Conferma e registra» {confirmItem.kind === 'income' ? 'accredita il fondo' : 'scala il fondo'} e conta nei totali. «Segna senza scalare» conta nei totali del periodo ma <strong>non</strong> tocca il saldo dei fondi.
             </p>
           </div>
@@ -1546,20 +1626,20 @@ export default function Dashboard() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-                <input
+                <label htmlFor="dashboard-f7" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
+                <input id="dashboard-f7"
                   type="text" value={spendForm.description}
                   onChange={e => setSpendForm({ ...spendForm, description: e.target.value })}
                   placeholder="es. Hotel, benzina, cena"
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-                <DecimalInput
+                <label htmlFor="dashboard-f8" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+                <DecimalInput id="dashboard-f8"
                   value={spendForm.amount}
                   onChange={n => setSpendForm({ ...spendForm, amount: n })}
-                  className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-lg font-semibold"
+                  className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow text-lg font-semibold"
                 />
                 {spendForm.amount > 0 && (
                   <p className={`text-xs mt-1 ${over ? 'text-red-600' : 'text-slate-500'}`}>
@@ -1569,16 +1649,16 @@ export default function Dashboard() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-                <input
+                <label htmlFor="dashboard-f9" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+                <input id="dashboard-f9"
                   type="date" value={spendForm.date}
                   onChange={e => setSpendForm({ ...spendForm, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Paga con</label>
-                <select value={spendForm.fund_id} onChange={e => setSpendForm({ ...spendForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <label htmlFor="dashboard-f10" className="block text-sm font-medium text-slate-700 mb-1">Paga con</label>
+                <select id="dashboard-f10" value={spendForm.fund_id} onChange={e => setSpendForm({ ...spendForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                   <option value="">Nessun fondo</option>
                   {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
                 </select>
@@ -1586,7 +1666,7 @@ export default function Dashboard() {
               <button onClick={saveSpendOn} disabled={spendSaving || spendForm.amount <= 0} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 active:scale-[0.98] transition-[transform,background-color] text-sm">
                 {spendSaving ? 'Registrazione...' : 'Registra spesa'}
               </button>
-              <p className="text-[11px] text-slate-400 text-center -mt-1">
+              <p className="text-[11px] text-slate-500 text-center -mt-1">
                 Scala il fondo come una normale uscita e consuma il residuo della pianificazione. Il totale del periodo non cambia finché resti entro il tetto.
               </p>
             </div>
@@ -1605,11 +1685,11 @@ export default function Dashboard() {
               Modifica l'importo se hai {completePlannedItem.type === 'income' ? 'ricevuto' : 'speso'} una cifra diversa dal previsto. Verrà registrata come transazione effettiva.
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="dashboard-f11" className="block text-sm font-medium text-slate-700 mb-1">
                 {completePlannedItem.type === 'income' ? 'Importo ricevuto (€)' : 'Importo speso (€)'}
               </label>
               <div className="relative">
-                <DecimalInput
+                <DecimalInput id="dashboard-f11"
                   value={completeAmount}
                   onChange={setCompleteAmount}
                   className={`w-full px-3 py-2.5 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-lg font-semibold ${completeAmount !== Number(completePlannedItem.amount) ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
@@ -1626,12 +1706,12 @@ export default function Dashboard() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data effettiva</label>
-              <input
+              <label htmlFor="dashboard-f12" className="block text-sm font-medium text-slate-700 mb-1">Data effettiva</label>
+              <input id="dashboard-f12"
                 type="date"
                 value={completeDate}
                 onChange={e => setCompleteDate(e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow ${completeDate !== completePlannedItem.date ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow ${completeDate !== completePlannedItem.date ? 'border-amber-400 bg-amber-50/30' : 'border-slate-300'}`}
               />
               {completeDate !== completePlannedItem.date && (
                 <p className="text-xs text-slate-500 mt-1">
@@ -1640,10 +1720,10 @@ export default function Dashboard() {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="dashboard-f13" className="block text-sm font-medium text-slate-700 mb-1">
                 {completePlannedItem.type === 'income' ? 'Accredita su' : 'Paga con'}
               </label>
-              <select value={completeFundId} onChange={e => setCompleteFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <select id="dashboard-f13" value={completeFundId} onChange={e => setCompleteFundId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                 <option value="">Nessun fondo</option>
                 {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
               </select>
@@ -1657,7 +1737,7 @@ export default function Dashboard() {
 
       <Modal isOpen={plannedListOpen} onClose={() => setPlannedListOpen(false)} title={`Tutte le pianificazioni (${planned.length})`}>
         {planned.length === 0 ? (
-          <p className="text-center text-sm text-slate-400 py-6">Nessuna pianificazione</p>
+          <p className="text-center text-sm text-slate-500 py-6">Nessuna pianificazione</p>
         ) : (
           <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
             {planned.map(p => {
@@ -1700,7 +1780,7 @@ export default function Dashboard() {
             Le pianificazioni appariranno nelle previsioni ma non intaccheranno il saldo dei fondi finché non le segnerai come fatte.
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+            <p className="block text-sm font-medium text-slate-700 mb-1">Tipo</p>
             <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo">
               <button onClick={() => setPlannedForm({ ...plannedForm, type: 'expense' })} aria-pressed={plannedForm.type === 'expense'} className={`min-h-[40px] py-2 rounded-lg text-sm font-medium border active:scale-[0.98] transition-[transform,background-color,border-color,color] ${plannedForm.type === 'expense' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                 Uscita
@@ -1711,29 +1791,29 @@ export default function Dashboard() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input type="text" value={plannedForm.description} onChange={e => setPlannedForm({ ...plannedForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Vacanza estate, Rimborso..." />
+            <label htmlFor="dashboard-f14" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
+            <input id="dashboard-f14" type="text" value={plannedForm.description} onChange={e => setPlannedForm({ ...plannedForm, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" placeholder="es. Vacanza estate, Rimborso..." />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="min-w-0">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput value={plannedForm.amount} onChange={n => setPlannedForm({ ...plannedForm, amount: n })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="dashboard-f15" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
+              <DecimalInput id="dashboard-f15" value={plannedForm.amount} onChange={n => setPlannedForm({ ...plannedForm, amount: n })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
             <div className="min-w-0">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data prevista</label>
-              <input type="date" value={plannedForm.date} onChange={e => setPlannedForm({ ...plannedForm, date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <label htmlFor="dashboard-f16" className="block text-sm font-medium text-slate-700 mb-1">Data prevista</label>
+              <input id="dashboard-f16" type="date" value={plannedForm.date} onChange={e => setPlannedForm({ ...plannedForm, date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Fondo (opzionale)</label>
-            <select value={plannedForm.fund_id} onChange={e => setPlannedForm({ ...plannedForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <label htmlFor="dashboard-f17" className="block text-sm font-medium text-slate-700 mb-1">Fondo (opzionale)</label>
+            <select id="dashboard-f17" value={plannedForm.fund_id} onChange={e => setPlannedForm({ ...plannedForm, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
               <option value="">Scegli al completamento</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
-            <CategorySelect value={plannedForm.category} onChange={c => setPlannedForm({ ...plannedForm, category: c })} baseCategories={TRANSACTION_CATEGORIES} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize" />
+            <label htmlFor="dashboard-f18" className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
+            <CategorySelect id="dashboard-f18" value={plannedForm.category} onChange={c => setPlannedForm({ ...plannedForm, category: c })} baseCategories={TRANSACTION_CATEGORIES} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow capitalize" />
           </div>
           <button onClick={savePlanned} disabled={plannedSaving || plannedForm.amount <= 0 || !plannedForm.description.trim()} className="w-full py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 active:scale-[0.98] transition-[transform,background-color]">
             {plannedSaving ? 'Salvataggio...' : editingPlanned ? 'Salva modifiche' : 'Aggiungi pianificazione'}
@@ -1749,7 +1829,7 @@ function Card({ icon: Icon, color, label, value, valueColor, sub, onClick, tint 
   return (
     <Wrapper
       onClick={onClick}
-      className={`rounded-2xl border shadow-sm p-5 text-left w-full ${tint || 'bg-white border-slate-200/70'} ${onClick ? 'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer' : ''}`}
+      className={`rounded-2xl border shadow-sm p-5 text-left w-full ${tint || 'bg-white border-slate-200/70'} ${onClick ? 'hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer' : ''}`}
     >
       <div className="flex items-center gap-2.5 mb-3">
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color}`}>
@@ -1758,7 +1838,7 @@ function Card({ icon: Icon, color, label, value, valueColor, sub, onClick, tint 
         <span className="text-[13px] font-medium text-slate-500 flex-1 leading-snug">{label}</span>
       </div>
       <p className={`text-2xl font-bold tracking-tight tabular-nums ${valueColor || 'text-slate-900'}`}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">{sub}</p>}
+      {sub && <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">{sub}</p>}
     </Wrapper>
   )
 }

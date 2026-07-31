@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Trash2, Pencil, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, Filter, CheckSquare, Square, X, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -14,11 +14,17 @@ import { postTransaction } from '../lib/postTransaction'
 import { logSupabaseError } from '../lib/logError'
 import { fuelConsumption, fuelTotalFromLiters, previousFuelFill, averageFuelConsumption, normalizeFuelType, FUEL_TYPE_LABEL, fuelStatsOdometer, lifetimeCostPerKmOdometer, lifetimePerFuelStima, type FuelType } from '../lib/fuelConsumption'
 import InfoBox from '../components/InfoBox'
+import EmptyState from '../components/EmptyState'
 import { probePlannedParentSupport, withPlannedParent } from '../lib/schemaSupport'
 import { plannedBudgetStatus } from '../lib/plannedBudget'
 import type { Transaction, Fund, WeeklyBudget } from '../types'
+import { SkeletonListPage } from '../components/Skeleton'
 
 const PAGE_SIZE = 50
+// Tetti sulle query di contorno: senza, crescono per sempre insieme allo storico e a un certo punto
+// il caricamento della pagina è dominato da dati che non entrano nemmeno nella schermata.
+const FUEL_FILLS_LIMIT = 400
+const OPEN_PLANNED_LIMIT = 200
 
 const emptyForm = {
   type: 'expense' as 'income' | 'expense' | 'transfer',
@@ -45,6 +51,13 @@ function belongsToColumns(v: string): { budget_id: string | null; planned_parent
   if (v.startsWith(WEEKLY_PREFIX)) return { budget_id: v.slice(WEEKLY_PREFIX.length), planned_parent_id: null }
   if (v.startsWith(PLANNED_PREFIX)) return { budget_id: null, planned_parent_id: v.slice(PLANNED_PREFIX.length) }
   return { budget_id: null, planned_parent_id: null }
+}
+
+// Nel filtro `or=(...)` di PostgREST virgole, parentesi e apici sono separatori: lasciarli passare
+// dal campo di ricerca produrrebbe una query malformata (o filtri inattesi). Vengono rimossi
+// insieme ai jolly di LIKE, che qui non hanno senso perché la ricerca è già "contiene".
+function sanitizeSearch(s: string): string {
+  return s.trim().replace(/[,()'"\\%_*]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 function isFuelColumnError(msg?: string | null): boolean {
@@ -116,8 +129,25 @@ export default function Transactions() {
   const [hasMore, setHasMore] = useState(true)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // Guardia sulle richieste concorrenti: due tap su "Carica altre" partirebbero con lo STESSO offset
+  // e accoderebbero due volte le stesse righe (chiavi duplicate e conteggi sbagliati). Il ref si
+  // aggiorna in modo sincrono, a differenza dello stato, quindi intercetta anche il doppio tap
+  // ravvicinato. Serve anche a scartare la risposta di un caricamento ormai superato.
+  const loadSeq = useRef(0)
+  const loadingMoreRef = useRef(false)
+  // Testo di ricerca "calmato": ora ogni modifica dei filtri va al server, e senza attesa partirebbe
+  // una query per ogni tasto premuto. 300 ms è la pausa naturale fra due caratteri digitati.
+  const [searchTerm, setSearchTerm] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(filterText), 300)
+    return () => clearTimeout(t)
+  }, [filterText])
 
   const load = async (reset = true) => {
+    if (!reset && loadingMoreRef.current) return
+    const seq = ++loadSeq.current
+    if (!reset) { loadingMoreRef.current = true; setLoadingMore(true) }
     try {
       const offset = reset ? 0 : items.length
       let query = supabase.from('transactions').select('*')
@@ -125,17 +155,39 @@ export default function Transactions() {
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1)
 
+      // I filtri vivono nella QUERY, non sull'array già scaricato. Filtrando a valle, la ricerca
+      // guardava solo le 50 righe della prima pagina: cercare un movimento di tre mesi fa dava
+      // "Nessuna transazione trovata" pur essendoci. Così invece la paginazione lavora sul
+      // sottoinsieme filtrato e "Carica altre" continua dentro i risultati della ricerca.
       if (dateFrom) query = query.gte('date', dateFrom)
       if (dateTo) query = query.lte('date', dateTo)
+      if (!includePlanned) query = query.eq('is_planned', false)
+      if (!includeMemo) query = query.eq('is_memo', false)
+      if (filterType !== 'all') query = query.eq('type', filterType)
+      if (filterFund !== 'all') query = query.or(`fund_id.eq.${filterFund},fund_to_id.eq.${filterFund}`)
+      if (filterSource === 'recurring_expense') query = query.not('recurring_expense_id', 'is', null)
+      if (filterSource === 'recurring_income') query = query.not('recurring_income_id', 'is', null)
+      if (filterSource === 'budget') query = query.not('budget_id', 'is', null)
+      if (filterSource === 'manual') {
+        query = query.is('recurring_expense_id', null).is('recurring_income_id', null).is('budget_id', null)
+      }
+      const term = sanitizeSearch(searchTerm)
+      if (term) query = query.or(`description.ilike.%${term}%,category.ilike.%${term}%`)
 
       if (reset) setPlannedParentOk(await probePlannedParentSupport())
       const [{ data: tx, error: e1 }, { data: fnd, error: e2 }, fuelRes, budRes, planRes] = await Promise.all([
         query,
         reset ? supabase.from('funds').select('*').order('sort_order') : Promise.resolve({ data: funds, error: null }),
-        reset ? supabase.from('transactions').select('*').eq('category', FUEL_CATEGORY) : Promise.resolve({ data: null, error: null }),
+        // Rifornimenti: servono per le medie di consumo, che guardano allo storico. Il tetto tiene
+        // la query limitata anche dopo anni d'uso (400 pieni ≈ 8 anni di rifornimento settimanale)
+        // prendendo comunque i più recenti, che sono quelli che contano per le medie.
+        reset ? supabase.from('transactions').select('*').eq('category', FUEL_CATEGORY).order('date', { ascending: false }).limit(FUEL_FILLS_LIMIT) : Promise.resolve({ data: null, error: null }),
         reset ? supabase.from('weekly_budgets').select('*').eq('is_active', true).order('name') : Promise.resolve({ data: null, error: null }),
-        reset ? supabase.from('transactions').select('*').eq('is_planned', true).eq('type', 'expense').order('date') : Promise.resolve({ data: null, error: null }),
+        reset ? supabase.from('transactions').select('*').eq('is_planned', true).eq('type', 'expense').order('date').limit(OPEN_PLANNED_LIMIT) : Promise.resolve({ data: null, error: null }),
       ])
+      // Risposta superata: nel frattempo è partito un altro caricamento (cambio filtro date, o un
+      // "Carica altre"). Scrivere questi dati sovrascriverebbe i più recenti con i più vecchi.
+      if (seq !== loadSeq.current) return
       const firstError = e1 || e2
       if (firstError) {
         logSupabaseError('Errore Supabase:', firstError)
@@ -156,11 +208,13 @@ export default function Transactions() {
       console.error('Errore fatale:', err)
       toast.error('Errore imprevisto (F12 per dettagli)')
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
+      if (!reset) { loadingMoreRef.current = false; setLoadingMore(false) }
     }
   }
 
-  useEffect(() => { if (user) load() }, [user, dateFrom, dateTo])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (user) load() }, [user, dateFrom, dateTo, includePlanned, includeMemo, filterType, filterFund, filterSource, searchTerm])
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setShowModal(true) }
   const openEdit = (tx: Transaction) => {
@@ -183,6 +237,12 @@ export default function Transactions() {
     if (form.type === 'transfer' && (!form.fund_id || !form.fund_to_id)) {
       toast.error('Seleziona entrambi i fondi per il trasferimento'); return
     }
+    // Trasferimento da un fondo a se stesso: i due movimenti di saldo si annullano, resta solo una
+    // riga che sporca lo storico e i conteggi. Era accettato senza obiezioni.
+    if (form.type === 'transfer' && form.fund_id === form.fund_to_id) {
+      toast.error('Il fondo di partenza e quello di arrivo devono essere diversi'); return
+    }
+    if (!form.description.trim()) { toast.error('Inserisci una descrizione'); return }
     setSaving(true)
 
     const isFuel = form.type === 'expense' && form.category === FUEL_CATEGORY
@@ -273,14 +333,21 @@ export default function Transactions() {
   const remove = async (tx: Transaction) => {
     if (!(await confirm({ message: 'Eliminare questa transazione? Il saldo del fondo sarà ripristinato.', confirmText: 'Elimina', danger: true }))) return
 
+    // `.select()` restituisce le righe DAVVERO eliminate. Senza, una DELETE che non trova nulla
+    // (doppio tap, riga già rimossa da un'altra scheda o in un altro momento) riesce comunque e il
+    // ripristino del saldo verrebbe applicato una seconda volta, gonfiando il fondo dell'importo.
+    const { data: deleted, error } = await supabase.from('transactions').delete().eq('id', tx.id).select('id')
+    if (error) { toast.error('Errore nell\'eliminazione'); return }
+    if (!deleted || deleted.length === 0) {
+      toast.error('Questa transazione non esiste più: nessun saldo modificato')
+      load()
+      return
+    }
+
     const deltas = new Map<string, number>()
     for (const { fundId, delta } of txBalanceDelta(tx)) {
       deltas.set(fundId, (deltas.get(fundId) || 0) - delta)
     }
-
-    const { error } = await supabase.from('transactions').delete().eq('id', tx.id)
-    if (error) { toast.error('Errore nell\'eliminazione'); return }
-
     await applyFundDeltas(deltas)
     toast.success('Transazione eliminata')
     load()
@@ -295,24 +362,28 @@ export default function Transactions() {
     if (!(await confirm({ message: msg, confirmText: 'Elimina', danger: true }))) return
 
     setBulkDeleting(true)
-    const deltas = new Map<string, number>()
-    for (const tx of selected) {
-      for (const { fundId, delta } of txBalanceDelta(tx)) {
-        deltas.set(fundId, (deltas.get(fundId) || 0) - delta)
-      }
-    }
-
     const ids = selected.map(t => t.id)
-    const { error } = await supabase.from('transactions').delete().in('id', ids)
+    // Come in remove(): i saldi si ripristinano SOLO per le righe realmente eliminate, mai per
+    // quelle che qualcun altro (o un tap precedente) aveva già rimosso.
+    const { data: deleted, error } = await supabase.from('transactions').delete().in('id', ids).select('id')
     if (error) {
       setBulkDeleting(false)
       toast.error('Errore nell\'eliminazione massiva')
       return
     }
 
+    const deletedIds = new Set((deleted || []).map(r => r.id))
+    const deltas = new Map<string, number>()
+    for (const tx of selected) {
+      if (!deletedIds.has(tx.id)) continue
+      for (const { fundId, delta } of txBalanceDelta(tx)) {
+        deltas.set(fundId, (deltas.get(fundId) || 0) - delta)
+      }
+    }
+
     await applyFundDeltas(deltas)
     setBulkDeleting(false)
-    toast.success(`${selected.length} transazion${selected.length === 1 ? 'e eliminata' : 'i eliminate'}`)
+    toast.success(`${deletedIds.size} transazion${deletedIds.size === 1 ? 'e eliminata' : 'i eliminate'}`)
     load()
   }
 
@@ -352,24 +423,17 @@ export default function Transactions() {
     gpl: lifetimePerFuelStima(fuelFills, 'gpl'),
   }), [fuelFills])
 
-  // Memoizzato: senza, la lista verrebbe ri-filtrata su TUTTI gli item caricati a ogni render
-  // (selezione di righe, digitazione nel modale, ecc.). Si ricalcola solo al cambio di filtri/dati.
-  const filtered = useMemo(() => items.filter(tx => {
-    if (!includePlanned && tx.is_planned) return false
-    if (!includeMemo && tx.is_memo) return false
-    if (filterType !== 'all' && tx.type !== filterType) return false
-    if (filterFund !== 'all' && tx.fund_id !== filterFund && tx.fund_to_id !== filterFund) return false
-    if (filterSource !== 'all') {
-      if (filterSource === 'recurring_expense' && !tx.recurring_expense_id) return false
-      if (filterSource === 'recurring_income' && !tx.recurring_income_id) return false
-      if (filterSource === 'budget' && !tx.budget_id) return false
-      if (filterSource === 'manual' && (tx.recurring_expense_id || tx.recurring_income_id || tx.budget_id)) return false
-    }
-    if (filterText && !tx.description.toLowerCase().includes(filterText.toLowerCase()) && !tx.category.toLowerCase().includes(filterText.toLowerCase())) return false
-    return true
-  }), [items, includePlanned, includeMemo, filterType, filterFund, filterSource, filterText])
+  // La selezione arriva già filtrata dal server (vedi load): qui resta solo il ritaglio finale
+  // mentre il testo digitato non è ancora stato inviato, così la lista non "lampeggia" con i
+  // risultati vecchi durante i 300 ms di attesa.
+  const filtered = useMemo(() => {
+    const pending = filterText.trim().toLowerCase()
+    if (!pending || pending === searchTerm.trim().toLowerCase()) return items
+    return items.filter(tx =>
+      tx.description.toLowerCase().includes(pending) || tx.category.toLowerCase().includes(pending))
+  }, [items, filterText, searchTerm])
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+  if (loading) return <SkeletonListPage rows={8} />
 
   const filtersActive = filterType !== 'all' || filterFund !== 'all' || filterSource !== 'all' || filterText !== '' || dateFrom !== '' || dateTo !== '' || includePlanned || includeMemo
   const resetFilters = () => {
@@ -463,17 +527,17 @@ export default function Transactions() {
       </button>
       <div id="tx-filters-panel" className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-col sm:flex-row flex-wrap gap-3 mb-6 sm:items-center bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4`}>
         <Filter className="w-4 h-4 text-slate-400 hidden sm:block" aria-hidden="true" />
-        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+        <select aria-label="Filtra per tipo" value={filterType} onChange={e => setFilterType(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none">
           <option value="all">Tutti i tipi</option>
           <option value="income">Entrate</option>
           <option value="expense">Uscite</option>
           <option value="transfer">Trasferimenti</option>
         </select>
-        <select value={filterFund} onChange={e => setFilterFund(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+        <select aria-label="Filtra per fondo" value={filterFund} onChange={e => setFilterFund(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none">
           <option value="all">Tutti i fondi</option>
           {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
-        <select value={filterSource} onChange={e => setFilterSource(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+        <select aria-label="Filtra per origine" value={filterSource} onChange={e => setFilterSource(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none">
           <option value="all">Tutte le origini</option>
           <option value="recurring_income">Entrate ricorrenti</option>
           <option value="recurring_expense">Spese ricorrenti</option>
@@ -481,24 +545,24 @@ export default function Transactions() {
           <option value="manual">Solo manuali</option>
         </select>
         <div className="relative w-full sm:w-auto">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-          <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Cerca..." className="w-full sm:w-auto min-w-0 pl-8 pr-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+          <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input type="search" aria-label="Cerca fra le transazioni" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Cerca…" className="w-full sm:w-auto min-w-0 pl-8 pr-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none" />
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
-          <label className="flex flex-1 sm:flex-none items-center gap-1.5 text-xs text-slate-500">Da
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+          <label htmlFor="transactions-f1" className="flex flex-1 sm:flex-none items-center gap-1.5 text-xs text-slate-500">Da
+            <input id="transactions-f1" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none" />
           </label>
-          <label className="flex flex-1 sm:flex-none items-center gap-1.5 text-xs text-slate-500">A
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+          <label htmlFor="transactions-f2" className="flex flex-1 sm:flex-none items-center gap-1.5 text-xs text-slate-500">A
+            <input id="transactions-f2" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none" />
           </label>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <label className="flex items-center gap-1.5 min-h-[40px] text-xs text-slate-600 cursor-pointer">
-            <input type="checkbox" checked={includePlanned} onChange={e => setIncludePlanned(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
+          <label htmlFor="transactions-f3" className="flex items-center gap-1.5 min-h-[40px] text-xs text-slate-600 cursor-pointer">
+            <input id="transactions-f3" type="checkbox" checked={includePlanned} onChange={e => setIncludePlanned(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
             Pianificate
           </label>
-          <label className="flex items-center gap-1.5 min-h-[40px] text-xs text-slate-600 cursor-pointer">
-            <input type="checkbox" checked={includeMemo} onChange={e => setIncludeMemo(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
+          <label htmlFor="transactions-f4" className="flex items-center gap-1.5 min-h-[40px] text-xs text-slate-600 cursor-pointer">
+            <input id="transactions-f4" type="checkbox" checked={includeMemo} onChange={e => setIncludeMemo(e.target.checked)} className="rounded border-slate-300 text-blue-600" />
             Memo
           </label>
           {filtersActive && (
@@ -528,9 +592,32 @@ export default function Transactions() {
       )}
 
       {filtered.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow-sm">
-          <p className="text-slate-400">Nessuna transazione trovata</p>
-        </div>
+        // Due stati vuoti distinti: "non hai ancora movimenti" e "i filtri non trovano nulla" sono
+        // problemi diversi e hanno vie d'uscita diverse.
+        filtersActive ? (
+          <EmptyState
+            icon={Search}
+            title="Nessun risultato"
+            description="Nessuna transazione corrisponde ai filtri impostati."
+            action={(
+              <button onClick={resetFilters} className="inline-flex items-center justify-center gap-2 px-4 min-h-[44px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium">
+                <X className="w-4 h-4" aria-hidden="true" /> Azzera i filtri
+              </button>
+            )}
+          />
+        ) : (
+          <EmptyState
+            icon={ArrowLeftRight}
+            tone="blue"
+            title="Nessuna transazione"
+            description="Qui finiscono tutti i movimenti che toccano i tuoi fondi: quelli che registri a mano e quelli generati dalle voci ricorrenti."
+            action={(
+              <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 px-4 min-h-[44px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium">
+                <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi la prima transazione
+              </button>
+            )}
+          />
+        )
       ) : (
         <>
           <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm px-4 py-1 mb-2 flex items-center gap-3">
@@ -629,8 +716,12 @@ export default function Transactions() {
             })}
           </div>
           {hasMore && (
-            <button onClick={() => load(false)} className="w-full mt-4 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-[transform,background-color] active:scale-[0.98]">
-              Carica altre
+            <button
+              onClick={() => load(false)}
+              disabled={loadingMore}
+              className="w-full mt-4 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-[transform,background-color] active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
+            >
+              {loadingMore ? 'Caricamento…' : 'Carica altre'}
             </button>
           )}
         </>
@@ -644,7 +735,7 @@ export default function Transactions() {
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+            <p className="block text-sm font-medium text-slate-700 mb-1">Tipo</p>
             <div role="group" aria-label="Tipo di transazione" className="grid grid-cols-3 gap-2">
               {(['expense', 'income', 'transfer'] as const).map(t => (
                 <button key={t} onClick={() => setForm({ ...form, type: t })} aria-pressed={form.type === t} className={`min-h-[44px] px-1 rounded-lg text-xs sm:text-sm font-medium border transition-[transform,background-color,border-color,color] active:scale-[0.98] ${form.type === t ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
@@ -655,33 +746,33 @@ export default function Transactions() {
           </div>
           <div>
             <label htmlFor="tx-desc" className="block text-sm font-medium text-slate-700 mb-1">Descrizione</label>
-            <input id="tx-desc" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder="es. Spesa supermercato..." />
+            <input id="tx-desc" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" placeholder="es. Spesa supermercato..." />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="min-w-0">
               <label htmlFor="tx-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput id="tx-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput id="tx-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
             <div className="min-w-0">
               <label htmlFor="tx-date" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-              <input id="tx-date" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="tx-date" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
           </div>
           <div>
             <label htmlFor="tx-fund" className="block text-sm font-medium text-slate-700 mb-1">{form.type === 'transfer' ? 'Da fondo' : 'Fondo'}</label>
-            <select id="tx-fund" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+            <select id="tx-fund" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
               <option value="">Nessun fondo</option>
               {funds.map(f => <option key={f.id} value={f.id}>{f.name} ({cur(Number(f.balance))})</option>)}
             </select>
           </div>
           {form.type === 'expense' && (budgets.length > 0 || (plannedParentOk && openPlanned.length > 0)) && (
             <div>
-              <label htmlFor="tx-belongs" className="block text-sm font-medium text-slate-700 mb-1">Rientra in <span className="font-normal text-slate-400">(facoltativo)</span></label>
+              <label htmlFor="tx-belongs" className="block text-sm font-medium text-slate-700 mb-1">Rientra in <span className="font-normal text-slate-500">(facoltativo)</span></label>
               <select
                 id="tx-belongs"
                 value={form.belongsTo}
                 onChange={e => setForm({ ...form, belongsTo: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow"
               >
                 <option value="">Nessun budget</option>
                 {budgets.length > 0 && (
@@ -720,7 +811,7 @@ export default function Transactions() {
           {form.type === 'transfer' && (
             <div>
               <label htmlFor="tx-fund-to" className="block text-sm font-medium text-slate-700 mb-1">A fondo</label>
-              <select id="tx-fund-to" value={form.fund_to_id} onChange={e => setForm({ ...form, fund_to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <select id="tx-fund-to" value={form.fund_to_id} onChange={e => setForm({ ...form, fund_to_id: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                 <option value="">Seleziona</option>
                 {funds.filter(f => f.id !== form.fund_id).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
@@ -728,7 +819,7 @@ export default function Transactions() {
           )}
           <div>
             <label htmlFor="tx-category" className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
-            <CategorySelect id="tx-category" value={form.category} onChange={c => setForm({ ...form, category: c })} baseCategories={TRANSACTION_CATEGORIES} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize" />
+            <CategorySelect id="tx-category" value={form.category} onChange={c => setForm({ ...form, category: c })} baseCategories={TRANSACTION_CATEGORIES} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow capitalize" />
           </div>
           {form.type === 'expense' && form.category === FUEL_CATEGORY && (
             <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -757,7 +848,7 @@ export default function Transactions() {
                   value={form.fuel_odometer}
                   onChange={e => setForm({ ...form, fuel_odometer: e.target.value })}
                   placeholder="es. 124500"
-                  className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-base sm:text-sm"
+                  className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow text-base sm:text-sm"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -769,7 +860,7 @@ export default function Transactions() {
                     value={form.fuel_liters}
                     onChange={e => setForm(withFuelTotal({ ...form, fuel_liters: e.target.value }))}
                     placeholder="es. 30"
-                    className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-base sm:text-sm"
+                    className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow text-base sm:text-sm"
                   />
                 </div>
                 <div>
@@ -780,7 +871,7 @@ export default function Transactions() {
                     value={form.fuel_price_per_liter}
                     onChange={e => setForm(withFuelTotal({ ...form, fuel_price_per_liter: e.target.value }))}
                     placeholder="es. 1,80"
-                    className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow text-base sm:text-sm"
+                    className="w-full min-w-0 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow text-base sm:text-sm"
                   />
                 </div>
               </div>

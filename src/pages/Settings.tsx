@@ -16,6 +16,7 @@ import { getNotifState, enableNotifications, disableNotifications, type NotifSta
 import { useCustomCategories, addCustomCategory, removeCustomCategory } from '../lib/categories'
 import { computePeriod, formatPeriodRange, todayString } from '../lib/utils'
 import type { RecurringIncome } from '../types'
+import { SkeletonListPage } from '../components/Skeleton'
 
 export default function Settings() {
   const { user } = useAuth()
@@ -35,6 +36,9 @@ export default function Settings() {
   const customCats = useCustomCategories()
   const [newCat, setNewCat] = useState('')
   const [catBusy, setCatBusy] = useState(false)
+  // Categoria in corso di rimozione: disabilita il pulsante e segnala l'attesa (la ✕ non dava
+  // alcun riscontro fra il tocco e la sparizione della pillola).
+  const [removingCat, setRemovingCat] = useState<string | null>(null)
 
   // Form locale, inizializzato dalle impostazioni correnti e risincronizzato quando cambiano.
   const [salaryIncomeId, setSalaryIncomeId] = useState(settings.salaryIncomeId || '')
@@ -135,8 +139,18 @@ export default function Settings() {
     toast.success('Categoria aggiunta')
   }
 
+  // Rimozione immediata al tocco della ✕: nessuna conferma e nessun modo di annullare, in una lista
+  // dove le voci sono piccole e vicine. Le transazioni già classificate con quella categoria la
+  // conservano, ma non la si può più scegliere finché non la si ricrea.
   const handleRemoveCat = async (name: string) => {
+    if (!(await confirm({
+      message: `Rimuovere la categoria «${name}»? I movimenti che la usano restano invariati, ma non potrai più selezionarla.`,
+      confirmText: 'Rimuovi',
+      danger: true,
+    }))) return
+    setRemovingCat(name)
     const res = await removeCustomCategory(name)
+    setRemovingCat(null)
     if (!res.ok) { toast.error(res.error || 'Errore'); return }
     toast.success('Categoria rimossa')
   }
@@ -173,7 +187,7 @@ export default function Settings() {
     toast.error('Errore nel ricalcolo: ' + (res.error || ''))
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+  if (loading) return <SkeletonListPage rows={5} />
 
   // Anteprima calcolata dai valori del FORM (non ancora salvati), così aggiorna mentre digiti.
   const period = computePeriod(periodStart || null, effectiveAnchor)
@@ -207,7 +221,7 @@ export default function Settings() {
               id="set-salary"
               value={salaryIncomeId}
               onChange={e => setSalaryIncomeId(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow"
             >
               <option value="">Nessuna (periodo a giorno fisso)</option>
               {monthlyIncomes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
@@ -225,7 +239,7 @@ export default function Settings() {
                 type="date"
                 value={periodStart}
                 onChange={e => setPeriodStart(e.target.value)}
-                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow"
               />
               <button onClick={() => setPeriodStart(todayString())} className="inline-flex items-center min-h-[40px] sm:min-h-0 px-2 -mx-2 text-xs text-blue-600 mt-1 hover:text-blue-700 active:scale-95 transition-[transform,color]">Imposta a oggi</button>
             </div>
@@ -237,7 +251,7 @@ export default function Settings() {
                 value={effectiveAnchor}
                 disabled={derivedAnchor !== null}
                 onChange={e => setAnchorDay(Math.min(28, Math.max(1, parseInt(e.target.value) || 1)))}
-                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow disabled:bg-slate-100 disabled:text-slate-500"
+                className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow disabled:bg-slate-100 disabled:text-slate-500"
               />
               <p className="text-xs text-slate-500 mt-1">
                 {derivedAnchor !== null
@@ -271,8 +285,13 @@ export default function Settings() {
             {customCats.map(c => (
               <span key={c} className="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-full bg-slate-100 text-slate-700 text-sm capitalize">
                 {c}
-                <button onClick={() => handleRemoveCat(c)} aria-label={`Rimuovi ${c}`} className="inline-flex items-center justify-center w-6 h-6 rounded-full hover:bg-slate-200 text-slate-400 hover:text-red-500 transition-colors">
-                  <X className="w-3.5 h-3.5" />
+                <button
+                  onClick={() => handleRemoveCat(c)}
+                  disabled={removingCat === c}
+                  aria-label={`Rimuovi ${c}`}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-slate-200 text-slate-500 hover:text-red-600 transition-colors disabled:opacity-40"
+                >
+                  <X className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               </span>
             ))}
@@ -286,7 +305,7 @@ export default function Settings() {
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCat() } }}
             placeholder="es. Palestra, Animali..."
             maxLength={30}
-            className="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow"
+            className="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow"
           />
           <button onClick={handleAddCat} disabled={catBusy || !newCat.trim()} className="inline-flex items-center justify-center gap-2 px-4 min-h-[44px] bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 active:scale-[0.98] transition-[transform,background-color] shrink-0">
             <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi

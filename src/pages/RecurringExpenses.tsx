@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ArrowRightLeft, Zap, Hand, Receipt } from 'lucide-react'
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, ArrowRightLeft, Zap, Hand, Receipt, CreditCard } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
@@ -11,7 +11,9 @@ import CategorySelect from '../components/CategorySelect'
 import { logSupabaseError } from '../lib/logError'
 import { getPeriodBreakdown, totalsFromBreakdown } from '../lib/periodBreakdown'
 import InfoBox from '../components/InfoBox'
+import EmptyState from '../components/EmptyState'
 import type { RecurringExpense, Fund, Transaction } from '../types'
+import { SkeletonListPage } from '../components/Skeleton'
 
 const DAYS_OF_WEEK = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
 const MONTHS = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
@@ -174,7 +176,7 @@ export default function RecurringExpenses() {
     load()
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Caricamento...</div>
+  if (loading) return <SkeletonListPage rows={6} />
 
   const today = todayString()
   const now = new Date()
@@ -221,10 +223,17 @@ export default function RecurringExpenses() {
       </InfoBox>
 
       {items.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-6">
-          <p className="text-base font-semibold text-slate-900 tracking-tight mb-4">Nessuna spesa ricorrente configurata</p>
-          <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 px-4 min-h-[40px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium"><Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi la prima voce</button>
-        </div>
+        <EmptyState
+          icon={CreditCard}
+          tone="amber"
+          title="Nessuna spesa ricorrente"
+          description="Bollette, abbonamenti, rate: le voci che tornano ogni mese, settimana o anno. Da qui la Dashboard costruisce le scadenze e la previsione."
+          action={(
+            <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 px-4 min-h-[44px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-[transform,background-color] text-sm font-medium">
+              <Plus className="w-4 h-4" aria-hidden="true" /> Aggiungi la prima voce
+            </button>
+          )}
+        />
       ) : (
         <div className="space-y-3">
           {visibleItems.map(item => {
@@ -276,7 +285,7 @@ export default function RecurringExpenses() {
 
           {expiredItems.length > 0 && (
             <>
-              <p className="text-base font-semibold tracking-tight text-slate-400 mt-8 mb-3">Terminate</p>
+              <p className="text-base font-semibold tracking-tight text-slate-500 mt-8 mb-3">Terminate</p>
               {expiredItems.map(item => (
                 <div key={item.id} className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-4 sm:p-5 flex items-center justify-between gap-2 sm:gap-3 opacity-40">
                   <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
@@ -287,7 +296,7 @@ export default function RecurringExpenses() {
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5 sm:gap-3 shrink-0">
-                    <span className="text-base sm:text-xl font-bold text-slate-400 tracking-tight tabular-nums whitespace-nowrap shrink-0">{cur(Number(item.amount))}</span>
+                    <span className="text-base sm:text-xl font-bold text-slate-500 tracking-tight tabular-nums whitespace-nowrap shrink-0">{cur(Number(item.amount))}</span>
                     <button onClick={() => remove(item.id)} aria-label="Elimina voce" className="inline-flex items-center justify-center w-10 h-10 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 active:scale-90 transition-[transform,background-color]"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
@@ -317,16 +326,16 @@ export default function RecurringExpenses() {
           </div>
           <div>
             <label htmlFor="rec-name" className="block text-sm font-medium text-slate-700 mb-1">Nome</label>
-            <input id="rec-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" placeholder={form.type === 'transfer' ? 'es. Risparmio mensile...' : 'es. Affitto, Netflix...'} />
+            <input id="rec-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" placeholder={form.type === 'transfer' ? 'es. Risparmio mensile...' : 'es. Affitto, Netflix...'} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label htmlFor="rec-amount" className="block text-sm font-medium text-slate-700 mb-1">Importo (€)</label>
-              <DecimalInput id="rec-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <DecimalInput id="rec-amount" value={form.amount} onChange={n => setForm({ ...form, amount: n })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
             <div className="min-w-0">
               <label htmlFor="rec-frequency" className="block text-sm font-medium text-slate-700 mb-1">Frequenza</label>
-              <select id="rec-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' | 'yearly' })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <select id="rec-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as 'monthly' | 'weekly' | 'yearly' })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                 <option value="monthly">Mensile</option>
                 <option value="weekly">Settimanale</option>
                 <option value="yearly">Annuale</option>
@@ -336,13 +345,13 @@ export default function RecurringExpenses() {
           {form.frequency === 'monthly' && (
             <div>
               <label htmlFor="rec-day-month" className="block text-sm font-medium text-slate-700 mb-1">Giorno del mese</label>
-              <input id="rec-day-month" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="rec-day-month" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
             </div>
           )}
           {form.frequency === 'weekly' && (
             <div>
               <label htmlFor="rec-day-week" className="block text-sm font-medium text-slate-700 mb-1">Giorno della settimana</label>
-              <select id="rec-day-week" value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+              <select id="rec-day-week" value={form.day_of_week} onChange={e => setForm({ ...form, day_of_week: parseInt(e.target.value) })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                 {DAYS_OF_WEEK.map((d, i) => <option key={i} value={i}>{d}</option>)}
               </select>
               <p className="text-xs text-slate-500 mt-1">La spesa verrà conteggiata ogni {DAYS_OF_WEEK[form.day_of_week]} (~{form.amount > 0 ? (form.amount * 4.33).toFixed(2) : 0}€/mese stimato).</p>
@@ -352,13 +361,13 @@ export default function RecurringExpenses() {
             <div className="grid grid-cols-2 gap-3">
               <div className="min-w-0">
                 <label htmlFor="rec-month" className="block text-sm font-medium text-slate-700 mb-1">Mese</label>
-                <select id="rec-month" value={form.month_of_year} onChange={e => setForm({ ...form, month_of_year: parseInt(e.target.value) })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="rec-month" value={form.month_of_year} onChange={e => setForm({ ...form, month_of_year: parseInt(e.target.value) })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                   {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                 </select>
               </div>
               <div className="min-w-0">
                 <label htmlFor="rec-year-day" className="block text-sm font-medium text-slate-700 mb-1">Giorno</label>
-                <input id="rec-year-day" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+                <input id="rec-year-day" type="number" min={1} max={31} value={form.day_of_month} onChange={e => setForm({ ...form, day_of_month: parseInt(e.target.value) || 1 })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
               </div>
               <p className="col-span-2 text-xs text-slate-500">La spesa verrà conteggiata ogni {form.day_of_month} {MONTHS[form.month_of_year - 1]} (~{form.amount > 0 ? (form.amount / 12).toFixed(2) : 0}€/mese stimato).</p>
             </div>
@@ -368,11 +377,11 @@ export default function RecurringExpenses() {
             <>
               <div>
                 <label htmlFor="rec-category" className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
-                <CategorySelect id="rec-category" value={form.category} onChange={c => setForm({ ...form, category: c })} baseCategories={EXPENSE_CATEGORIES} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow capitalize" />
+                <CategorySelect id="rec-category" value={form.category} onChange={c => setForm({ ...form, category: c })} baseCategories={EXPENSE_CATEGORIES} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow capitalize" />
               </div>
               <div>
                 <label htmlFor="rec-fund" className="block text-sm font-medium text-slate-700 mb-1">Fondo predefinito (opzionale)</label>
-                <select id="rec-fund" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="rec-fund" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                   <option value="">Scegli al momento del pagamento</option>
                   {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
@@ -384,14 +393,14 @@ export default function RecurringExpenses() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="min-w-0">
                 <label htmlFor="rec-from" className="block text-sm font-medium text-slate-700 mb-1">Da</label>
-                <select id="rec-from" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="rec-from" value={form.fund_id} onChange={e => setForm({ ...form, fund_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                   <option value="">Seleziona...</option>
                   {funds.filter(f => f.id !== form.fund_to_id).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
               </div>
               <div className="min-w-0">
                 <label htmlFor="rec-to" className="block text-sm font-medium text-slate-700 mb-1">A</label>
-                <select id="rec-to" value={form.fund_to_id} onChange={e => setForm({ ...form, fund_to_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow">
+                <select id="rec-to" value={form.fund_to_id} onChange={e => setForm({ ...form, fund_to_id: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow">
                   <option value="">Seleziona...</option>
                   {funds.filter(f => f.id !== form.fund_id).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
@@ -400,7 +409,7 @@ export default function RecurringExpenses() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Modalità di addebito</label>
+            <p className="block text-sm font-medium text-slate-700 mb-2">Modalità di addebito</p>
             <div className="grid grid-cols-2 gap-2" role="group" aria-label="Modalità di addebito">
               <button
                 onClick={() => setForm({ ...form, auto_deduct: false })}
@@ -435,14 +444,14 @@ export default function RecurringExpenses() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="rec-start" className="block text-sm font-medium text-slate-700 mb-1">Data inizio (opzionale)</label>
-              <input id="rec-start" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="rec-start" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
               {form.start_date && (
                 <button onClick={() => setForm({ ...form, start_date: '' })} className="inline-flex items-center min-h-[40px] px-2 -mx-2 text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
               )}
             </div>
             <div>
               <label htmlFor="rec-end" className="block text-sm font-medium text-slate-700 mb-1">Data fine (opzionale)</label>
-              <input id="rec-end" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-shadow" />
+              <input id="rec-end" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="w-full min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-shadow" />
               {form.end_date && (
                 <button onClick={() => setForm({ ...form, end_date: '' })} className="inline-flex items-center min-h-[40px] px-2 -mx-2 text-xs text-blue-600 mt-1 hover:text-blue-700 transition-colors">Rimuovi</button>
               )}
