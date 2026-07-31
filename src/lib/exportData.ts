@@ -15,17 +15,34 @@ export interface BackupBundle {
   tables: Record<string, unknown[]>
 }
 
-export async function fetchBackup(): Promise<BackupBundle> {
-  const tables: Record<string, unknown[]> = {}
-  for (const t of TABLES) {
-    const { data, error } = await supabase.from(t).select('*')
+// PostgREST applica un tetto di righe per risposta (su Supabase, di norma 1000). Una `select('*')`
+// secca su `transactions` restituiva quindi le prime N righe SENZA alcun errore: il file di backup
+// sembrava completo ma non lo era — il difetto peggiore possibile in una funzione di sicurezza.
+// Qui si pagina finché la pagina torna piena.
+const PAGE = 1000
+
+async function fetchAllRows(table: string): Promise<unknown[]> {
+  const out: unknown[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from(table).select('*').range(from, from + PAGE - 1)
     // Una tabella mancante (DB non ancora migrato) non deve far fallire l'intero backup.
     if (error) {
-      if (/does not exist|schema cache|find the table/i.test(error.message || '')) { tables[t] = []; continue }
-      throw new Error(`Errore esportando ${t}: ${error.message}`)
+      if (/does not exist|schema cache|find the table/i.test(error.message || '')) return []
+      throw new Error(`Errore esportando ${table}: ${error.message}`)
     }
-    tables[t] = data || []
+    const rows = data || []
+    out.push(...rows)
+    // Pagina non piena → era l'ultima. (Se il tetto del server fosse più basso di PAGE, la pagina
+    // arriva comunque non piena e il ciclo si ferma: nessun rischio di ciclo infinito.)
+    if (rows.length < PAGE) return out
   }
+}
+
+export async function fetchBackup(): Promise<BackupBundle> {
+  // Le sei tabelle sono indipendenti: in serie erano sei attese sommate, in parallelo una sola.
+  const results = await Promise.all(TABLES.map(t => fetchAllRows(t)))
+  const tables: Record<string, unknown[]> = {}
+  TABLES.forEach((t, i) => { tables[t] = results[i] })
   return { app: 'FinanzApp', version: 1, exported_at: new Date().toISOString(), tables }
 }
 

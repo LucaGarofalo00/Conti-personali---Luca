@@ -7,8 +7,13 @@ import { getAnchorDay, getPeriodStartOverride } from './periodSettings'
 // Maschera mostrata quando la privacy importi è attiva (toggle "occhio" nell'header).
 const HIDDEN_MASK = '••••• €'
 
+// Formatter costruito UNA volta. Number.prototype.toLocaleString ne crea uno nuovo a ogni chiamata,
+// e cur() viene invocata centinaia di volte per render (ogni importo di ogni riga): la costruzione
+// di un Intl.NumberFormat è l'operazione più costosa dell'intero ciclo di rendering.
+const eurFormatter = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
+
 export const cur = (n: number) =>
-  isAmountsHidden() ? HIDDEN_MASK : n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+  isAmountsHidden() ? HIDDEN_MASK : eurFormatter.format(n)
 
 // Arrotonda a 2 decimali in modo stabile: la somma di float in JS produce artefatti
 // (0.1 + 0.2 = 0.30000000000000004). Da usare prima di scrivere un saldo nel DB o di
