@@ -1,18 +1,44 @@
 {
-  "name": "FinanzApp",
+  "id": "/conti/",
+  "name": "FinanzApp — Finanze personali",
   "short_name": "FinanzApp",
-  "description": "Gestisci le tue finanze personali",
+  "description": "Fondi, spese ricorrenti, budget settimanali e previsione del saldo, con il periodo ancorato al giorno dello stipendio.",
   "lang": "it",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f7f8fa",
+  "background_color": "#f6f7f9",
   "theme_color": "#4F46E5",
+  "categories": ["finance", "productivity", "utilities"],
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nuova transazione",
+      "short_name": "Transazione",
+      "description": "Registra subito una spesa o un'entrata",
+      "url": "./#/transazioni",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Previsione saldo",
+      "short_name": "Previsione",
+      "description": "Come andrà il saldo nei prossimi mesi",
+      "url": "./#/previsione",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Statistiche",
+      "short_name": "Statistiche",
+      "description": "Uscite per categoria e andamento mensile",
+      "url": "./#/statistiche",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }
