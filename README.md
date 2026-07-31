@@ -14,6 +14,7 @@ App di finanze personali (React 19 + Vite + Tailwind v4 + Supabase). Pensata pri
    - `supabase-rpc-balances.sql` — aggiornamenti di saldo **atomici** (consigliato).
    - `supabase-user-settings.sql` — tabella impostazioni periodo.
    - `supabase-reconcile.sql` — **(opzionale)** abilita il pulsante "Ricalcola saldi" in Impostazioni: aggiunge `funds.opening_balance` e le RPC `recompute_fund_balances` / `set_fund_opening_balance`. Da eseguire una volta; il backfill iniziale non modifica i saldi.
+   - `supabase-planned-budget.sql` — **(opzionale)** colonna `transactions.planned_parent_id` per le spese imputate a una pianificata ("budget a progetto"). **Da eseguire PRIMA di `supabase-post-transaction.sql`**, che scrive quella colonna.
    - `supabase-post-transaction.sql` — **(opzionale)** RPC `post_transaction` che inserisce un movimento e aggiorna i saldi in **un'unica transazione DB** (vedi il file per come adottarla lato client).
    - `supabase-notifications.sql` — **(opzionale)** tabella sottoscrizioni push per i promemoria scadenze (vedi sotto).
    - `supabase-categories.sql` — **(opzionale)** tabella `custom_categories` per le categorie personalizzate (Impostazioni → "Categorie personalizzate").
@@ -33,6 +34,8 @@ Manda un promemoria quando una voce ricorrente scade, anche ad app chiusa.
    ```
 5. Pianifica l'esecuzione giornaliera (blocco `pg_cron` commentato in fondo a `supabase-notifications.sql`).
 6. In app: Impostazioni → "Notifiche promemoria" → Attiva.
+
+> Per il sito pubblicato da GitHub Actions serve anche il secret di repository `VITE_VAPID_PUBLIC_KEY`: senza, la build esce con la chiave vuota e le notifiche restano non attivabili.
 
 ## Comandi
 

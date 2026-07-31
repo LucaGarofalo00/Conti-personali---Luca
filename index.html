@@ -11,9 +11,25 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="FinanzApp" />
+    <meta name="description" content="Fondi, spese ricorrenti, budget e previsione del saldo: le tue finanze personali, ancorate al giorno dello stipendio." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!--
+      Inter caricato in modo NON bloccante: come <link rel="stylesheet"> normale il browser rimanda
+      il primo disegno finché il CSS di terze parti non è arrivato — su rete mobile lenta è mezzo
+      secondo di schermo bianco. Con media="print" il foglio si scarica a priorità bassa senza
+      bloccare, e onload lo attiva. L'URL ha già display=swap, quindi il testo compare subito con il
+      fallback di sistema e passa a Inter appena pronto; se JS è disabilitato interviene il noscript.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      media="print"
+      onload="this.media='all';this.onload=null"
+    />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    </noscript>
     <title>FinanzApp</title>
   </head>
   <body>

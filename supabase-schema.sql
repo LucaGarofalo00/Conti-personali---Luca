@@ -177,69 +177,72 @@ alter table variable_expenses enable row level security;
 alter table transactions enable row level security;
 alter table user_settings enable row level security;
 
--- Drop & ricrea le policies (così sono sicure anche su DB già configurati)
+-- Drop & ricrea le policies (così sono sicure anche su DB già configurati).
+-- (select auth.uid()) invece di auth.uid(): incapsulata in una sotto-query, Postgres la valuta UNA
+-- volta per query (InitPlan) invece che per ogni riga esaminata. Su una tabella transactions con
+-- migliaia di righe è la differenza fra un filtro costante e una chiamata di funzione per riga.
 drop policy if exists "funds_select" on funds;
 drop policy if exists "funds_insert" on funds;
 drop policy if exists "funds_update" on funds;
 drop policy if exists "funds_delete" on funds;
-create policy "funds_select" on funds for select using (auth.uid() = user_id);
-create policy "funds_insert" on funds for insert with check (auth.uid() = user_id);
-create policy "funds_update" on funds for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "funds_delete" on funds for delete using (auth.uid() = user_id);
+create policy "funds_select" on funds for select using ((select auth.uid()) = user_id);
+create policy "funds_insert" on funds for insert with check ((select auth.uid()) = user_id);
+create policy "funds_update" on funds for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "funds_delete" on funds for delete using ((select auth.uid()) = user_id);
 
 drop policy if exists "recurring_expenses_select" on recurring_expenses;
 drop policy if exists "recurring_expenses_insert" on recurring_expenses;
 drop policy if exists "recurring_expenses_update" on recurring_expenses;
 drop policy if exists "recurring_expenses_delete" on recurring_expenses;
-create policy "recurring_expenses_select" on recurring_expenses for select using (auth.uid() = user_id);
-create policy "recurring_expenses_insert" on recurring_expenses for insert with check (auth.uid() = user_id);
-create policy "recurring_expenses_update" on recurring_expenses for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "recurring_expenses_delete" on recurring_expenses for delete using (auth.uid() = user_id);
+create policy "recurring_expenses_select" on recurring_expenses for select using ((select auth.uid()) = user_id);
+create policy "recurring_expenses_insert" on recurring_expenses for insert with check ((select auth.uid()) = user_id);
+create policy "recurring_expenses_update" on recurring_expenses for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "recurring_expenses_delete" on recurring_expenses for delete using ((select auth.uid()) = user_id);
 
 drop policy if exists "recurring_income_select" on recurring_income;
 drop policy if exists "recurring_income_insert" on recurring_income;
 drop policy if exists "recurring_income_update" on recurring_income;
 drop policy if exists "recurring_income_delete" on recurring_income;
-create policy "recurring_income_select" on recurring_income for select using (auth.uid() = user_id);
-create policy "recurring_income_insert" on recurring_income for insert with check (auth.uid() = user_id);
-create policy "recurring_income_update" on recurring_income for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "recurring_income_delete" on recurring_income for delete using (auth.uid() = user_id);
+create policy "recurring_income_select" on recurring_income for select using ((select auth.uid()) = user_id);
+create policy "recurring_income_insert" on recurring_income for insert with check ((select auth.uid()) = user_id);
+create policy "recurring_income_update" on recurring_income for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "recurring_income_delete" on recurring_income for delete using ((select auth.uid()) = user_id);
 
 drop policy if exists "weekly_budgets_select" on weekly_budgets;
 drop policy if exists "weekly_budgets_insert" on weekly_budgets;
 drop policy if exists "weekly_budgets_update" on weekly_budgets;
 drop policy if exists "weekly_budgets_delete" on weekly_budgets;
-create policy "weekly_budgets_select" on weekly_budgets for select using (auth.uid() = user_id);
-create policy "weekly_budgets_insert" on weekly_budgets for insert with check (auth.uid() = user_id);
-create policy "weekly_budgets_update" on weekly_budgets for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "weekly_budgets_delete" on weekly_budgets for delete using (auth.uid() = user_id);
+create policy "weekly_budgets_select" on weekly_budgets for select using ((select auth.uid()) = user_id);
+create policy "weekly_budgets_insert" on weekly_budgets for insert with check ((select auth.uid()) = user_id);
+create policy "weekly_budgets_update" on weekly_budgets for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "weekly_budgets_delete" on weekly_budgets for delete using ((select auth.uid()) = user_id);
 
 drop policy if exists "variable_expenses_select" on variable_expenses;
 drop policy if exists "variable_expenses_insert" on variable_expenses;
 drop policy if exists "variable_expenses_update" on variable_expenses;
 drop policy if exists "variable_expenses_delete" on variable_expenses;
-create policy "variable_expenses_select" on variable_expenses for select using (auth.uid() = user_id);
-create policy "variable_expenses_insert" on variable_expenses for insert with check (auth.uid() = user_id);
-create policy "variable_expenses_update" on variable_expenses for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "variable_expenses_delete" on variable_expenses for delete using (auth.uid() = user_id);
+create policy "variable_expenses_select" on variable_expenses for select using ((select auth.uid()) = user_id);
+create policy "variable_expenses_insert" on variable_expenses for insert with check ((select auth.uid()) = user_id);
+create policy "variable_expenses_update" on variable_expenses for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "variable_expenses_delete" on variable_expenses for delete using ((select auth.uid()) = user_id);
 
 drop policy if exists "transactions_select" on transactions;
 drop policy if exists "transactions_insert" on transactions;
 drop policy if exists "transactions_update" on transactions;
 drop policy if exists "transactions_delete" on transactions;
-create policy "transactions_select" on transactions for select using (auth.uid() = user_id);
-create policy "transactions_insert" on transactions for insert with check (auth.uid() = user_id);
-create policy "transactions_update" on transactions for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "transactions_delete" on transactions for delete using (auth.uid() = user_id);
+create policy "transactions_select" on transactions for select using ((select auth.uid()) = user_id);
+create policy "transactions_insert" on transactions for insert with check ((select auth.uid()) = user_id);
+create policy "transactions_update" on transactions for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "transactions_delete" on transactions for delete using ((select auth.uid()) = user_id);
 
 drop policy if exists "user_settings_select" on user_settings;
 drop policy if exists "user_settings_insert" on user_settings;
 drop policy if exists "user_settings_update" on user_settings;
 drop policy if exists "user_settings_delete" on user_settings;
-create policy "user_settings_select" on user_settings for select using (auth.uid() = user_id);
-create policy "user_settings_insert" on user_settings for insert with check (auth.uid() = user_id);
-create policy "user_settings_update" on user_settings for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "user_settings_delete" on user_settings for delete using (auth.uid() = user_id);
+create policy "user_settings_select" on user_settings for select using ((select auth.uid()) = user_id);
+create policy "user_settings_insert" on user_settings for insert with check ((select auth.uid()) = user_id);
+create policy "user_settings_update" on user_settings for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "user_settings_delete" on user_settings for delete using ((select auth.uid()) = user_id);
 
 -- ---------------------------------------------
 -- Indici per performance (idempotenti)
@@ -253,6 +256,21 @@ create index if not exists idx_variable_expenses_user on variable_expenses(user_
 create index if not exists idx_transactions_user_date on transactions(user_id, date desc);
 create index if not exists idx_transactions_planned on transactions(user_id, is_planned);
 create index if not exists idx_transactions_recurring_expense on transactions(recurring_expense_id);
+
+-- Indici allineati alle query che l'app fa davvero (aggiunti dopo averle censite una per una).
+-- Elenco paginato e finestre di periodo: filtra su is_planned e ordina per data.
+create index if not exists idx_transactions_user_planned_date
+  on transactions(user_id, is_planned, date desc);
+-- Rifornimenti (categoria 'benzina') letti da Transazioni e dal modale di conferma della Dashboard.
+create index if not exists idx_transactions_user_category_date
+  on transactions(user_id, category, date desc);
+-- Spese imputate a un budget settimanale (pagina Budget). Parziale: le righe senza budget_id sono
+-- la maggioranza e non servono a questa query.
+create index if not exists idx_transactions_budget
+  on transactions(budget_id) where budget_id is not null;
+-- Riconciliazione delle entrate ricorrenti (occorrenze già incassate/saltate).
+create index if not exists idx_transactions_recurring_income
+  on transactions(recurring_income_id) where recurring_income_id is not null;
 
 -- =============================================
 -- (Opzionale) Query per individuare duplicati creati dal bug timezone

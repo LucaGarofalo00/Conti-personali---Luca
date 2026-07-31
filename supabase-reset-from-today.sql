@@ -20,6 +20,9 @@ create or replace function public.reset_from_today(
 )
 returns integer
 language plpgsql
+-- search_path fissato, come nelle altre funzioni del progetto: difesa da name-hijack (uno schema
+-- nel search_path dell'utente che ridefinisce una funzione usata qui dentro).
+set search_path = public, pg_temp
 as $$
 declare
   v_deleted_planned integer;
